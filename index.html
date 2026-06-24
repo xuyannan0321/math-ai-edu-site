@@ -222,30 +222,76 @@
         </section>
 
         <section
-          class="app-page placeholder-page fade-in"
+          class="app-page library-page fade-in"
           id="page-original-library"
           data-page="original-library"
           aria-labelledby="nav-original-library"
           hidden
         >
-          <div class="placeholder-card">
-            <span class="placeholder-number">02</span>
-            <h1>原创题库</h1>
-            <p>页面容器已准备好，题目管理与分享功能将在后续阶段逐步迁移。</p>
+          <div class="library-page-scroll">
+            <div class="library-container">
+              <header class="library-header">
+                <div>
+                  <span class="library-kicker">LOCAL ORIGINAL LIBRARY</span>
+                  <h1>原创题库</h1>
+                  <p>查看和管理从源码建站发布到当前浏览器的原创教学页面。</p>
+                </div>
+                <span class="library-storage-badge">浏览器本地存储</span>
+              </header>
+
+              <div
+                class="library-list"
+                id="original-library-list"
+                aria-label="本地原创题列表"
+                aria-live="polite"
+              ></div>
+
+              <div class="library-empty" id="original-library-empty">
+                <span class="library-empty-mark" aria-hidden="true">02</span>
+                <h2>还没有本地原创题</h2>
+                <p>前往源码建站，填写页面信息和源码后点击“发布至原创题库”。</p>
+                <button class="library-empty-action" type="button" data-page-target="build">
+                  去源码建站
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
         <section
-          class="app-page placeholder-page fade-in"
+          class="app-page library-page fade-in"
           id="page-strategy"
           data-page="strategy"
           aria-labelledby="nav-strategy"
           hidden
         >
-          <div class="placeholder-card">
-            <span class="placeholder-number">03</span>
-            <h1>策略库</h1>
-            <p>页面容器已准备好，教研策略筛选与省市联动将在后续阶段实现。</p>
+          <div class="library-page-scroll">
+            <div class="library-container">
+              <header class="library-header">
+                <div>
+                  <span class="library-kicker">LOCAL STRATEGY LIBRARY</span>
+                  <h1>策略库</h1>
+                  <p>查看和管理从源码建站保存到当前浏览器的教研策略页面。</p>
+                </div>
+                <span class="library-storage-badge">浏览器本地存储</span>
+              </header>
+
+              <div
+                class="library-list"
+                id="strategy-library-list"
+                aria-label="本地策略页列表"
+                aria-live="polite"
+              ></div>
+
+              <div class="library-empty" id="strategy-library-empty">
+                <span class="library-empty-mark" aria-hidden="true">03</span>
+                <h2>还没有本地策略页</h2>
+                <p>前往源码建站，填写页面信息和源码后点击“存入策略库”。</p>
+                <button class="library-empty-action" type="button" data-page-target="build">
+                  去源码建站
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -264,7 +310,7 @@
                   <h1>源码建站</h1>
                   <p>补充教研信息，粘贴 HTML 或 JSON 源码，并在安全沙箱中检查本地效果。</p>
                 </div>
-                <span class="local-mode-badge">仅本地预览</span>
+                <span class="local-mode-badge">本地预览与保存</span>
               </header>
 
               <section class="build-form-card" aria-labelledby="build-metadata-title">
@@ -273,7 +319,7 @@
                     <span class="section-step" aria-hidden="true">01</span>
                     <h2 id="build-metadata-title">页面归属信息</h2>
                   </div>
-                  <p>这些字段仅用于当前页面演示，本阶段不会保存。</p>
+                  <p>这些字段会随源码保存到当前浏览器。</p>
                 </div>
 
                 <div class="build-metadata-grid">
@@ -378,54 +424,6 @@
                   </div>
                 </section>
 
-                <div
-                  class="build-preview-modal"
-                  id="build-preview-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="build-preview-title"
-                  aria-describedby="build-preview-description"
-                  hidden
-                >
-                  <section class="build-preview-window">
-                    <header class="build-preview-toolbar">
-                      <div class="build-preview-toolbar-title">
-                        <div>
-                          <span class="section-step" aria-hidden="true">03</span>
-                          <div>
-                            <h2 id="build-preview-title">本地预览</h2>
-                            <p id="build-preview-description">
-                              脚本已启用 · 隔离来源 · 接近真实页面尺寸
-                            </p>
-                          </div>
-                        </div>
-                        <span class="preview-status" id="build-preview-status" aria-live="polite">
-                          等待渲染
-                        </span>
-                      </div>
-                      <button class="build-preview-close" id="close-build-preview" type="button">
-                        <span aria-hidden="true">×</span>
-                        关闭
-                      </button>
-                    </header>
-
-                    <div class="build-preview-stage">
-                      <iframe
-                        class="build-preview-frame"
-                        id="build-preview-frame"
-                        title="源码建站本地预览"
-                        sandbox="allow-scripts"
-                        referrerpolicy="no-referrer"
-                        hidden
-                      ></iframe>
-                      <div class="build-preview-placeholder" id="build-preview-placeholder">
-                        <span aria-hidden="true">&lt;/&gt;</span>
-                        <h3>预览尚未生成</h3>
-                        <p>在源码编辑区粘贴内容并点击渲染，结果会显示在这个安全沙箱中。</p>
-                      </div>
-                    </div>
-                  </section>
-                </div>
               </div>
             </div>
           </div>
@@ -445,6 +443,53 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div
+      class="build-preview-modal"
+      id="build-preview-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="build-preview-title"
+      aria-describedby="build-preview-description"
+      hidden
+    >
+      <section class="build-preview-window">
+        <header class="build-preview-toolbar">
+          <div class="build-preview-toolbar-title">
+            <div>
+              <span class="section-step" aria-hidden="true">03</span>
+              <div>
+                <h2 id="build-preview-title">本地预览</h2>
+                <p id="build-preview-description">脚本已启用 · 隔离来源 · 接近真实页面尺寸</p>
+              </div>
+            </div>
+            <span class="preview-status" id="build-preview-status" aria-live="polite">
+              等待渲染
+            </span>
+          </div>
+          <button class="build-preview-close" id="close-build-preview" type="button">
+            <span aria-hidden="true">×</span>
+            关闭
+          </button>
+        </header>
+
+        <div class="build-preview-stage">
+          <iframe
+            class="build-preview-frame"
+            id="build-preview-frame"
+            title="源码建站本地预览"
+            sandbox="allow-scripts"
+            referrerpolicy="no-referrer"
+            hidden
+          ></iframe>
+          <div class="build-preview-placeholder" id="build-preview-placeholder">
+            <span aria-hidden="true">&lt;/&gt;</span>
+            <h3>预览尚未生成</h3>
+            <p>在源码编辑区粘贴内容并点击渲染，结果会显示在这个安全沙箱中。</p>
+          </div>
+        </div>
+      </section>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true">

@@ -117,12 +117,35 @@ const PROVINCE_CITY_MAP = {
   澳门特别行政区: ["澳门半岛", "氹仔岛", "路环岛"],
 };
 
+const STORAGE_KEYS = Object.freeze({
+  original: "mathAiEduOriginalItems",
+  strategy: "mathAiEduStrategyItems",
+});
+
+const LIBRARY_CONFIG = Object.freeze({
+  original: {
+    listId: "original-library-list",
+    emptyId: "original-library-empty",
+    defaultTitle: "未命名原创题",
+    savedMessage: "已发布至本地原创题库。",
+    deletedMessage: "已从本地原创题库删除。",
+  },
+  strategy: {
+    listId: "strategy-library-list",
+    emptyId: "strategy-library-empty",
+    defaultTitle: "未命名策略页",
+    savedMessage: "已存入本地策略库。",
+    deletedMessage: "已从本地策略库删除。",
+  },
+});
+
 const state = {
   activePage: "workspace",
   activeView: "preview",
   toastTimer: null,
   generationTimer: null,
   filePreviewUrl: null,
+  previewReturnFocus: null,
 };
 
 const elements = {};
@@ -147,8 +170,18 @@ function cacheElements() {
   elements.previewFileSize = document.querySelector("#preview-file-size");
   elements.previewFileType = document.querySelector("#preview-file-type");
   elements.clearFileButton = document.querySelector("#clear-file-button");
+  elements.originalLibraryList = document.querySelector("#original-library-list");
+  elements.originalLibraryEmpty = document.querySelector("#original-library-empty");
+  elements.strategyLibraryList = document.querySelector("#strategy-library-list");
+  elements.strategyLibraryEmpty = document.querySelector("#strategy-library-empty");
+  elements.buildPageScroll = document.querySelector("#page-build .build-page-scroll");
+  elements.buildSubject = document.querySelector("#build-subject");
   elements.buildProvince = document.querySelector("#build-province");
   elements.buildCity = document.querySelector("#build-city");
+  elements.buildQuestionType = document.querySelector("#build-question-type");
+  elements.buildYear = document.querySelector("#build-year");
+  elements.buildSchool = document.querySelector("#build-school");
+  elements.buildPageTitle = document.querySelector("#build-page-title");
   elements.buildSourceCode = document.querySelector("#build-source-code");
   elements.buildPreviewModal = document.querySelector("#build-preview-modal");
   elements.buildPreviewFrame = document.querySelector("#build-preview-frame");
@@ -188,6 +221,12 @@ function switchPage(pageId) {
       }
     }
   });
+
+  if (pageId === "original-library") {
+    renderLibraryList("original");
+  } else if (pageId === "strategy") {
+    renderLibraryList("strategy");
+  }
 }
 
 function switchResultView(viewName) {
@@ -341,6 +380,307 @@ function handleFileSelection() {
   showFilePreview(file);
 }
 
+function readLibraryItems(targetLibrary, notifyOnError = false) {
+  const storageKey = STORAGE_KEYS[targetLibrary];
+
+  try {
+    const storedValue = window.localStorage.getItem(storageKey);
+
+    if (!storedValue) {
+      return [];
+    }
+
+    const parsedValue = JSON.parse(storedValue);
+
+    if (!Array.isArray(parsedValue)) {
+      throw new TypeError("Stored library value is not an array.");
+    }
+
+    return parsedValue.filter(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        typeof item.id === "string" &&
+        typeof item.sourceCode === "string",
+    );
+  } catch {
+    if (notifyOnError) {
+      showToast("本地数据暂时无法读取，请检查浏览器存储设置。");
+    }
+
+    return null;
+  }
+}
+
+function writeLibraryItems(targetLibrary, items) {
+  const storageKey = STORAGE_KEYS[targetLibrary];
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(items));
+    return true;
+  } catch {
+    showToast("本地保存失败，可能是浏览器存储空间不足或已被禁用。");
+    return false;
+  }
+}
+
+function createLocalItemId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function collectBuildRecord(targetLibrary) {
+  const sourceCode = elements.buildSourceCode.value;
+
+  if (!sourceCode.trim()) {
+    showToast("请先粘贴 HTML 或 JSON 源码，再保存到本地库。");
+    return null;
+  }
+
+  const config = LIBRARY_CONFIG[targetLibrary];
+  const title = elements.buildPageTitle.value.trim() || config.defaultTitle;
+
+  return {
+    id: createLocalItemId(),
+    title,
+    subject: elements.buildSubject.value,
+    province: elements.buildProvince.value,
+    city: elements.buildCity.value,
+    questionType: elements.buildQuestionType.value,
+    year: elements.buildYear.value,
+    school: elements.buildSchool.value.trim(),
+    sourceCode,
+    targetLibrary,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function saveBuildRecord(targetLibrary) {
+  const record = collectBuildRecord(targetLibrary);
+
+  if (!record) {
+    return;
+  }
+
+  const items = readLibraryItems(targetLibrary, true);
+
+  if (!items) {
+    return;
+  }
+
+  if (!writeLibraryItems(targetLibrary, [record, ...items])) {
+    return;
+  }
+
+  renderLibraryList(targetLibrary);
+  showToast(LIBRARY_CONFIG[targetLibrary].savedMessage);
+}
+
+function createTextElement(tagName, className, text) {
+  const element = document.createElement(tagName);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function formatCreatedAt(createdAt) {
+  const date = new Date(createdAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return "创建时间未知";
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function formatRegion(item) {
+  if (!item.province && !item.city) {
+    return "地区未填写";
+  }
+
+  if (!item.city || item.province === item.city) {
+    return item.province || item.city;
+  }
+
+  return `${item.province} / ${item.city}`;
+}
+
+function createLibraryActionButton(action, label, item, targetLibrary, extraClass = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `library-action-button ${extraClass}`.trim();
+  button.dataset.libraryAction = action;
+  button.dataset.itemId = item.id;
+  button.dataset.targetLibrary = targetLibrary;
+  button.textContent = label;
+  button.setAttribute("aria-label", `${label}：${item.title || LIBRARY_CONFIG[targetLibrary].defaultTitle}`);
+  return button;
+}
+
+function createLibraryCard(item, targetLibrary) {
+  const card = document.createElement("article");
+  card.className = "library-card";
+
+  const main = document.createElement("div");
+  main.className = "library-card-main";
+
+  const top = document.createElement("div");
+  top.className = "library-card-top";
+  top.append(
+    createTextElement(
+      "h2",
+      "library-card-title",
+      item.title || LIBRARY_CONFIG[targetLibrary].defaultTitle,
+    ),
+    createTextElement("time", "library-card-time", formatCreatedAt(item.createdAt)),
+  );
+
+  const meta = document.createElement("div");
+  meta.className = "library-card-meta";
+  meta.append(
+    createTextElement("span", "library-meta-pill is-blue", item.subject || "科目未填写"),
+    createTextElement("span", "library-meta-pill", formatRegion(item)),
+    createTextElement("span", "library-meta-pill", item.questionType || "类型未填写"),
+    createTextElement("span", "library-meta-pill", item.year || "年份未填写"),
+  );
+
+  main.append(top, meta);
+
+  if (item.school) {
+    main.append(createTextElement("p", "library-card-school", `学校：${item.school}`));
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "library-card-actions";
+  actions.append(
+    createLibraryActionButton("view", "查看", item, targetLibrary, "is-primary"),
+    createLibraryActionButton("edit", "编辑", item, targetLibrary),
+    createLibraryActionButton("delete", "删除", item, targetLibrary, "is-danger"),
+  );
+
+  card.append(main, actions);
+  return card;
+}
+
+function getLibraryElements(targetLibrary) {
+  if (targetLibrary === "original") {
+    return {
+      list: elements.originalLibraryList,
+      empty: elements.originalLibraryEmpty,
+    };
+  }
+
+  return {
+    list: elements.strategyLibraryList,
+    empty: elements.strategyLibraryEmpty,
+  };
+}
+
+function renderLibraryList(targetLibrary) {
+  const items = readLibraryItems(targetLibrary, true) || [];
+  const { list, empty } = getLibraryElements(targetLibrary);
+
+  list.replaceChildren();
+  list.hidden = items.length === 0;
+  empty.hidden = items.length > 0;
+
+  items.forEach((item) => {
+    list.append(createLibraryCard(item, targetLibrary));
+  });
+}
+
+function findLibraryItem(targetLibrary, itemId) {
+  const items = readLibraryItems(targetLibrary, true);
+
+  if (!items) {
+    return null;
+  }
+
+  return items.find((item) => item.id === itemId) || null;
+}
+
+function fillBuildFormFromItem(item) {
+  elements.buildSubject.value = item.subject || elements.buildSubject.options[0].value;
+
+  if (Object.hasOwn(PROVINCE_CITY_MAP, item.province)) {
+    elements.buildProvince.value = item.province;
+  }
+
+  updateBuildCities();
+
+  if (Array.from(elements.buildCity.options).some((option) => option.value === item.city)) {
+    elements.buildCity.value = item.city;
+  }
+
+  elements.buildQuestionType.value = item.questionType || elements.buildQuestionType.options[0].value;
+  elements.buildYear.value = item.year || elements.buildYear.options[0].value;
+  elements.buildSchool.value = item.school || "";
+  elements.buildPageTitle.value = item.title || "";
+  elements.buildSourceCode.value = item.sourceCode;
+  elements.buildPageScroll.scrollTop = 0;
+}
+
+function deleteLibraryItem(targetLibrary, item) {
+  const confirmed = window.confirm(`确定删除“${item.title || LIBRARY_CONFIG[targetLibrary].defaultTitle}”吗？`);
+
+  if (!confirmed) {
+    return;
+  }
+
+  const items = readLibraryItems(targetLibrary, true);
+
+  if (!items) {
+    return;
+  }
+
+  const remainingItems = items.filter((storedItem) => storedItem.id !== item.id);
+
+  if (!writeLibraryItems(targetLibrary, remainingItems)) {
+    return;
+  }
+
+  renderLibraryList(targetLibrary);
+  showToast(LIBRARY_CONFIG[targetLibrary].deletedMessage);
+}
+
+function handleLibraryAction(event) {
+  const button = event.target.closest("[data-library-action]");
+
+  if (!button) {
+    return;
+  }
+
+  const targetLibrary = button.dataset.targetLibrary;
+  const item = findLibraryItem(targetLibrary, button.dataset.itemId);
+
+  if (!item) {
+    showToast("这条本地记录已不存在，请刷新列表后重试。");
+    renderLibraryList(targetLibrary);
+    return;
+  }
+
+  if (button.dataset.libraryAction === "view") {
+    showSourceInBuildPreview(item.sourceCode, "本地记录预览", button);
+    showToast("已打开本地记录预览；页面脚本在隔离沙箱内运行。");
+  } else if (button.dataset.libraryAction === "edit") {
+    switchPage("build");
+    fillBuildFormFromItem(item);
+    showToast("记录已回填到源码建站，再次保存会创建一条新记录。");
+  } else if (button.dataset.libraryAction === "delete") {
+    deleteLibraryItem(targetLibrary, item);
+  }
+}
+
 function updateBuildCities() {
   const selectedProvince = elements.buildProvince.value;
   const cities = PROVINCE_CITY_MAP[selectedProvince] || [];
@@ -401,7 +741,8 @@ function createJsonPreviewDocument(source) {
 </html>`;
 }
 
-function openBuildPreview() {
+function openBuildPreview(returnFocus = document.activeElement) {
+  state.previewReturnFocus = returnFocus;
   elements.buildPreviewModal.hidden = false;
   document.body.classList.add("is-preview-open");
   elements.closeBuildPreviewButton.focus();
@@ -410,7 +751,29 @@ function openBuildPreview() {
 function closeBuildPreview() {
   elements.buildPreviewModal.hidden = true;
   document.body.classList.remove("is-preview-open");
-  elements.renderBuildPreviewButton.focus();
+
+  const returnFocus = state.previewReturnFocus;
+  state.previewReturnFocus = null;
+
+  if (returnFocus && returnFocus.isConnected && !returnFocus.closest("[hidden]")) {
+    returnFocus.focus();
+  } else if (!elements.renderBuildPreviewButton.closest("[hidden]")) {
+    elements.renderBuildPreviewButton.focus();
+  }
+}
+
+function showSourceInBuildPreview(source, statusText, returnFocus) {
+  const trimmedSource = source.trim();
+  const looksLikeJson = trimmedSource.startsWith("{") || trimmedSource.startsWith("[");
+  const previewDocument = looksLikeJson ? createJsonPreviewDocument(trimmedSource) : source;
+
+  elements.buildPreviewFrame.removeAttribute("srcdoc");
+  elements.buildPreviewFrame.srcdoc = previewDocument;
+  elements.buildPreviewFrame.hidden = false;
+  elements.buildPreviewPlaceholder.hidden = true;
+  elements.buildPreviewStatus.textContent = statusText;
+  elements.buildPreviewStatus.classList.add("is-ready");
+  openBuildPreview(returnFocus);
 }
 
 function renderBuildPreview() {
@@ -422,16 +785,7 @@ function renderBuildPreview() {
     return;
   }
 
-  const looksLikeJson = trimmedSource.startsWith("{") || trimmedSource.startsWith("[");
-  const previewDocument = looksLikeJson ? createJsonPreviewDocument(trimmedSource) : source;
-
-  elements.buildPreviewFrame.removeAttribute("srcdoc");
-  elements.buildPreviewFrame.srcdoc = previewDocument;
-  elements.buildPreviewFrame.hidden = false;
-  elements.buildPreviewPlaceholder.hidden = true;
-  elements.buildPreviewStatus.textContent = "脚本预览已更新";
-  elements.buildPreviewStatus.classList.add("is-ready");
-  openBuildPreview();
+  showSourceInBuildPreview(source, "脚本预览已更新", elements.renderBuildPreviewButton);
   showToast("本地预览已更新；页面脚本正在隔离沙箱内运行。");
 }
 
@@ -454,15 +808,20 @@ function bindEvents() {
   elements.buildProvince.addEventListener("change", updateBuildCities);
   elements.renderBuildPreviewButton.addEventListener("click", renderBuildPreview);
   elements.closeBuildPreviewButton.addEventListener("click", closeBuildPreview);
-  elements.publishOriginalButton.addEventListener("click", () => {
-    showToast("演示：尚未接入原创题库，本阶段不会保存或发布数据。");
-  });
-  elements.saveStrategyButton.addEventListener("click", () => {
-    showToast("演示：尚未接入策略库，本阶段不会保存数据。");
-  });
+  elements.publishOriginalButton.addEventListener("click", () => saveBuildRecord("original"));
+  elements.saveStrategyButton.addEventListener("click", () => saveBuildRecord("strategy"));
+  elements.originalLibraryList.addEventListener("click", handleLibraryAction);
+  elements.strategyLibraryList.addEventListener("click", handleLibraryAction);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !elements.buildPreviewModal.hidden) {
       closeBuildPreview();
+    }
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === STORAGE_KEYS.original) {
+      renderLibraryList("original");
+    } else if (event.key === STORAGE_KEYS.strategy) {
+      renderLibraryList("strategy");
     }
   });
   window.addEventListener("beforeunload", revokeFilePreviewUrl);
@@ -472,6 +831,8 @@ function initializeApp() {
   cacheElements();
   initializeBuildSelectors();
   bindEvents();
+  renderLibraryList("original");
+  renderLibraryList("strategy");
   switchPage(state.activePage);
   switchResultView(state.activeView);
 }
