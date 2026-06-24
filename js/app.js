@@ -125,6 +125,28 @@ const STORAGE_KEYS = Object.freeze({
 const LAST_FULL_BACKUP_KEY = "mathAiEduLastFullBackupAt";
 const WELCOME_GUIDE_KEY = "mathAiEduHasSeenWelcomeGuide";
 const FULL_BACKUP_VERSION = 1;
+const VISUALIZATION_DATA_VERSION = 1;
+
+const VISUALIZATION_KIND_LABELS = Object.freeze({
+  point: "点",
+  segment: "线段",
+  line: "直线",
+  circle: "圆",
+  function: "函数",
+  slider: "滑块",
+});
+
+const VISUALIZATION_EXAMPLE = Object.freeze({
+  version: VISUALIZATION_DATA_VERSION,
+  type: "geometry",
+  objects: [
+    { kind: "point", id: "A", label: "A", x: -2, y: 1 },
+    { kind: "point", id: "B", label: "B", x: 2, y: 1 },
+    { kind: "segment", id: "AB", from: "A", to: "B" },
+    { kind: "function", id: "f", expression: "y = x^2", range: [-5, 5] },
+    { kind: "slider", id: "t", min: 0, max: 10, step: 0.5, value: 2 },
+  ],
+});
 
 const LIBRARY_CONFIG = Object.freeze({
   original: {
@@ -264,6 +286,14 @@ function cacheElements() {
   elements.buildYear = document.querySelector("#build-year");
   elements.buildSchool = document.querySelector("#build-school");
   elements.buildPageTitle = document.querySelector("#build-page-title");
+  elements.buildVisualizationData = document.querySelector("#build-visualization-data");
+  elements.insertVisualizationExampleButton = document.querySelector(
+    "#insert-visualization-example",
+  );
+  elements.checkVisualizationDataButton = document.querySelector(
+    "#check-visualization-data",
+  );
+  elements.visualizationCheckResult = document.querySelector("#visualization-check-result");
   elements.buildSourceCode = document.querySelector("#build-source-code");
   elements.buildPreviewModal = document.querySelector("#build-preview-modal");
   elements.buildPreviewFrame = document.querySelector("#build-preview-frame");
@@ -682,6 +712,248 @@ function exportLibrary(targetLibrary) {
   showToast(`已导出 ${items.length} 条${LIBRARY_CONFIG[targetLibrary].displayName}数据。`);
 }
 
+function createVisualizationValidationResult(valid, message, data = null, details = {}) {
+  return {
+    valid,
+    message,
+    data,
+    empty: false,
+    objectCount: 0,
+    kindLabels: [],
+    ...details,
+  };
+}
+
+function validateVisualizationDataValue(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return createVisualizationValidationResult(false, "图形数据必须是一个 JSON 对象。");
+  }
+
+  if (!Object.hasOwn(value, "version")) {
+    return createVisualizationValidationResult(false, "图形 JSON 缺少 version 字段。");
+  }
+
+  if (value.version !== VISUALIZATION_DATA_VERSION) {
+    return createVisualizationValidationResult(false, "当前仅支持 version 为 1 的图形 JSON。");
+  }
+
+  if (typeof value.type !== "string" || !value.type.trim()) {
+    return createVisualizationValidationResult(false, "图形 JSON 缺少有效的 type 字段。");
+  }
+
+  if (!Object.hasOwn(value, "objects")) {
+    return createVisualizationValidationResult(false, "图形 JSON 缺少 objects 字段。");
+  }
+
+  if (!Array.isArray(value.objects)) {
+    return createVisualizationValidationResult(false, "图形 JSON 的 objects 必须是数组。");
+  }
+
+  const usedIds = new Set();
+  const pointIds = new Set();
+  const kinds = new Set();
+  const isFiniteNumber = (number) => typeof number === "number" && Number.isFinite(number);
+
+  for (const [index, object] of value.objects.entries()) {
+    const position = index + 1;
+
+    if (!object || typeof object !== "object" || Array.isArray(object)) {
+      return createVisualizationValidationResult(false, `objects 第 ${position} 项必须是对象。`);
+    }
+
+    if (
+      typeof object.kind !== "string" ||
+      !object.kind.trim() ||
+      typeof object.id !== "string" ||
+      !object.id.trim()
+    ) {
+      return createVisualizationValidationResult(
+        false,
+        `objects 第 ${position} 项缺少有效的 kind 或 id。`,
+      );
+    }
+
+    const kind = object.kind.trim();
+    const id = object.id.trim();
+
+    if (!Object.hasOwn(VISUALIZATION_KIND_LABELS, kind)) {
+      return createVisualizationValidationResult(false, `对象“${id}”使用了暂不支持的 kind：${kind}。`);
+    }
+
+    if (usedIds.has(id)) {
+      return createVisualizationValidationResult(false, `图形对象 id“${id}”重复，请保持 id 唯一。`);
+    }
+
+    usedIds.add(id);
+    kinds.add(kind);
+
+    if (kind === "point") {
+      if (
+        typeof object.label !== "string" ||
+        !object.label.trim() ||
+        !isFiniteNumber(object.x) ||
+        !isFiniteNumber(object.y)
+      ) {
+        return createVisualizationValidationResult(
+          false,
+          `点“${id}”需要有效的 label、x 和 y。`,
+        );
+      }
+      pointIds.add(id);
+    } else if (kind === "segment") {
+      if (
+        typeof object.from !== "string" ||
+        !object.from.trim() ||
+        typeof object.to !== "string" ||
+        !object.to.trim()
+      ) {
+        return createVisualizationValidationResult(false, `线段“${id}”需要有效的 from 和 to。`);
+      }
+    } else if (kind === "line") {
+      if (
+        !Array.isArray(object.through) ||
+        object.through.length !== 2 ||
+        object.through.some((pointId) => typeof pointId !== "string" || !pointId.trim())
+      ) {
+        return createVisualizationValidationResult(
+          false,
+          `直线“${id}”的 through 必须包含两个点 id。`,
+        );
+      }
+    } else if (kind === "circle") {
+      if (
+        typeof object.center !== "string" ||
+        !object.center.trim() ||
+        !isFiniteNumber(object.radius) ||
+        object.radius <= 0
+      ) {
+        return createVisualizationValidationResult(
+          false,
+          `圆“${id}”需要有效的 center 和大于 0 的 radius。`,
+        );
+      }
+    } else if (kind === "function") {
+      if (
+        typeof object.expression !== "string" ||
+        !object.expression.trim() ||
+        !Array.isArray(object.range) ||
+        object.range.length !== 2 ||
+        object.range.some((boundary) => !isFiniteNumber(boundary)) ||
+        object.range[0] > object.range[1]
+      ) {
+        return createVisualizationValidationResult(
+          false,
+          `函数“${id}”需要字符串 expression 和有效的两端点 range。`,
+        );
+      }
+    } else if (kind === "slider") {
+      if (
+        !isFiniteNumber(object.min) ||
+        !isFiniteNumber(object.max) ||
+        !isFiniteNumber(object.step) ||
+        !isFiniteNumber(object.value) ||
+        object.min >= object.max ||
+        object.step <= 0 ||
+        object.value < object.min ||
+        object.value > object.max
+      ) {
+        return createVisualizationValidationResult(
+          false,
+          `滑块“${id}”需要有效的 min、max、step 和 value。`,
+        );
+      }
+    }
+  }
+
+  for (const object of value.objects) {
+    const references =
+      object.kind === "segment"
+        ? [object.from, object.to]
+        : object.kind === "line"
+          ? object.through
+          : object.kind === "circle"
+            ? [object.center]
+            : [];
+    const missingReference = references.find((reference) => !pointIds.has(reference));
+
+    if (missingReference) {
+      return createVisualizationValidationResult(
+        false,
+        `对象“${object.id}”引用了不存在的点 id“${missingReference}”。`,
+      );
+    }
+  }
+
+  const kindLabels = Array.from(kinds, (kind) => VISUALIZATION_KIND_LABELS[kind]);
+  const typeSummary = kindLabels.length > 0 ? kindLabels.join("、") : "暂无对象";
+
+  return createVisualizationValidationResult(
+    true,
+    `图形 JSON 格式通过；对象数量：${value.objects.length}；包含类型：${typeSummary}。`,
+    value,
+    {
+      objectCount: value.objects.length,
+      kindLabels,
+    },
+  );
+}
+
+function parseVisualizationDataText(text) {
+  const trimmedText = String(text || "").trim();
+
+  if (!trimmedText) {
+    return createVisualizationValidationResult(
+      true,
+      "图形数据为空，不影响保存。",
+      null,
+      { empty: true },
+    );
+  }
+
+  try {
+    return validateVisualizationDataValue(JSON.parse(trimmedText));
+  } catch {
+    return createVisualizationValidationResult(
+      false,
+      "图形 JSON 不是合法 JSON，请检查括号、逗号和引号。",
+    );
+  }
+}
+
+function renderVisualizationCheckResult(result) {
+  elements.visualizationCheckResult.classList.toggle("is-neutral", result.empty);
+  elements.visualizationCheckResult.classList.toggle("is-success", result.valid && !result.empty);
+  elements.visualizationCheckResult.classList.toggle("is-error", !result.valid);
+  elements.visualizationCheckResult.textContent = result.message;
+}
+
+function checkVisualizationData() {
+  const result = parseVisualizationDataText(elements.buildVisualizationData.value);
+  renderVisualizationCheckResult(result);
+  return result;
+}
+
+function markVisualizationDataForReview() {
+  elements.visualizationCheckResult.classList.add("is-neutral");
+  elements.visualizationCheckResult.classList.remove("is-success", "is-error");
+  elements.visualizationCheckResult.textContent = elements.buildVisualizationData.value.trim()
+    ? "图形数据已修改，请点击“检查图形 JSON”。"
+    : "图形数据为空，不影响保存。";
+}
+
+function insertVisualizationExample() {
+  if (
+    elements.buildVisualizationData.value.trim() &&
+    !window.confirm("当前图形数据已有内容，确定用示例模板覆盖吗？")
+  ) {
+    return;
+  }
+
+  elements.buildVisualizationData.value = JSON.stringify(VISUALIZATION_EXAMPLE, null, 2);
+  checkVisualizationData();
+  showToast("已插入数学图形数据示例模板。");
+}
+
 function normalizeImportedItem(item, targetLibrary, usedIds) {
   if (
     !item ||
@@ -709,6 +981,14 @@ function normalizeImportedItem(item, targetLibrary, usedIds) {
   const createdAt = Number.isNaN(new Date(importedCreatedAt).getTime())
     ? new Date().toISOString()
     : importedCreatedAt;
+  const visualizationResult =
+    item.visualizationData === undefined || item.visualizationData === null
+      ? createVisualizationValidationResult(true, "", null, { empty: true })
+      : validateVisualizationDataValue(item.visualizationData);
+
+  if (!visualizationResult.valid) {
+    return null;
+  }
 
   return {
     id,
@@ -720,6 +1000,7 @@ function normalizeImportedItem(item, targetLibrary, usedIds) {
     year: typeof item.year === "string" ? item.year : "",
     school: typeof item.school === "string" ? item.school : "",
     sourceCode: item.sourceCode,
+    visualizationData: visualizationResult.data,
     targetLibrary,
     createdAt,
   };
@@ -1032,7 +1313,7 @@ function applyFullBackup(mode) {
   );
 
   if (!importedOriginalItems || !importedStrategyItems) {
-    showToast("恢复失败：备份中存在标题或源码不完整的记录，尚未写入本地数据。");
+    showToast("恢复失败：备份中存在标题、源码或图形数据不完整的记录，尚未写入本地数据。");
     return;
   }
 
@@ -1129,6 +1410,13 @@ function collectBuildRecord(targetLibrary) {
     return null;
   }
 
+  const visualizationResult = checkVisualizationData();
+
+  if (!visualizationResult.valid) {
+    showToast("图形 JSON 检查未通过，请修正后再保存。");
+    return null;
+  }
+
   const config = LIBRARY_CONFIG[targetLibrary];
   const title = elements.buildPageTitle.value.trim() || config.defaultTitle;
 
@@ -1142,6 +1430,7 @@ function collectBuildRecord(targetLibrary) {
     year: elements.buildYear.value,
     school: elements.buildSchool.value.trim(),
     sourceCode,
+    visualizationData: visualizationResult.data,
     targetLibrary,
     createdAt: new Date().toISOString(),
   };
@@ -1225,6 +1514,20 @@ function createRecordMeta(item) {
     createTextElement("span", "library-meta-pill", item.questionType || "类型未填写"),
     createTextElement("span", "library-meta-pill", item.year || "年份未填写"),
   );
+
+  if (
+    item.visualizationData &&
+    validateVisualizationDataValue(item.visualizationData).valid
+  ) {
+    meta.append(
+      createTextElement(
+        "span",
+        "library-meta-pill has-visualization",
+        "包含图形数据",
+      ),
+    );
+  }
+
   return meta;
 }
 
@@ -1660,6 +1963,12 @@ function fillBuildFormFromItem(item) {
   elements.buildSchool.value = item.school || "";
   elements.buildPageTitle.value = item.title || "";
   elements.buildSourceCode.value = item.sourceCode;
+  elements.buildVisualizationData.value = item.visualizationData
+    ? JSON.stringify(item.visualizationData, null, 2)
+    : "";
+  renderVisualizationCheckResult(
+    parseVisualizationDataText(elements.buildVisualizationData.value),
+  );
   elements.buildPageScroll.scrollTop = 0;
 }
 
@@ -1938,6 +2247,12 @@ function bindEvents() {
     showToast("无法生成这张图片的缩略图，请尝试其他图片。");
   });
   elements.buildProvince.addEventListener("change", updateBuildCities);
+  elements.insertVisualizationExampleButton.addEventListener(
+    "click",
+    insertVisualizationExample,
+  );
+  elements.checkVisualizationDataButton.addEventListener("click", checkVisualizationData);
+  elements.buildVisualizationData.addEventListener("input", markVisualizationDataForReview);
   elements.strategySubject.addEventListener("change", () => renderLibraryList("strategy"));
   elements.strategyProvince.addEventListener("change", () => {
     updateStrategyCities();

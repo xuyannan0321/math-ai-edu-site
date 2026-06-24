@@ -749,6 +749,46 @@
                 </div>
               </section>
 
+              <section
+                class="build-panel build-visualization-panel"
+                aria-labelledby="build-visualization-title"
+              >
+                <div class="build-panel-header build-visualization-header">
+                  <div>
+                    <span class="section-step visualization-step" aria-hidden="true">VIZ</span>
+                    <div>
+                      <h2 id="build-visualization-title">数学图形数据（可选）</h2>
+                      <p>如果解析页面包含几何图、函数图或动态演示，可以在这里粘贴标准图形 JSON。后续可用于 GGB 导出、Word 文档生成和图形复用。</p>
+                    </div>
+                  </div>
+                  <span class="code-language">JSON · VERSION 1</span>
+                </div>
+
+                <textarea
+                  class="build-visualization-editor"
+                  id="build-visualization-data"
+                  aria-labelledby="build-visualization-title"
+                  spellcheck="false"
+                  placeholder='例如：{"version":1,"type":"geometry","objects":[]}'
+                ></textarea>
+
+                <div class="build-visualization-actions">
+                  <button id="insert-visualization-example" type="button">插入示例模板</button>
+                  <button class="is-primary" id="check-visualization-data" type="button">
+                    检查图形 JSON
+                  </button>
+                </div>
+
+                <div
+                  class="visualization-check-result is-neutral"
+                  id="visualization-check-result"
+                  role="status"
+                  aria-live="polite"
+                >
+                  图形数据为空，不影响保存。
+                </div>
+              </section>
+
               <div class="build-editor-grid">
                 <section class="build-panel source-panel" aria-labelledby="build-source-title">
                   <div class="build-panel-header">
@@ -1206,6 +1246,16 @@
                     </h3>
                     <div class="help-faq-answer" id="help-faq-answer-5" hidden>
                       <p>可以。后续可增加安全的服务端接口、数据库、账号系统和真实 AI，但 API key 必须保存在服务端，不能写进前端代码。</p>
+                    </div>
+                  </article>
+                  <article class="help-faq-item">
+                    <h3>
+                      <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-6">
+                        <span>什么是数学图形数据？</span><span aria-hidden="true">＋</span>
+                      </button>
+                    </h3>
+                    <div class="help-faq-answer" id="help-faq-answer-6" hidden>
+                      <p>数学图形数据是为后续 GGB 导出、Word 文档和动态演示复用准备的结构化 JSON。当前阶段只负责保存和校验，不会真正生成 GGB 文件，也不会执行其中的函数表达式。</p>
                     </div>
                   </article>
                 </div>
