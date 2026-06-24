@@ -150,9 +150,11 @@ function cacheElements() {
   elements.buildProvince = document.querySelector("#build-province");
   elements.buildCity = document.querySelector("#build-city");
   elements.buildSourceCode = document.querySelector("#build-source-code");
+  elements.buildPreviewModal = document.querySelector("#build-preview-modal");
   elements.buildPreviewFrame = document.querySelector("#build-preview-frame");
   elements.buildPreviewPlaceholder = document.querySelector("#build-preview-placeholder");
   elements.buildPreviewStatus = document.querySelector("#build-preview-status");
+  elements.closeBuildPreviewButton = document.querySelector("#close-build-preview");
   elements.renderBuildPreviewButton = document.querySelector("#render-build-preview");
   elements.publishOriginalButton = document.querySelector("#publish-original-button");
   elements.saveStrategyButton = document.querySelector("#save-strategy-button");
@@ -399,21 +401,38 @@ function createJsonPreviewDocument(source) {
 </html>`;
 }
 
-function renderBuildPreview() {
-  const source = elements.buildSourceCode.value.trim();
+function openBuildPreview() {
+  elements.buildPreviewModal.hidden = false;
+  document.body.classList.add("is-preview-open");
+  elements.closeBuildPreviewButton.focus();
+}
 
-  if (!source) {
+function closeBuildPreview() {
+  elements.buildPreviewModal.hidden = true;
+  document.body.classList.remove("is-preview-open");
+  elements.renderBuildPreviewButton.focus();
+}
+
+function renderBuildPreview() {
+  const source = elements.buildSourceCode.value;
+  const trimmedSource = source.trim();
+
+  if (!trimmedSource) {
     showToast("请先粘贴 HTML 或 JSON 源码，再渲染本地预览。");
     return;
   }
 
-  const looksLikeJson = source.startsWith("{") || source.startsWith("[");
-  elements.buildPreviewFrame.srcdoc = looksLikeJson ? createJsonPreviewDocument(source) : source;
+  const looksLikeJson = trimmedSource.startsWith("{") || trimmedSource.startsWith("[");
+  const previewDocument = looksLikeJson ? createJsonPreviewDocument(trimmedSource) : source;
+
+  elements.buildPreviewFrame.removeAttribute("srcdoc");
+  elements.buildPreviewFrame.srcdoc = previewDocument;
   elements.buildPreviewFrame.hidden = false;
   elements.buildPreviewPlaceholder.hidden = true;
-  elements.buildPreviewStatus.textContent = "已本地渲染";
+  elements.buildPreviewStatus.textContent = "脚本预览已更新";
   elements.buildPreviewStatus.classList.add("is-ready");
-  showToast("本地预览已更新；沙箱会阻止源码中的脚本运行。");
+  openBuildPreview();
+  showToast("本地预览已更新；页面脚本正在隔离沙箱内运行。");
 }
 
 function bindEvents() {
@@ -434,11 +453,17 @@ function bindEvents() {
   });
   elements.buildProvince.addEventListener("change", updateBuildCities);
   elements.renderBuildPreviewButton.addEventListener("click", renderBuildPreview);
+  elements.closeBuildPreviewButton.addEventListener("click", closeBuildPreview);
   elements.publishOriginalButton.addEventListener("click", () => {
     showToast("演示：尚未接入原创题库，本阶段不会保存或发布数据。");
   });
   elements.saveStrategyButton.addEventListener("click", () => {
     showToast("演示：尚未接入策略库，本阶段不会保存数据。");
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.buildPreviewModal.hidden) {
+      closeBuildPreview();
+    }
   });
   window.addEventListener("beforeunload", revokeFilePreviewUrl);
 }

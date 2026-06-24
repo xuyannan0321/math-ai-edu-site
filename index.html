@@ -378,33 +378,54 @@
                   </div>
                 </section>
 
-                <section class="build-panel preview-output-panel" aria-labelledby="build-preview-title">
-                  <div class="build-panel-header">
-                    <div>
-                      <span class="section-step" aria-hidden="true">03</span>
-                      <h2 id="build-preview-title">本地预览</h2>
-                    </div>
-                    <span class="preview-status" id="build-preview-status" aria-live="polite">
-                      等待渲染
-                    </span>
-                  </div>
+                <div
+                  class="build-preview-modal"
+                  id="build-preview-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="build-preview-title"
+                  aria-describedby="build-preview-description"
+                  hidden
+                >
+                  <section class="build-preview-window">
+                    <header class="build-preview-toolbar">
+                      <div class="build-preview-toolbar-title">
+                        <div>
+                          <span class="section-step" aria-hidden="true">03</span>
+                          <div>
+                            <h2 id="build-preview-title">本地预览</h2>
+                            <p id="build-preview-description">
+                              脚本已启用 · 隔离来源 · 接近真实页面尺寸
+                            </p>
+                          </div>
+                        </div>
+                        <span class="preview-status" id="build-preview-status" aria-live="polite">
+                          等待渲染
+                        </span>
+                      </div>
+                      <button class="build-preview-close" id="close-build-preview" type="button">
+                        <span aria-hidden="true">×</span>
+                        关闭
+                      </button>
+                    </header>
 
-                  <div class="build-preview-stage">
-                    <iframe
-                      class="build-preview-frame"
-                      id="build-preview-frame"
-                      title="源码建站本地预览"
-                      sandbox=""
-                      referrerpolicy="no-referrer"
-                      hidden
-                    ></iframe>
-                    <div class="build-preview-placeholder" id="build-preview-placeholder">
-                      <span aria-hidden="true">&lt;/&gt;</span>
-                      <h3>预览尚未生成</h3>
-                      <p>在左侧粘贴源码并点击渲染，结果会显示在这个安全沙箱中。</p>
+                    <div class="build-preview-stage">
+                      <iframe
+                        class="build-preview-frame"
+                        id="build-preview-frame"
+                        title="源码建站本地预览"
+                        sandbox="allow-scripts"
+                        referrerpolicy="no-referrer"
+                        hidden
+                      ></iframe>
+                      <div class="build-preview-placeholder" id="build-preview-placeholder">
+                        <span aria-hidden="true">&lt;/&gt;</span>
+                        <h3>预览尚未生成</h3>
+                        <p>在源码编辑区粘贴内容并点击渲染，结果会显示在这个安全沙箱中。</p>
+                      </div>
                     </div>
-                  </div>
-                </section>
+                  </section>
+                </div>
               </div>
             </div>
           </div>
