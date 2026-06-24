@@ -338,6 +338,58 @@
                   <button type="button" data-grade-filter="中考" aria-pressed="false">中考</button>
                 </div>
 
+                <section class="original-data-filter-card" aria-label="原创题搜索筛选与排序">
+                  <div class="original-filter-toolbar">
+                    <label class="original-search-field" for="original-keyword">
+                      <span>搜索：</span>
+                      <input
+                        id="original-keyword"
+                        type="search"
+                        placeholder="搜索标题、科目、地区、类型或学校"
+                      />
+                    </label>
+                    <label class="library-sort-field" for="original-sort">
+                      <span>排序：</span>
+                      <select id="original-sort">
+                        <option value="latest">最新创建</option>
+                        <option value="earliest">最早创建</option>
+                        <option value="title-asc">标题 A-Z</option>
+                        <option value="title-desc">标题 Z-A</option>
+                      </select>
+                    </label>
+                    <button class="filter-reset-button" id="reset-original-filters" type="button">
+                      重置筛选
+                    </button>
+                    <strong id="original-result-count" aria-live="polite">共 0 条</strong>
+                  </div>
+                  <div class="original-filter-row">
+                    <span>类型：</span>
+                    <div class="original-filter-pills" aria-label="原创题类型筛选">
+                      <button class="is-active" type="button" data-original-type="" aria-pressed="true">全部</button>
+                      <button type="button" data-original-type="中考真题" aria-pressed="false">中考真题</button>
+                      <button type="button" data-original-type="中考模拟" aria-pressed="false">中考模拟</button>
+                      <button type="button" data-original-type="智能解析" aria-pressed="false">智能解析</button>
+                      <button type="button" data-original-type="期末测试" aria-pressed="false">期末测试</button>
+                      <button type="button" data-original-type="期中测试" aria-pressed="false">期中测试</button>
+                      <button type="button" data-original-type="月考" aria-pressed="false">月考</button>
+                    </div>
+                  </div>
+                  <div class="original-filter-row">
+                    <span>年份：</span>
+                    <div class="original-filter-pills" aria-label="原创题年份筛选">
+                      <button class="is-active" type="button" data-original-year="" aria-pressed="true">全部</button>
+                      <button type="button" data-original-year="2026" aria-pressed="false">2026</button>
+                      <button type="button" data-original-year="2025" aria-pressed="false">2025</button>
+                      <button type="button" data-original-year="2024" aria-pressed="false">2024</button>
+                      <button type="button" data-original-year="2023" aria-pressed="false">2023</button>
+                      <button type="button" data-original-year="2022" aria-pressed="false">2022</button>
+                      <button type="button" data-original-year="2021" aria-pressed="false">2021</button>
+                      <button type="button" data-original-year="2020" aria-pressed="false">2020</button>
+                      <button type="button" data-original-year="earlier" aria-pressed="false">更早</button>
+                    </div>
+                  </div>
+                </section>
+
                 <div
                   class="library-list original-record-list"
                   id="original-library-list"
@@ -347,8 +399,8 @@
 
                 <div class="library-empty" id="original-library-empty">
                   <span class="library-empty-mark" aria-hidden="true">＋</span>
-                  <h2>还没有本地原创题</h2>
-                  <p>前往源码建站，填写页面信息和源码后点击“发布至原创题库”。</p>
+                  <h2 id="original-empty-title">还没有本地原创题</h2>
+                  <p id="original-empty-description">前往源码建站，填写页面信息和源码后点击“发布至原创题库”。</p>
                   <button class="library-empty-action" type="button" data-page-target="build">
                     去源码建站
                   </button>
@@ -506,6 +558,20 @@
                     <strong id="strategy-result-count" aria-live="polite">0套</strong>
                     <input id="strategy-keyword" type="search" placeholder="请输入关键字搜索试卷" aria-label="搜索策略库" />
                   </div>
+                </div>
+                <div class="strategy-filter-tools">
+                  <label class="library-sort-field" for="strategy-sort">
+                    <span>排序：</span>
+                    <select id="strategy-sort">
+                      <option value="latest">最新入库</option>
+                      <option value="earliest">最早入库</option>
+                      <option value="title-asc">标题 A-Z</option>
+                      <option value="title-desc">标题 Z-A</option>
+                    </select>
+                  </label>
+                  <button class="filter-reset-button" id="reset-strategy-filters" type="button">
+                    重置筛选
+                  </button>
                 </div>
               </section>
 
@@ -737,7 +803,13 @@
                       <span aria-hidden="true">▣</span>
                       <h2 id="profile-original-title">最近保存的原创题</h2>
                     </div>
-                    <button type="button" data-page-target="original-library">查看全部</button>
+                    <button
+                      type="button"
+                      data-page-target="original-library"
+                      data-reset-library-filters="original"
+                    >
+                      查看全部
+                    </button>
                   </header>
                   <div
                     class="profile-recent-list"
@@ -757,7 +829,13 @@
                       <span aria-hidden="true">▤</span>
                       <h2 id="profile-strategy-title">最近保存的策略页</h2>
                     </div>
-                    <button type="button" data-page-target="strategy">查看全部</button>
+                    <button
+                      type="button"
+                      data-page-target="strategy"
+                      data-reset-library-filters="strategy"
+                    >
+                      查看全部
+                    </button>
                   </header>
                   <div
                     class="profile-recent-list"

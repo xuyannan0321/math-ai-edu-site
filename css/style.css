@@ -1233,6 +1233,104 @@ select.form-control {
   border-color: var(--blue-600);
 }
 
+.original-data-filter-card {
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 13px;
+  box-shadow: var(--shadow-sm);
+}
+
+.original-filter-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 13px;
+  margin-bottom: 7px;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.original-search-field,
+.library-sort-field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.original-search-field {
+  flex: 1 1 310px;
+}
+
+.original-search-field input,
+.library-sort-field select {
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 10px;
+  color: var(--gray-700);
+  font-size: 12px;
+  background: var(--white);
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  outline: 0;
+}
+
+.original-search-field input {
+  width: 100%;
+}
+
+.original-search-field input:focus,
+.library-sort-field select:focus {
+  border-color: var(--blue-500);
+}
+
+.filter-reset-button {
+  min-height: 36px;
+  padding: 7px 11px;
+  color: var(--gray-600);
+  font-size: 12px;
+  font-weight: 750;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+}
+
+.filter-reset-button:hover {
+  color: var(--blue-700);
+  background: var(--blue-50);
+  border-color: var(--blue-200);
+}
+
+#original-result-count {
+  flex: none;
+  padding: 8px 2px;
+  color: #ef4444;
+  font-size: 12px;
+}
+
+.original-filter-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+  padding-top: 9px;
+}
+
+.original-filter-row > span {
+  width: 45px;
+  flex: none;
+  padding-top: 5px;
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .original-record-card {
   padding: 15px 16px;
   gap: 16px;
@@ -1589,14 +1687,16 @@ select.form-control {
   min-width: 150px;
 }
 
-.strategy-filter-pills {
+.strategy-filter-pills,
+.original-filter-pills {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
   gap: 7px 12px;
 }
 
-.strategy-filter-pills button {
+.strategy-filter-pills button,
+.original-filter-pills button {
   min-height: 29px;
   padding: 4px 9px;
   color: var(--gray-600);
@@ -1606,12 +1706,14 @@ select.form-control {
   border-radius: 6px;
 }
 
-.strategy-filter-pills button:hover {
+.strategy-filter-pills button:hover,
+.original-filter-pills button:hover {
   color: var(--blue-600);
   background: var(--blue-50);
 }
 
-.strategy-filter-pills button.is-active {
+.strategy-filter-pills button.is-active,
+.original-filter-pills button.is-active {
   color: var(--white);
   background: var(--blue-600);
   border-color: var(--blue-600);
@@ -1654,6 +1756,17 @@ select.form-control {
 
 .strategy-search-group input {
   border-radius: 999px;
+}
+
+.strategy-filter-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--gray-100);
 }
 
 .strategy-record-card {
@@ -2908,6 +3021,27 @@ body.is-preview-open {
     width: 100%;
   }
 
+  .original-filter-toolbar {
+    align-items: stretch;
+  }
+
+  .original-search-field {
+    flex-basis: 100%;
+  }
+
+  .original-filter-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .original-filter-row > span {
+    width: auto;
+  }
+
+  .strategy-filter-tools {
+    justify-content: flex-start;
+  }
+
   .library-card {
     align-items: stretch;
     flex-direction: column;
@@ -3161,6 +3295,30 @@ body.is-preview-open {
 
   .library-action-button.profile-recent-view {
     width: 100%;
+  }
+
+  .original-data-filter-card {
+    padding: 14px;
+  }
+
+  .original-search-field,
+  .library-sort-field {
+    width: 100%;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .library-sort-field select,
+  .filter-reset-button,
+  .strategy-filter-tools .library-sort-field,
+  .strategy-filter-tools .filter-reset-button {
+    width: 100%;
+  }
+
+  #original-result-count {
+    width: 100%;
+    padding-bottom: 0;
   }
 }
 

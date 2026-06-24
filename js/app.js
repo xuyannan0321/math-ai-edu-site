@@ -181,6 +181,14 @@ function cacheElements() {
   elements.originalTabButtons = Array.from(document.querySelectorAll("[data-original-tab]"));
   elements.originalTabPanels = Array.from(document.querySelectorAll("[data-original-panel]"));
   elements.originalGradeButtons = Array.from(document.querySelectorAll("[data-grade-filter]"));
+  elements.originalTypeButtons = Array.from(document.querySelectorAll("[data-original-type]"));
+  elements.originalYearButtons = Array.from(document.querySelectorAll("[data-original-year]"));
+  elements.originalKeyword = document.querySelector("#original-keyword");
+  elements.originalSort = document.querySelector("#original-sort");
+  elements.resetOriginalFiltersButton = document.querySelector("#reset-original-filters");
+  elements.originalResultCount = document.querySelector("#original-result-count");
+  elements.originalEmptyTitle = document.querySelector("#original-empty-title");
+  elements.originalEmptyDescription = document.querySelector("#original-empty-description");
   elements.exportOriginalLibraryButton = document.querySelector("#export-original-library");
   elements.importOriginalLibraryButton = document.querySelector("#import-original-library");
   elements.importOriginalFile = document.querySelector("#import-original-file");
@@ -198,6 +206,8 @@ function cacheElements() {
   elements.strategyEndDate = document.querySelector("#strategy-end-date");
   elements.strategySchool = document.querySelector("#strategy-school");
   elements.strategyKeyword = document.querySelector("#strategy-keyword");
+  elements.strategySort = document.querySelector("#strategy-sort");
+  elements.resetStrategyFiltersButton = document.querySelector("#reset-strategy-filters");
   elements.exportStrategyLibraryButton = document.querySelector("#export-strategy-library");
   elements.importStrategyLibraryButton = document.querySelector("#import-strategy-library");
   elements.importStrategyFile = document.querySelector("#import-strategy-file");
@@ -297,6 +307,44 @@ function selectPillButton(buttons, selectedButton) {
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
+}
+
+function resetOriginalFilters(shouldRender = true) {
+  elements.originalKeyword.value = "";
+  elements.originalSort.value = "latest";
+  selectPillButton(elements.originalTypeButtons, elements.originalTypeButtons[0]);
+  selectPillButton(elements.originalYearButtons, elements.originalYearButtons[0]);
+  selectPillButton(elements.originalGradeButtons, elements.originalGradeButtons[0]);
+
+  if (shouldRender) {
+    renderLibraryList("original");
+  }
+}
+
+function resetStrategyFilters(shouldRender = true) {
+  elements.strategySubject.value = "";
+  elements.strategyProvince.value = "";
+  updateStrategyCities();
+  elements.strategyCity.value = "";
+  elements.strategyStartDate.value = "";
+  elements.strategyEndDate.value = "";
+  elements.strategySchool.value = "";
+  elements.strategyKeyword.value = "";
+  elements.strategySort.value = "latest";
+  selectPillButton(elements.strategyTypeButtons, elements.strategyTypeButtons[0]);
+  selectPillButton(elements.strategyYearButtons, elements.strategyYearButtons[0]);
+
+  if (shouldRender) {
+    renderLibraryList("strategy");
+  }
+}
+
+function resetLibraryFilters(targetLibrary, shouldRender = true) {
+  if (targetLibrary === "original") {
+    resetOriginalFilters(shouldRender);
+  } else if (targetLibrary === "strategy") {
+    resetStrategyFilters(shouldRender);
+  }
 }
 
 function switchResultView(viewName) {
@@ -911,31 +959,120 @@ function getLibraryElements(targetLibrary) {
   };
 }
 
+function getActiveFilterValue(buttons, datasetKey) {
+  const activeButton = buttons.find((button) => button.classList.contains("is-active"));
+  return activeButton?.dataset[datasetKey] || "";
+}
+
+function normalizeSearchValue(value) {
+  return String(value || "").trim().toLocaleLowerCase("zh-CN");
+}
+
+function createLibrarySearchText(item) {
+  return [
+    item.title,
+    item.subject,
+    item.province,
+    item.city,
+    item.questionType,
+    item.school,
+  ]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLocaleLowerCase("zh-CN");
+}
+
+function matchesYearFilter(itemYear, filterYear) {
+  if (!filterYear) {
+    return true;
+  }
+
+  if (filterYear === "earlier") {
+    const numericYear = Number.parseInt(itemYear, 10);
+    return Number.isFinite(numericYear) && numericYear < 2020;
+  }
+
+  return itemYear === filterYear;
+}
+
+function sortLibraryItems(items, sortMode) {
+  const titleCollator = new Intl.Collator("zh-CN", {
+    numeric: true,
+    sensitivity: "base",
+  });
+
+  return [...items].sort((firstItem, secondItem) => {
+    if (sortMode === "title-asc" || sortMode === "title-desc") {
+      const titleComparison = titleCollator.compare(
+        String(firstItem.title || ""),
+        String(secondItem.title || ""),
+      );
+      return sortMode === "title-desc" ? -titleComparison : titleComparison;
+    }
+
+    const firstTime = new Date(firstItem.createdAt).getTime();
+    const secondTime = new Date(secondItem.createdAt).getTime();
+    const firstInvalid = Number.isNaN(firstTime);
+    const secondInvalid = Number.isNaN(secondTime);
+
+    if (firstInvalid || secondInvalid) {
+      if (firstInvalid && secondInvalid) {
+        return 0;
+      }
+
+      return firstInvalid ? 1 : -1;
+    }
+
+    return sortMode === "earliest" ? firstTime - secondTime : secondTime - firstTime;
+  });
+}
+
+function getOriginalFilterState() {
+  return {
+    keyword: normalizeSearchValue(elements.originalKeyword.value),
+    questionType: getActiveFilterValue(elements.originalTypeButtons, "originalType"),
+    year: getActiveFilterValue(elements.originalYearButtons, "originalYear"),
+    sortMode: elements.originalSort.value,
+  };
+}
+
+function filterOriginalItems(items) {
+  const filters = getOriginalFilterState();
+  const filteredItems = items.filter((item) => {
+    if (filters.keyword && !createLibrarySearchText(item).includes(filters.keyword)) {
+      return false;
+    }
+
+    if (filters.questionType && item.questionType !== filters.questionType) {
+      return false;
+    }
+
+    return matchesYearFilter(item.year, filters.year);
+  });
+
+  return sortLibraryItems(filteredItems, filters.sortMode);
+}
+
 function getStrategyFilterState() {
-  const activeTypeButton = elements.strategyTypeButtons.find((button) =>
-    button.classList.contains("is-active"),
-  );
-  const activeYearButton = elements.strategyYearButtons.find((button) =>
-    button.classList.contains("is-active"),
-  );
 
   return {
     subject: elements.strategySubject.value,
     province: elements.strategyProvince.value,
     city: elements.strategyCity.value,
-    questionType: activeTypeButton?.dataset.strategyType || "",
-    year: activeYearButton?.dataset.strategyYear || "",
+    questionType: getActiveFilterValue(elements.strategyTypeButtons, "strategyType"),
+    year: getActiveFilterValue(elements.strategyYearButtons, "strategyYear"),
     startDate: elements.strategyStartDate.value,
     endDate: elements.strategyEndDate.value,
-    school: elements.strategySchool.value.trim().toLocaleLowerCase("zh-CN"),
-    keyword: elements.strategyKeyword.value.trim().toLocaleLowerCase("zh-CN"),
+    school: normalizeSearchValue(elements.strategySchool.value),
+    keyword: normalizeSearchValue(elements.strategyKeyword.value),
+    sortMode: elements.strategySort.value,
   };
 }
 
 function filterStrategyItems(items) {
   const filters = getStrategyFilterState();
 
-  return items.filter((item) => {
+  const filteredItems = items.filter((item) => {
     if (filters.subject && item.subject !== filters.subject) {
       return false;
     }
@@ -952,13 +1089,7 @@ function filterStrategyItems(items) {
       return false;
     }
 
-    if (filters.year === "earlier") {
-      const numericYear = Number.parseInt(item.year, 10);
-
-      if (!Number.isFinite(numericYear) || numericYear >= 2020) {
-        return false;
-      }
-    } else if (filters.year && item.year !== filters.year) {
+    if (!matchesYearFilter(item.year, filters.year)) {
       return false;
     }
 
@@ -980,36 +1111,26 @@ function filterStrategyItems(items) {
       }
     }
 
-    if (filters.school && !String(item.school || "").toLocaleLowerCase("zh-CN").includes(filters.school)) {
+    if (filters.school && !normalizeSearchValue(item.school).includes(filters.school)) {
       return false;
     }
 
-    if (filters.keyword) {
-      const searchableText = [
-        item.title,
-        item.subject,
-        item.province,
-        item.city,
-        item.questionType,
-        item.year,
-        item.school,
-      ]
-        .filter((value) => typeof value === "string")
-        .join(" ")
-        .toLocaleLowerCase("zh-CN");
-
-      if (!searchableText.includes(filters.keyword)) {
-        return false;
-      }
+    if (filters.keyword && !createLibrarySearchText(item).includes(filters.keyword)) {
+      return false;
     }
 
     return true;
   });
+
+  return sortLibraryItems(filteredItems, filters.sortMode);
 }
 
 function renderLibraryList(targetLibrary) {
   const storedItems = readLibraryItems(targetLibrary, true) || [];
-  const items = targetLibrary === "strategy" ? filterStrategyItems(storedItems) : storedItems;
+  const items =
+    targetLibrary === "strategy"
+      ? filterStrategyItems(storedItems)
+      : filterOriginalItems(storedItems);
   const { list, empty } = getLibraryElements(targetLibrary);
 
   list.replaceChildren();
@@ -1018,6 +1139,12 @@ function renderLibraryList(targetLibrary) {
 
   if (targetLibrary === "original") {
     elements.originalLocalCount.textContent = `${storedItems.length} 道`;
+    elements.originalResultCount.textContent = `共 ${items.length} 条`;
+    const isFiltered = items.length === 0 && storedItems.length > 0;
+    elements.originalEmptyTitle.textContent = isFiltered ? "没有找到匹配内容" : "还没有本地原创题";
+    elements.originalEmptyDescription.textContent = isFiltered
+      ? "请调整搜索关键词、类型、年份或排序条件后再试。"
+      : "前往源码建站，填写页面信息和源码后点击“发布至原创题库”。";
   } else {
     elements.strategyResultCount.textContent = `${items.length}套`;
     const isFiltered = items.length === 0 && storedItems.length > 0;
@@ -1349,7 +1476,13 @@ function renderBuildPreview() {
 
 function bindEvents() {
   elements.pageButtons.forEach((button) => {
-    button.addEventListener("click", () => switchPage(button.dataset.pageTarget));
+    button.addEventListener("click", () => {
+      if (button.dataset.resetLibraryFilters) {
+        resetLibraryFilters(button.dataset.resetLibraryFilters, false);
+      }
+
+      switchPage(button.dataset.pageTarget);
+    });
   });
 
   elements.originalTabButtons.forEach((button) => {
@@ -1359,6 +1492,22 @@ function bindEvents() {
   elements.originalGradeButtons.forEach((button) => {
     button.addEventListener("click", () => selectPillButton(elements.originalGradeButtons, button));
   });
+
+  elements.originalKeyword.addEventListener("input", () => renderLibraryList("original"));
+  elements.originalTypeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      selectPillButton(elements.originalTypeButtons, button);
+      renderLibraryList("original");
+    });
+  });
+  elements.originalYearButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      selectPillButton(elements.originalYearButtons, button);
+      renderLibraryList("original");
+    });
+  });
+  elements.originalSort.addEventListener("change", () => renderLibraryList("original"));
+  elements.resetOriginalFiltersButton.addEventListener("click", () => resetOriginalFilters());
 
   elements.toastButtons.forEach((button) => {
     button.addEventListener("click", () => showToast(button.dataset.toastMessage));
@@ -1398,6 +1547,8 @@ function bindEvents() {
   elements.strategyEndDate.addEventListener("change", () => renderLibraryList("strategy"));
   elements.strategySchool.addEventListener("input", () => renderLibraryList("strategy"));
   elements.strategyKeyword.addEventListener("input", () => renderLibraryList("strategy"));
+  elements.strategySort.addEventListener("change", () => renderLibraryList("strategy"));
+  elements.resetStrategyFiltersButton.addEventListener("click", () => resetStrategyFilters());
   elements.renderBuildPreviewButton.addEventListener("click", renderBuildPreview);
   elements.closeBuildPreviewButton.addEventListener("click", closeBuildPreview);
   elements.publishOriginalButton.addEventListener("click", () => saveBuildRecord("original"));
