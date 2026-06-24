@@ -201,6 +201,11 @@ function cacheElements() {
   elements.exportStrategyLibraryButton = document.querySelector("#export-strategy-library");
   elements.importStrategyLibraryButton = document.querySelector("#import-strategy-library");
   elements.importStrategyFile = document.querySelector("#import-strategy-file");
+  elements.profileRecentGrid = document.querySelector("#profile-recent-grid");
+  elements.profileOriginalList = document.querySelector("#profile-original-list");
+  elements.profileOriginalEmpty = document.querySelector("#profile-original-empty");
+  elements.profileStrategyList = document.querySelector("#profile-strategy-list");
+  elements.profileStrategyEmpty = document.querySelector("#profile-strategy-empty");
   elements.buildPageScroll = document.querySelector("#page-build .build-page-scroll");
   elements.buildSubject = document.querySelector("#build-subject");
   elements.buildProvince = document.querySelector("#build-province");
@@ -254,6 +259,8 @@ function switchPage(pageId) {
     renderLibraryList("original");
   } else if (pageId === "strategy") {
     renderLibraryList("strategy");
+  } else if (pageId === "profile") {
+    renderProfileRecentItems();
   }
 }
 
@@ -1029,6 +1036,73 @@ function renderLibraryList(targetLibrary) {
   });
 }
 
+function getRecentLibraryItems(targetLibrary, limit = 3) {
+  const items = readLibraryItems(targetLibrary, true) || [];
+
+  return [...items]
+    .sort((firstItem, secondItem) => {
+      const firstTime = new Date(firstItem.createdAt).getTime();
+      const secondTime = new Date(secondItem.createdAt).getTime();
+      return (Number.isNaN(secondTime) ? 0 : secondTime) - (Number.isNaN(firstTime) ? 0 : firstTime);
+    })
+    .slice(0, limit);
+}
+
+function createProfileRecentItem(item, targetLibrary) {
+  const card = document.createElement("article");
+  card.className = "profile-recent-item";
+
+  const content = document.createElement("div");
+  content.className = "profile-recent-item-content";
+  content.append(
+    createTextElement(
+      "h3",
+      "profile-recent-item-title",
+      item.title || LIBRARY_CONFIG[targetLibrary].defaultTitle,
+    ),
+    createTextElement("time", "profile-recent-item-time", formatCreatedAt(item.createdAt)),
+  );
+
+  const meta = document.createElement("div");
+  meta.className = "profile-recent-item-meta";
+  meta.append(
+    createTextElement("span", "", item.subject || "科目未填写"),
+    createTextElement("span", "", item.questionType || "类型未填写"),
+  );
+  content.append(meta);
+
+  card.append(
+    content,
+    createLibraryActionButton("view", "查看", item, targetLibrary, "profile-recent-view"),
+  );
+  return card;
+}
+
+function renderProfileRecentList(targetLibrary, list, empty) {
+  const items = getRecentLibraryItems(targetLibrary);
+
+  list.replaceChildren();
+  list.hidden = items.length === 0;
+  empty.hidden = items.length > 0;
+
+  items.forEach((item) => {
+    list.append(createProfileRecentItem(item, targetLibrary));
+  });
+}
+
+function renderProfileRecentItems() {
+  renderProfileRecentList(
+    "original",
+    elements.profileOriginalList,
+    elements.profileOriginalEmpty,
+  );
+  renderProfileRecentList(
+    "strategy",
+    elements.profileStrategyList,
+    elements.profileStrategyEmpty,
+  );
+}
+
 function findLibraryItem(targetLibrary, itemId) {
   const items = readLibraryItems(targetLibrary, true);
 
@@ -1344,6 +1418,7 @@ function bindEvents() {
   );
   elements.originalLibraryList.addEventListener("click", handleLibraryAction);
   elements.strategyLibraryList.addEventListener("click", handleLibraryAction);
+  elements.profileRecentGrid.addEventListener("click", handleLibraryAction);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !elements.buildPreviewModal.hidden) {
       closeBuildPreview();
@@ -1352,8 +1427,14 @@ function bindEvents() {
   window.addEventListener("storage", (event) => {
     if (event.key === STORAGE_KEYS.original) {
       renderLibraryList("original");
+      if (state.activePage === "profile") {
+        renderProfileRecentItems();
+      }
     } else if (event.key === STORAGE_KEYS.strategy) {
       renderLibraryList("strategy");
+      if (state.activePage === "profile") {
+        renderProfileRecentItems();
+      }
     }
   });
   window.addEventListener("beforeunload", revokeFilePreviewUrl);

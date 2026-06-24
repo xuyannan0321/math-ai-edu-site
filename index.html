@@ -663,16 +663,115 @@
         </section>
 
         <section
-          class="app-page placeholder-page fade-in"
+          class="app-page profile-page fade-in"
           id="page-profile"
           data-page="profile"
           aria-labelledby="nav-profile"
           hidden
         >
-          <div class="placeholder-card">
-            <span class="placeholder-number">05</span>
-            <h1>我的中心</h1>
-            <p>页面容器已准备好，个人资料与学习记录将在后续阶段实现。</p>
+          <div class="profile-page-scroll">
+            <div class="profile-container">
+              <header class="profile-page-header">
+                <div>
+                  <span class="profile-kicker">LOCAL PROFILE</span>
+                  <h1><span aria-hidden="true">◎</span> 我的中心</h1>
+                  <p>管理本地演示账号信息，并快速查看最近保存的教学页面。</p>
+                </div>
+                <span class="profile-local-badge">仅当前浏览器</span>
+              </header>
+
+              <section class="profile-user-card" aria-labelledby="profile-user-name">
+                <div class="profile-avatar-column">
+                  <div class="profile-avatar-placeholder" aria-label="头像占位">1</div>
+                  <span class="profile-role-badge">身份：教师</span>
+                </div>
+
+                <div class="profile-user-details">
+                  <div class="profile-name-row">
+                    <h2 id="profile-user-name">学霸01号</h2>
+                    <span>本地演示账号</span>
+                  </div>
+                  <p>当前登录状态：本地演示账号</p>
+                  <dl class="profile-facts">
+                    <div><dt>账号类型</dt><dd>普通教师用户</dd></div>
+                    <div><dt>数据范围</dt><dd>仅保存在当前浏览器</dd></div>
+                  </dl>
+                </div>
+
+                <div class="profile-quick-actions">
+                  <button type="button" data-toast-message="个人信息编辑将在接入账号系统后开放。">
+                    个人信息
+                  </button>
+                  <button type="button" data-toast-message="勋章系统将在后续阶段开放。">
+                    我的勋章
+                  </button>
+                </div>
+              </section>
+
+              <section class="profile-asset-card" aria-labelledby="profile-assets-title">
+                <h2 id="profile-assets-title"><span aria-hidden="true">◆</span> 我的资产</h2>
+                <div class="profile-points-panel">
+                  <div>
+                    <span>当前可用积分</span>
+                    <p><strong>1,250</strong><small>分</small></p>
+                    <em>静态演示数据，不代表真实账户资产</em>
+                  </div>
+                  <button type="button" data-toast-message="购买积分为静态演示，本阶段不会发起真实支付。">
+                    购买积分
+                  </button>
+                </div>
+              </section>
+
+              <aside class="profile-security-card" aria-labelledby="profile-security-title">
+                <span aria-hidden="true">✓</span>
+                <div>
+                  <h2 id="profile-security-title">数据安全提示</h2>
+                  <p>当前原创题和策略页保存在浏览器 localStorage。更换浏览器、设备或网站地址时，请先导出 JSON，再在新环境中导入完成迁移。</p>
+                </div>
+              </aside>
+
+              <div class="profile-recent-grid" id="profile-recent-grid">
+                <section class="profile-recent-card" aria-labelledby="profile-original-title">
+                  <header>
+                    <div>
+                      <span aria-hidden="true">▣</span>
+                      <h2 id="profile-original-title">最近保存的原创题</h2>
+                    </div>
+                    <button type="button" data-page-target="original-library">查看全部</button>
+                  </header>
+                  <div
+                    class="profile-recent-list"
+                    id="profile-original-list"
+                    aria-live="polite"
+                  ></div>
+                  <div class="profile-recent-empty" id="profile-original-empty">
+                    <span aria-hidden="true">＋</span>
+                    <p>还没有本地原创题</p>
+                    <button type="button" data-page-target="build">去创建</button>
+                  </div>
+                </section>
+
+                <section class="profile-recent-card" aria-labelledby="profile-strategy-title">
+                  <header>
+                    <div>
+                      <span aria-hidden="true">▤</span>
+                      <h2 id="profile-strategy-title">最近保存的策略页</h2>
+                    </div>
+                    <button type="button" data-page-target="strategy">查看全部</button>
+                  </header>
+                  <div
+                    class="profile-recent-list"
+                    id="profile-strategy-list"
+                    aria-live="polite"
+                  ></div>
+                  <div class="profile-recent-empty" id="profile-strategy-empty">
+                    <span aria-hidden="true">＋</span>
+                    <p>还没有本地策略页</p>
+                    <button type="button" data-page-target="build">去创建</button>
+                  </div>
+                </section>
+              </div>
+            </div>
           </div>
         </section>
       </main>
