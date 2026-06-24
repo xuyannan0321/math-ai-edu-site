@@ -3,10 +3,261 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>数学网站</title>
+    <meta
+      name="description"
+      content="原题真解 Pro 数学学习工作台，帮助学生理解题意、掌握步骤并完成验算。"
+    />
+    <title>原题真解 Pro - 数学学习工作台</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <script src="js/app.js" defer></script>
   </head>
   <body>
-    <h1>数学网站项目已创建</h1>
-    <p>下一步将根据 design/网站样式.html 迁移 UI。</p>
+    <div class="app-shell">
+      <header class="site-header">
+        <button
+          class="brand"
+          type="button"
+          data-page-target="workspace"
+          aria-label="返回工作台"
+        >
+          <span class="brand-mark" aria-hidden="true">∑</span>
+          <span>原题真解 Pro</span>
+        </button>
+
+        <nav class="primary-nav" aria-label="主导航">
+          <button
+            class="nav-button is-active"
+            id="nav-workspace"
+            type="button"
+            data-page-target="workspace"
+            aria-controls="page-workspace"
+            aria-current="page"
+          >
+            工作台
+          </button>
+          <button
+            class="nav-button"
+            id="nav-original-library"
+            type="button"
+            data-page-target="original-library"
+            aria-controls="page-original-library"
+          >
+            原创题库
+          </button>
+          <button
+            class="nav-button"
+            id="nav-strategy"
+            type="button"
+            data-page-target="strategy"
+            aria-controls="page-strategy"
+          >
+            策略库
+          </button>
+          <button
+            class="nav-button"
+            id="nav-build"
+            type="button"
+            data-page-target="build"
+            aria-controls="page-build"
+          >
+            源码建站
+          </button>
+          <button
+            class="nav-button"
+            id="nav-profile"
+            type="button"
+            data-page-target="profile"
+            aria-controls="page-profile"
+          >
+            我的
+          </button>
+        </nav>
+
+        <div class="user-avatar" aria-label="当前用户">1</div>
+      </header>
+
+      <main class="app-main">
+        <section
+          class="app-page workspace-page fade-in"
+          id="page-workspace"
+          data-page="workspace"
+          aria-labelledby="nav-workspace"
+        >
+          <aside class="workspace-controls" aria-label="解题输入面板">
+            <div class="controls-scroll-area">
+              <div class="field-group">
+                <label class="field-label" for="model-select">AI 中枢模型</label>
+                <select id="model-select" class="form-control">
+                  <option>Gemini 3.1 Pro（界面演示）</option>
+                  <option>DeepSeek（界面演示）</option>
+                  <option>豆包 Doubao（界面演示）</option>
+                  <option>Qwen（界面演示）</option>
+                </select>
+                <p class="field-help">当前仅用于界面展示，尚未连接真实 AI。</p>
+              </div>
+
+              <div class="field-group">
+                <span class="field-label" id="upload-label">上传源文件</span>
+                <input
+                  class="visually-hidden"
+                  id="problem-file"
+                  type="file"
+                  accept="image/*,.pdf"
+                  aria-describedby="upload-help upload-file-name"
+                />
+                <label class="upload-zone" for="problem-file" aria-labelledby="upload-label">
+                  <span class="upload-icon" aria-hidden="true">＋</span>
+                  <strong>点击上传试题图片或 PDF</strong>
+                  <span id="upload-help">本阶段仅选择本地文件，不会上传到服务器</span>
+                </label>
+                <p class="selected-file" id="upload-file-name">尚未选择文件</p>
+              </div>
+
+              <div class="field-group instruction-group">
+                <label class="field-label" for="instruction-input">输入解题指令</label>
+                <textarea
+                  id="instruction-input"
+                  class="form-control instruction-input"
+                  placeholder="例如：请用初中方法分析这道题，说明考点、完整步骤、易错点，并进行验算。"
+                ></textarea>
+                <p class="field-help">完整的教学解析比只给答案更重要。</p>
+              </div>
+            </div>
+
+            <div class="generate-area">
+              <button class="primary-button" id="generate-report" type="button">
+                <span class="button-icon" aria-hidden="true">▶</span>
+                <span id="generate-button-text">生成标准解析报告</span>
+              </button>
+            </div>
+          </aside>
+
+          <section class="workspace-result" aria-label="解析结果">
+            <div class="result-toolbar">
+              <div class="view-switch" role="group" aria-label="结果展示方式">
+                <button
+                  class="view-button"
+                  id="view-code-button"
+                  type="button"
+                  data-result-view="code"
+                  aria-pressed="false"
+                >
+                  代码
+                </button>
+                <button
+                  class="view-button is-active"
+                  id="view-preview-button"
+                  type="button"
+                  data-result-view="preview"
+                  aria-pressed="true"
+                >
+                  预览
+                </button>
+              </div>
+              <span class="demo-badge">模拟模式 · 未连接 AI</span>
+            </div>
+
+            <div class="result-stage">
+              <div class="result-panel preview-panel" id="preview-view">
+                <iframe
+                  id="result-iframe"
+                  class="result-iframe"
+                  title="数学解析报告预览"
+                  sandbox=""
+                  hidden
+                ></iframe>
+                <div class="preview-placeholder" id="preview-placeholder">
+                  <span class="placeholder-mark" aria-hidden="true">∴</span>
+                  <h1>解析预览区</h1>
+                  <p>在左侧输入要求并点击生成，这里将展示教学式分步解析。</p>
+                  <ul aria-label="解析报告包含的内容">
+                    <li>题意分析</li>
+                    <li>本题考点</li>
+                    <li>解题步骤</li>
+                    <li>最终答案</li>
+                    <li>易错提醒</li>
+                    <li>验算或检查</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="result-panel code-panel" id="code-view" hidden>
+                <div class="code-header">
+                  <span>HTML</span>
+                  <span>模拟解析源码</span>
+                </div>
+                <textarea
+                  id="result-code"
+                  aria-label="生成的 HTML 代码"
+                  readonly
+                  spellcheck="false"
+                >// 等待生成教学解析 HTML...</textarea>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section
+          class="app-page placeholder-page fade-in"
+          id="page-original-library"
+          data-page="original-library"
+          aria-labelledby="nav-original-library"
+          hidden
+        >
+          <div class="placeholder-card">
+            <span class="placeholder-number">02</span>
+            <h1>原创题库</h1>
+            <p>页面容器已准备好，题目管理与分享功能将在后续阶段逐步迁移。</p>
+          </div>
+        </section>
+
+        <section
+          class="app-page placeholder-page fade-in"
+          id="page-strategy"
+          data-page="strategy"
+          aria-labelledby="nav-strategy"
+          hidden
+        >
+          <div class="placeholder-card">
+            <span class="placeholder-number">03</span>
+            <h1>策略库</h1>
+            <p>页面容器已准备好，教研策略筛选与省市联动将在后续阶段实现。</p>
+          </div>
+        </section>
+
+        <section
+          class="app-page placeholder-page fade-in"
+          id="page-build"
+          data-page="build"
+          aria-labelledby="nav-build"
+          hidden
+        >
+          <div class="placeholder-card">
+            <span class="placeholder-number">04</span>
+            <h1>源码建站</h1>
+            <p>页面容器已准备好，源码编辑与独立预览将在后续阶段实现。</p>
+          </div>
+        </section>
+
+        <section
+          class="app-page placeholder-page fade-in"
+          id="page-profile"
+          data-page="profile"
+          aria-labelledby="nav-profile"
+          hidden
+        >
+          <div class="placeholder-card">
+            <span class="placeholder-number">05</span>
+            <h1>我的中心</h1>
+            <p>页面容器已准备好，个人资料与学习记录将在后续阶段实现。</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true">
+      <span class="toast-dot" aria-hidden="true"></span>
+      <span id="toast-message"></span>
+    </div>
   </body>
 </html>
