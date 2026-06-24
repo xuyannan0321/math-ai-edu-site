@@ -805,6 +805,99 @@
                 </div>
               </aside>
 
+              <section class="profile-backup-card" aria-labelledby="profile-backup-title">
+                <header class="profile-backup-header">
+                  <div>
+                    <span class="profile-backup-icon" aria-hidden="true">⇄</span>
+                    <div>
+                      <span class="profile-backup-kicker">FULL LOCAL BACKUP</span>
+                      <h2 id="profile-backup-title">数据备份与恢复</h2>
+                      <p>一次备份当前浏览器中的原创题和策略页，便于在新环境中完整恢复。</p>
+                    </div>
+                  </div>
+                  <span class="profile-backup-badge">仅保存在本地</span>
+                </header>
+
+                <div class="profile-backup-stats" aria-label="完整备份数据统计">
+                  <div>
+                    <span>当前原创题数量</span>
+                    <strong id="full-backup-original-count">0 条</strong>
+                  </div>
+                  <div>
+                    <span>当前策略页数量</span>
+                    <strong id="full-backup-strategy-count">0 条</strong>
+                  </div>
+                  <div>
+                    <span>上次完整备份时间</span>
+                    <strong id="full-backup-last-time">尚未导出</strong>
+                  </div>
+                  <div>
+                    <span>当前数据位置</span>
+                    <strong>当前浏览器 localStorage</strong>
+                  </div>
+                </div>
+
+                <p class="profile-backup-tip">
+                  更换浏览器、设备或网站地址时，请先导出备份，再在新环境中导入。
+                </p>
+
+                <div class="profile-backup-actions">
+                  <button class="is-primary" id="export-full-backup" type="button">
+                    导出全部数据
+                  </button>
+                  <button id="import-full-backup" type="button">导入完整备份</button>
+                  <input
+                    class="visually-hidden"
+                    id="import-full-backup-file"
+                    type="file"
+                    accept="application/json,.json"
+                    aria-label="选择完整备份 JSON 文件"
+                  />
+                </div>
+
+                <section
+                  class="profile-backup-preview"
+                  id="full-backup-preview"
+                  aria-labelledby="full-backup-preview-title"
+                  aria-live="polite"
+                  hidden
+                >
+                  <header>
+                    <div>
+                      <span aria-hidden="true">✓</span>
+                      <div>
+                        <h3 id="full-backup-preview-title">完整备份导入预览</h3>
+                        <p>文件尚未写入本地数据，请确认统计后选择恢复方式。</p>
+                      </div>
+                    </div>
+                    <span class="profile-backup-preview-status">等待确认</span>
+                  </header>
+
+                  <dl class="profile-backup-preview-data">
+                    <div><dt>备份文件导出时间</dt><dd id="full-backup-preview-time">—</dd></div>
+                    <div><dt>备份版本</dt><dd id="full-backup-preview-version">—</dd></div>
+                    <div><dt>原创题数量</dt><dd id="full-backup-preview-original-count">0 条</dd></div>
+                    <div><dt>策略页数量</dt><dd id="full-backup-preview-strategy-count">0 条</dd></div>
+                  </dl>
+
+                  <p class="profile-backup-preview-warning">
+                    “追加合并”会保留当前数据；“覆盖恢复”会替换当前浏览器中的两套题库。
+                  </p>
+
+                  <div class="profile-backup-preview-actions">
+                    <button class="is-merge" id="merge-full-backup" type="button">
+                      追加合并
+                    </button>
+                    <button class="is-danger" id="overwrite-full-backup" type="button">
+                      覆盖恢复
+                    </button>
+                    <button class="is-cancel" id="cancel-full-backup-import" type="button">
+                      取消
+                    </button>
+                  </div>
+                </section>
+              </section>
+
               <div class="profile-recent-grid" id="profile-recent-grid">
                 <section class="profile-recent-card" aria-labelledby="profile-original-title">
                   <header>

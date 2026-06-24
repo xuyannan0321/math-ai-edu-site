@@ -122,6 +122,9 @@ const STORAGE_KEYS = Object.freeze({
   strategy: "mathAiEduStrategyItems",
 });
 
+const LAST_FULL_BACKUP_KEY = "mathAiEduLastFullBackupAt";
+const FULL_BACKUP_VERSION = 1;
+
 const LIBRARY_CONFIG = Object.freeze({
   original: {
     listId: "original-library-list",
@@ -151,6 +154,7 @@ const state = {
   generationTimer: null,
   filePreviewUrl: null,
   previewReturnFocus: null,
+  pendingFullBackup: null,
 };
 
 const elements = {};
@@ -216,6 +220,26 @@ function cacheElements() {
   elements.profileOriginalEmpty = document.querySelector("#profile-original-empty");
   elements.profileStrategyList = document.querySelector("#profile-strategy-list");
   elements.profileStrategyEmpty = document.querySelector("#profile-strategy-empty");
+  elements.fullBackupOriginalCount = document.querySelector("#full-backup-original-count");
+  elements.fullBackupStrategyCount = document.querySelector("#full-backup-strategy-count");
+  elements.fullBackupLastTime = document.querySelector("#full-backup-last-time");
+  elements.exportFullBackupButton = document.querySelector("#export-full-backup");
+  elements.importFullBackupButton = document.querySelector("#import-full-backup");
+  elements.importFullBackupFile = document.querySelector("#import-full-backup-file");
+  elements.fullBackupPreview = document.querySelector("#full-backup-preview");
+  elements.fullBackupPreviewTime = document.querySelector("#full-backup-preview-time");
+  elements.fullBackupPreviewVersion = document.querySelector("#full-backup-preview-version");
+  elements.fullBackupPreviewOriginalCount = document.querySelector(
+    "#full-backup-preview-original-count",
+  );
+  elements.fullBackupPreviewStrategyCount = document.querySelector(
+    "#full-backup-preview-strategy-count",
+  );
+  elements.mergeFullBackupButton = document.querySelector("#merge-full-backup");
+  elements.overwriteFullBackupButton = document.querySelector("#overwrite-full-backup");
+  elements.cancelFullBackupImportButton = document.querySelector(
+    "#cancel-full-backup-import",
+  );
   elements.buildPageScroll = document.querySelector("#page-build .build-page-scroll");
   elements.buildSubject = document.querySelector("#build-subject");
   elements.buildProvince = document.querySelector("#build-province");
@@ -695,6 +719,270 @@ async function importLibraryFile(targetLibrary, fileInput) {
   } finally {
     fileInput.value = "";
   }
+}
+
+function readLastFullBackupAt() {
+  try {
+    const storedValue = window.localStorage.getItem(LAST_FULL_BACKUP_KEY);
+
+    if (!storedValue || Number.isNaN(new Date(storedValue).getTime())) {
+      return "";
+    }
+
+    return storedValue;
+  } catch {
+    return "";
+  }
+}
+
+function renderFullBackupStats() {
+  const originalItems = readLibraryItems("original") || [];
+  const strategyItems = readLibraryItems("strategy") || [];
+  const lastBackupAt = readLastFullBackupAt();
+
+  elements.fullBackupOriginalCount.textContent = `${originalItems.length} 条`;
+  elements.fullBackupStrategyCount.textContent = `${strategyItems.length} 条`;
+  elements.fullBackupLastTime.textContent = lastBackupAt
+    ? formatCreatedAt(lastBackupAt)
+    : "尚未导出";
+}
+
+function exportFullBackup() {
+  const originalItems = readLibraryItems("original", true);
+  const strategyItems = readLibraryItems("strategy", true);
+
+  if (!originalItems || !strategyItems) {
+    return;
+  }
+
+  const exportedAt = new Date().toISOString();
+  const backup = {
+    appName: "原题真解 Pro",
+    backupVersion: FULL_BACKUP_VERSION,
+    exportedAt,
+    source: "localStorage",
+    data: {
+      originalItems,
+      strategyItems,
+    },
+  };
+
+  try {
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    downloadBlob(blob, `原题真解Pro-完整备份-${formatDateForFilename()}.json`);
+
+    let backupTimeSaved = true;
+    try {
+      window.localStorage.setItem(LAST_FULL_BACKUP_KEY, exportedAt);
+    } catch {
+      backupTimeSaved = false;
+    }
+
+    renderFullBackupStats();
+    showToast(
+      backupTimeSaved
+        ? `完整备份已导出，包含 ${originalItems.length} 条原创题和 ${strategyItems.length} 条策略页。`
+        : "完整备份已下载，但浏览器未能记录本次备份时间。",
+    );
+  } catch {
+    showToast("完整备份导出失败，请检查浏览器下载和存储设置后重试。");
+  }
+}
+
+function validateFullBackupPayload(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { valid: false, message: "导入失败：所选文件不是完整备份 JSON。" };
+  }
+
+  if (!value.data || typeof value.data !== "object" || Array.isArray(value.data)) {
+    return { valid: false, message: "导入失败：备份文件缺少完整的数据区域。" };
+  }
+
+  if (!Array.isArray(value.data.originalItems) || !Array.isArray(value.data.strategyItems)) {
+    return { valid: false, message: "导入失败：原创题或策略页数据不是数组。" };
+  }
+
+  if (value.backupVersion !== FULL_BACKUP_VERSION) {
+    return { valid: false, message: "导入失败：当前仅支持版本 1 的完整备份。" };
+  }
+
+  if (
+    typeof value.exportedAt !== "string" ||
+    Number.isNaN(new Date(value.exportedAt).getTime())
+  ) {
+    return { valid: false, message: "导入失败：备份文件缺少有效的导出时间。" };
+  }
+
+  return {
+    valid: true,
+    backup: {
+      backupVersion: value.backupVersion,
+      exportedAt: value.exportedAt,
+      originalItems: value.data.originalItems,
+      strategyItems: value.data.strategyItems,
+    },
+  };
+}
+
+function showFullBackupPreview(backup) {
+  state.pendingFullBackup = backup;
+  elements.fullBackupPreviewTime.textContent = formatCreatedAt(backup.exportedAt);
+  elements.fullBackupPreviewVersion.textContent = `版本 ${backup.backupVersion}`;
+  elements.fullBackupPreviewOriginalCount.textContent = `${backup.originalItems.length} 条`;
+  elements.fullBackupPreviewStrategyCount.textContent = `${backup.strategyItems.length} 条`;
+  elements.fullBackupPreview.hidden = false;
+}
+
+function closeFullBackupPreview() {
+  state.pendingFullBackup = null;
+  elements.fullBackupPreview.hidden = true;
+  elements.importFullBackupFile.value = "";
+}
+
+async function handleFullBackupFileSelection() {
+  const [file] = elements.importFullBackupFile.files;
+
+  if (!file) {
+    return;
+  }
+
+  try {
+    const importedValue = JSON.parse(await file.text());
+    const validation = validateFullBackupPayload(importedValue);
+
+    if (!validation.valid) {
+      showToast(validation.message);
+      closeFullBackupPreview();
+      return;
+    }
+
+    showFullBackupPreview(validation.backup);
+    showToast("完整备份已读取，请确认预览信息后选择恢复方式。");
+  } catch {
+    closeFullBackupPreview();
+    showToast("导入失败：JSON 格式错误，请选择正确的完整备份文件。");
+  } finally {
+    elements.importFullBackupFile.value = "";
+  }
+}
+
+function normalizeFullBackupItems(items, targetLibrary, currentItems) {
+  const usedIds = new Set(currentItems.map((item) => item.id));
+  const normalizedItems = items.map((item) =>
+    normalizeImportedItem(item, targetLibrary, usedIds),
+  );
+
+  return normalizedItems.some((item) => item === null) ? null : normalizedItems;
+}
+
+function restoreStorageValue(storageKey, previousValue) {
+  if (previousValue === null) {
+    window.localStorage.removeItem(storageKey);
+  } else {
+    window.localStorage.setItem(storageKey, previousValue);
+  }
+}
+
+function writeFullBackupItems(originalItems, strategyItems) {
+  let previousOriginalValue;
+  let previousStrategyValue;
+
+  try {
+    previousOriginalValue = window.localStorage.getItem(STORAGE_KEYS.original);
+    previousStrategyValue = window.localStorage.getItem(STORAGE_KEYS.strategy);
+  } catch {
+    showToast("恢复失败：当前浏览器无法读取本地存储。");
+    return false;
+  }
+
+  try {
+    const originalJson = JSON.stringify(originalItems);
+    const strategyJson = JSON.stringify(strategyItems);
+    window.localStorage.setItem(STORAGE_KEYS.original, originalJson);
+    window.localStorage.setItem(STORAGE_KEYS.strategy, strategyJson);
+    return true;
+  } catch {
+    try {
+      restoreStorageValue(STORAGE_KEYS.original, previousOriginalValue);
+      restoreStorageValue(STORAGE_KEYS.strategy, previousStrategyValue);
+    } catch {
+      // 浏览器存储不可用时无法继续回滚，由下方 Toast 提示用户。
+    }
+
+    showToast("恢复失败：本地存储空间不足或已被禁用，原有数据已尽量保留。");
+    return false;
+  }
+}
+
+function refreshAllLibraryViews() {
+  renderLibraryList("original");
+  renderLibraryList("strategy");
+  renderProfileRecentItems();
+}
+
+function applyFullBackup(mode) {
+  const backup = state.pendingFullBackup;
+
+  if (!backup) {
+    showToast("请先选择并预览完整备份文件。");
+    return;
+  }
+
+  if (
+    mode === "overwrite" &&
+    !window.confirm(
+      "覆盖恢复会替换当前浏览器中的原创题库和策略库数据。建议先导出现有数据。确定继续吗？",
+    )
+  ) {
+    return;
+  }
+
+  const currentOriginalItems =
+    mode === "merge" ? readLibraryItems("original", true) : [];
+  const currentStrategyItems =
+    mode === "merge" ? readLibraryItems("strategy", true) : [];
+
+  if (!currentOriginalItems || !currentStrategyItems) {
+    return;
+  }
+
+  const importedOriginalItems = normalizeFullBackupItems(
+    backup.originalItems,
+    "original",
+    currentOriginalItems,
+  );
+  const importedStrategyItems = normalizeFullBackupItems(
+    backup.strategyItems,
+    "strategy",
+    currentStrategyItems,
+  );
+
+  if (!importedOriginalItems || !importedStrategyItems) {
+    showToast("恢复失败：备份中存在标题或源码不完整的记录，尚未写入本地数据。");
+    return;
+  }
+
+  const nextOriginalItems =
+    mode === "merge"
+      ? [...currentOriginalItems, ...importedOriginalItems]
+      : importedOriginalItems;
+  const nextStrategyItems =
+    mode === "merge"
+      ? [...currentStrategyItems, ...importedStrategyItems]
+      : importedStrategyItems;
+
+  if (!writeFullBackupItems(nextOriginalItems, nextStrategyItems)) {
+    return;
+  }
+
+  closeFullBackupPreview();
+  refreshAllLibraryViews();
+  showToast(
+    mode === "merge"
+      ? `追加合并完成：导入 ${importedOriginalItems.length} 条原创题和 ${importedStrategyItems.length} 条策略页。`
+      : `覆盖恢复完成：恢复 ${importedOriginalItems.length} 条原创题和 ${importedStrategyItems.length} 条策略页。`,
+  );
 }
 
 function createSafeHtmlFilename(title) {
@@ -1247,6 +1535,7 @@ function renderProfileRecentItems() {
     elements.profileStrategyList,
     elements.profileStrategyEmpty,
   );
+  renderFullBackupStats();
 }
 
 function findLibraryItem(targetLibrary, itemId) {
@@ -1590,6 +1879,16 @@ function bindEvents() {
   elements.importStrategyFile.addEventListener("change", () =>
     importLibraryFile("strategy", elements.importStrategyFile),
   );
+  elements.exportFullBackupButton.addEventListener("click", exportFullBackup);
+  elements.importFullBackupButton.addEventListener("click", () =>
+    elements.importFullBackupFile.click(),
+  );
+  elements.importFullBackupFile.addEventListener("change", handleFullBackupFileSelection);
+  elements.mergeFullBackupButton.addEventListener("click", () => applyFullBackup("merge"));
+  elements.overwriteFullBackupButton.addEventListener("click", () =>
+    applyFullBackup("overwrite"),
+  );
+  elements.cancelFullBackupImportButton.addEventListener("click", closeFullBackupPreview);
   elements.originalLibraryList.addEventListener("click", handleLibraryAction);
   elements.strategyLibraryList.addEventListener("click", handleLibraryAction);
   elements.profileRecentGrid.addEventListener("click", handleLibraryAction);
@@ -1609,6 +1908,8 @@ function bindEvents() {
       if (state.activePage === "profile") {
         renderProfileRecentItems();
       }
+    } else if (event.key === LAST_FULL_BACKUP_KEY && state.activePage === "profile") {
+      renderFullBackupStats();
     }
   });
   window.addEventListener("beforeunload", revokeFilePreviewUrl);
