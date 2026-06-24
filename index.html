@@ -103,14 +103,38 @@
                   id="problem-file"
                   type="file"
                   accept="image/*,.pdf"
-                  aria-describedby="upload-help upload-file-name"
+                  aria-describedby="upload-help upload-empty-state"
+                  aria-controls="file-preview"
                 />
                 <label class="upload-zone" for="problem-file" aria-labelledby="upload-label">
                   <span class="upload-icon" aria-hidden="true">＋</span>
                   <strong>点击上传试题图片或 PDF</strong>
                   <span id="upload-help">本阶段仅选择本地文件，不会上传到服务器</span>
                 </label>
-                <p class="selected-file" id="upload-file-name">尚未选择文件</p>
+                <p class="selected-file" id="upload-empty-state">尚未选择文件</p>
+
+                <div class="file-preview" id="file-preview" aria-live="polite" hidden>
+                  <div class="file-preview-media">
+                    <img id="image-preview" alt="" hidden />
+                    <div class="pdf-preview" id="pdf-preview" aria-hidden="true" hidden>
+                      <span>PDF</span>
+                    </div>
+                  </div>
+
+                  <div class="file-preview-meta">
+                    <p class="file-preview-name" id="preview-file-name"></p>
+                    <p class="file-preview-details">
+                      <span id="preview-file-size"></span>
+                      <span aria-hidden="true">·</span>
+                      <span id="preview-file-type"></span>
+                    </p>
+                    <span class="local-preview-badge">仅在浏览器本地预览</span>
+                  </div>
+
+                  <button class="clear-file-button" id="clear-file-button" type="button">
+                    清除文件
+                  </button>
+                </div>
               </div>
 
               <div class="field-group instruction-group">

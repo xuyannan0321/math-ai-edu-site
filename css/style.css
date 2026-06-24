@@ -357,6 +357,116 @@ select.form-control {
   box-shadow: 0 6px 18px rgb(37 99 235 / 12%);
 }
 
+.file-preview {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 13px;
+  align-items: center;
+  padding: 12px;
+  margin-top: 12px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 13px;
+  box-shadow: 0 4px 14px rgb(15 23 42 / 5%);
+  animation: fade-in 200ms ease-out;
+}
+
+.file-preview-media {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  overflow: hidden;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+}
+
+#image-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--white);
+}
+
+.pdf-preview {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: linear-gradient(145deg, var(--blue-50), var(--white));
+}
+
+.pdf-preview span {
+  padding: 6px 7px;
+  color: var(--blue-700);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  background: var(--white);
+  border: 1px solid var(--blue-200);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(37 99 235 / 10%);
+}
+
+.file-preview-meta {
+  min-width: 0;
+}
+
+.file-preview-name {
+  margin: 0 0 5px;
+  overflow: hidden;
+  color: var(--gray-700);
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0 0 8px;
+  color: var(--gray-500);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.local-preview-badge {
+  display: inline-flex;
+  padding: 3px 7px;
+  color: var(--blue-700);
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 999px;
+}
+
+.clear-file-button {
+  align-self: start;
+  padding: 6px 8px;
+  color: var(--gray-500);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 7px;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.clear-file-button:hover {
+  color: var(--blue-700);
+  background: var(--blue-50);
+  border-color: var(--blue-200);
+}
+
 .instruction-input {
   min-height: 170px;
   padding: 14px;
@@ -788,6 +898,22 @@ select.form-control {
   .toast {
     top: 124px;
     border-radius: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  .file-preview {
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+
+  .file-preview-media {
+    width: 60px;
+    height: 60px;
+  }
+
+  .clear-file-button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }
 

@@ -85,6 +85,7 @@ const state = {
   activeView: "preview",
   toastTimer: null,
   generationTimer: null,
+  filePreviewUrl: null,
 };
 
 const elements = {};
@@ -101,7 +102,14 @@ function cacheElements() {
   elements.generateButton = document.querySelector("#generate-report");
   elements.generateButtonText = document.querySelector("#generate-button-text");
   elements.fileInput = document.querySelector("#problem-file");
-  elements.fileName = document.querySelector("#upload-file-name");
+  elements.uploadEmptyState = document.querySelector("#upload-empty-state");
+  elements.filePreview = document.querySelector("#file-preview");
+  elements.imagePreview = document.querySelector("#image-preview");
+  elements.pdfPreview = document.querySelector("#pdf-preview");
+  elements.previewFileName = document.querySelector("#preview-file-name");
+  elements.previewFileSize = document.querySelector("#preview-file-size");
+  elements.previewFileType = document.querySelector("#preview-file-type");
+  elements.clearFileButton = document.querySelector("#clear-file-button");
   elements.toast = document.querySelector("#toast");
   elements.toastMessage = document.querySelector("#toast-message");
 }
@@ -187,16 +195,102 @@ function generateMockReport() {
   }, 900);
 }
 
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return "未知大小";
+  }
+
+  if (bytes === 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** unitIndex;
+  const precision = unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function isPdfFile(file) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+function isImageFile(file) {
+  return file.type.startsWith("image/");
+}
+
+function revokeFilePreviewUrl() {
+  if (!state.filePreviewUrl) {
+    return;
+  }
+
+  URL.revokeObjectURL(state.filePreviewUrl);
+  state.filePreviewUrl = null;
+}
+
+function resetPreviewMedia() {
+  revokeFilePreviewUrl();
+  elements.imagePreview.hidden = true;
+  elements.imagePreview.removeAttribute("src");
+  elements.imagePreview.alt = "";
+  elements.pdfPreview.hidden = true;
+}
+
+function clearFileSelection(showConfirmation = true) {
+  resetPreviewMedia();
+  elements.fileInput.value = "";
+  elements.filePreview.hidden = true;
+  elements.uploadEmptyState.hidden = false;
+  elements.previewFileName.textContent = "";
+  elements.previewFileSize.textContent = "";
+  elements.previewFileType.textContent = "";
+
+  if (showConfirmation) {
+    showToast("已清除当前文件，本地预览也已释放。");
+  }
+}
+
+function showFilePreview(file) {
+  const imageFile = isImageFile(file);
+  const pdfFile = isPdfFile(file);
+
+  if (!imageFile && !pdfFile) {
+    clearFileSelection(false);
+    showToast("暂不支持这种文件格式，请选择图片或 PDF。");
+    return;
+  }
+
+  resetPreviewMedia();
+  elements.previewFileName.textContent = file.name;
+  elements.previewFileSize.textContent = formatFileSize(file.size);
+  elements.uploadEmptyState.hidden = true;
+  elements.filePreview.hidden = false;
+
+  if (imageFile) {
+    state.filePreviewUrl = URL.createObjectURL(file);
+    elements.imagePreview.src = state.filePreviewUrl;
+    elements.imagePreview.alt = `${file.name} 的本地缩略图`;
+    elements.imagePreview.hidden = false;
+    elements.previewFileType.textContent = "图片";
+    showToast("图片已在浏览器本地生成缩略图，不会上传服务器。");
+    return;
+  }
+
+  elements.pdfPreview.hidden = false;
+  elements.previewFileType.textContent = "PDF 文档";
+  showToast("PDF 已在浏览器本地读取文件信息，不会预览或上传内容。");
+}
+
 function handleFileSelection() {
   const [file] = elements.fileInput.files;
 
   if (!file) {
-    elements.fileName.textContent = "尚未选择文件";
+    clearFileSelection(false);
     return;
   }
 
-  elements.fileName.textContent = `已选择：${file.name}`;
-  showToast("文件已在本地选中；第一阶段不会上传或解析该文件。");
+  showFilePreview(file);
 }
 
 function bindEvents() {
@@ -210,6 +304,12 @@ function bindEvents() {
 
   elements.generateButton.addEventListener("click", generateMockReport);
   elements.fileInput.addEventListener("change", handleFileSelection);
+  elements.clearFileButton.addEventListener("click", () => clearFileSelection());
+  elements.imagePreview.addEventListener("error", () => {
+    clearFileSelection(false);
+    showToast("无法生成这张图片的缩略图，请尝试其他图片。");
+  });
+  window.addEventListener("beforeunload", revokeFilePreviewUrl);
 }
 
 function initializeApp() {
