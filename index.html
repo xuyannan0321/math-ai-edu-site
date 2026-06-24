@@ -222,36 +222,94 @@
         </section>
 
         <section
-          class="app-page library-page fade-in"
+          class="app-page library-page original-library-page fade-in"
           id="page-original-library"
           data-page="original-library"
           aria-labelledby="nav-original-library"
           hidden
         >
           <div class="library-page-scroll">
-            <div class="library-container">
-              <header class="library-header">
+            <div class="library-container is-wide">
+              <header class="original-library-hero">
                 <div>
-                  <span class="library-kicker">LOCAL ORIGINAL LIBRARY</span>
-                  <h1>原创题库</h1>
-                  <p>查看和管理从源码建站发布到当前浏览器的原创教学页面。</p>
+                  <h1><span aria-hidden="true">💡</span> 原创题库</h1>
+                  <p>您可以创建原创题、分享赚取积分，或在原创题大厅兑换全网名师的优质试题。</p>
                 </div>
-                <div class="library-header-tools" aria-label="原创题库数据工具">
-                  <span class="library-storage-badge">浏览器本地存储</span>
-                  <div class="library-tool-actions">
-                    <button
-                      class="library-tool-button"
-                      id="export-original-library"
-                      type="button"
-                    >
-                      导出原创题库
+                <div class="original-points-card">
+                  <span class="points-coin" aria-hidden="true">★</span>
+                  <div>
+                    <span>我的可用积分</span>
+                    <strong>1,250</strong>
+                  </div>
+                  <button
+                    type="button"
+                    data-toast-message="提现与兑换中心将在后续阶段开放。"
+                  >
+                    去提现
+                  </button>
+                </div>
+              </header>
+
+              <div class="original-tabs" role="tablist" aria-label="原创题库分类">
+                <button
+                  class="original-tab-button is-active"
+                  id="original-tab-my"
+                  type="button"
+                  role="tab"
+                  data-original-tab="my"
+                  aria-controls="original-panel-my"
+                  aria-selected="true"
+                >
+                  我的原创题
+                </button>
+                <button
+                  class="original-tab-button"
+                  id="original-tab-shared"
+                  type="button"
+                  role="tab"
+                  data-original-tab="shared"
+                  aria-controls="original-panel-shared"
+                  aria-selected="false"
+                  tabindex="-1"
+                >
+                  已分享原创
+                </button>
+                <button
+                  class="original-tab-button"
+                  id="original-tab-hall"
+                  type="button"
+                  role="tab"
+                  data-original-tab="hall"
+                  aria-controls="original-panel-hall"
+                  aria-selected="false"
+                  tabindex="-1"
+                >
+                  原创题大厅
+                </button>
+              </div>
+
+              <div
+                class="original-tab-panel"
+                id="original-panel-my"
+                role="tabpanel"
+                data-original-panel="my"
+                aria-labelledby="original-tab-my"
+              >
+                <div class="original-section-heading">
+                  <div>
+                    <h2><span aria-hidden="true">▣</span> 我的本地原创</h2>
+                    <span id="original-local-count" aria-live="polite">0 道</span>
+                  </div>
+                  <div class="original-local-actions">
+                    <button class="library-tool-button" id="export-original-library" type="button">
+                      导出 JSON
                     </button>
                     <button
-                      class="library-tool-button is-primary"
+                      class="library-tool-button"
                       id="import-original-library"
                       type="button"
                     >
-                      导入原创题库
+                      导入 JSON
                     </button>
                     <input
                       class="visually-hidden"
@@ -260,83 +318,208 @@
                       accept="application/json,.json"
                       aria-label="选择原创题库 JSON 备份文件"
                     />
+                    <button
+                      class="original-new-button"
+                      type="button"
+                      data-page-target="build"
+                    >
+                      + 新建原创题
+                    </button>
                   </div>
                 </div>
-              </header>
+
+                <div class="original-grade-filters" aria-label="年级筛选">
+                  <button class="is-active" type="button" data-grade-filter="全部" aria-pressed="true">全部</button>
+                  <button type="button" data-grade-filter="七年上册" aria-pressed="false">七年上册</button>
+                  <button type="button" data-grade-filter="七年下册" aria-pressed="false">七年下册</button>
+                  <button type="button" data-grade-filter="八年上册" aria-pressed="false">八年上册</button>
+                  <button type="button" data-grade-filter="八年下册" aria-pressed="false">八年下册</button>
+                  <button type="button" data-grade-filter="九年" aria-pressed="false">九年</button>
+                  <button type="button" data-grade-filter="中考" aria-pressed="false">中考</button>
+                </div>
+
+                <div
+                  class="library-list original-record-list"
+                  id="original-library-list"
+                  aria-label="本地原创题列表"
+                  aria-live="polite"
+                ></div>
+
+                <div class="library-empty" id="original-library-empty">
+                  <span class="library-empty-mark" aria-hidden="true">＋</span>
+                  <h2>还没有本地原创题</h2>
+                  <p>前往源码建站，填写页面信息和源码后点击“发布至原创题库”。</p>
+                  <button class="library-empty-action" type="button" data-page-target="build">
+                    去源码建站
+                  </button>
+                </div>
+              </div>
 
               <div
-                class="library-list"
-                id="original-library-list"
-                aria-label="本地原创题列表"
-                aria-live="polite"
-              ></div>
+                class="original-tab-panel"
+                id="original-panel-shared"
+                role="tabpanel"
+                data-original-panel="shared"
+                aria-labelledby="original-tab-shared"
+                hidden
+              >
+                <div class="original-section-heading">
+                  <div>
+                    <h2><span aria-hidden="true">✦</span> 我已分享的试题</h2>
+                    <span>静态演示</span>
+                  </div>
+                </div>
+                <article class="shared-original-card">
+                  <div>
+                    <span class="shared-status">● 已发布到原创题大厅 · 2026-06-23</span>
+                    <h3>一次函数综合探究：坐标系中的图形面积</h3>
+                    <p>围绕面积分割和动点探究组织教学步骤，帮助学生理解条件变化与图形面积之间的联系。</p>
+                    <div class="shared-tags"><span>面积分割</span><span>动点探究</span></div>
+                  </div>
+                  <div class="shared-card-actions">
+                    <button type="button" data-toast-message="售卖积分设置将在后续阶段开放。">设置/修改售卖积分</button>
+                    <button type="button" data-toast-message="下架功能将在接入真实分享系统后开放。">取消分享</button>
+                  </div>
+                </article>
+              </div>
 
-              <div class="library-empty" id="original-library-empty">
-                <span class="library-empty-mark" aria-hidden="true">02</span>
-                <h2>还没有本地原创题</h2>
-                <p>前往源码建站，填写页面信息和源码后点击“发布至原创题库”。</p>
-                <button class="library-empty-action" type="button" data-page-target="build">
-                  去源码建站
-                </button>
+              <div
+                class="original-tab-panel"
+                id="original-panel-hall"
+                role="tabpanel"
+                data-original-panel="hall"
+                aria-labelledby="original-tab-hall"
+                hidden
+              >
+                <div class="original-section-heading hall-heading">
+                  <div>
+                    <h2><span aria-hidden="true">⌂</span> 发现精选原创</h2>
+                    <span>名师教学资源静态演示</span>
+                  </div>
+                  <input type="search" placeholder="搜索原创题或名师…" aria-label="搜索原创题大厅" />
+                </div>
+                <div class="original-hall-grid">
+                  <article class="hall-card">
+                    <div class="hall-author"><span aria-hidden="true">王</span><div><strong>王雪老师</strong><small>辽宁省 · 大连市第八中学</small></div></div>
+                    <h3>二次函数压轴：抛物线与定长线段综合探究</h3>
+                    <p>从动点条件出发，引导学生识别定长关系，再分步讨论图形边界与最值。</p>
+                    <div class="shared-tags"><span>二次函数</span><span>极值问题</span></div>
+                    <footer><strong>★ 50 <small>积分</small></strong><button type="button" data-toast-message="兑换下载为静态演示，本阶段不会扣除积分。">兑换下载</button></footer>
+                  </article>
+                  <article class="hall-card">
+                    <div class="hall-author"><span aria-hidden="true">张</span><div><strong>张海峰老师</strong><small>辽宁省 · 沈阳市第七中学</small></div></div>
+                    <h3>全等三角形：旋转与中点模型</h3>
+                    <p>通过共顶点旋转构造全等关系，并用中点条件完成线段数量关系的验证。</p>
+                    <div class="shared-tags"><span>旋转变换</span><span>全等三角形</span></div>
+                    <footer><strong>★ 80 <small>积分</small></strong><button type="button" data-toast-message="兑换下载为静态演示，本阶段不会扣除积分。">兑换下载</button></footer>
+                  </article>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         <section
-          class="app-page library-page fade-in"
+          class="app-page library-page strategy-library-page fade-in"
           id="page-strategy"
           data-page="strategy"
           aria-labelledby="nav-strategy"
           hidden
         >
           <div class="library-page-scroll">
-            <div class="library-container">
-              <header class="library-header">
+            <div class="library-container is-wide">
+              <header class="strategy-library-header">
                 <div>
-                  <span class="library-kicker">LOCAL STRATEGY LIBRARY</span>
-                  <h1>策略库</h1>
-                  <p>查看和管理从源码建站保存到当前浏览器的教研策略页面。</p>
+                  <h1>教研策略库</h1>
+                  <p>按学科、地区和入库信息查找保存在当前浏览器中的教学策略页面。</p>
                 </div>
-                <div class="library-header-tools" aria-label="策略库数据工具">
-                  <span class="library-storage-badge">浏览器本地存储</span>
-                  <div class="library-tool-actions">
-                    <button
-                      class="library-tool-button"
-                      id="export-strategy-library"
-                      type="button"
-                    >
-                      导出策略库
-                    </button>
-                    <button
-                      class="library-tool-button is-primary"
-                      id="import-strategy-library"
-                      type="button"
-                    >
-                      导入策略库
-                    </button>
-                    <input
-                      class="visually-hidden"
-                      id="import-strategy-file"
-                      type="file"
-                      accept="application/json,.json"
-                      aria-label="选择策略库 JSON 备份文件"
-                    />
-                  </div>
+                <div class="library-tool-actions" aria-label="策略库数据工具">
+                  <button class="library-tool-button" id="export-strategy-library" type="button">导出策略库</button>
+                  <button class="library-tool-button is-primary" id="import-strategy-library" type="button">导入策略库</button>
+                  <input
+                    class="visually-hidden"
+                    id="import-strategy-file"
+                    type="file"
+                    accept="application/json,.json"
+                    aria-label="选择策略库 JSON 备份文件"
+                  />
                 </div>
               </header>
 
+              <section class="strategy-filter-card" aria-label="策略库筛选">
+                <div class="strategy-filter-row">
+                  <span class="strategy-filter-label">科目：</span>
+                  <select id="strategy-subject" aria-label="筛选科目">
+                    <option value="">全部科目</option>
+                    <option>初中数学</option>
+                    <option>初中物理</option>
+                    <option>初中化学</option>
+                    <option>高中数学</option>
+                    <option>高中物理</option>
+                    <option>高中化学</option>
+                  </select>
+                </div>
+                <div class="strategy-filter-row">
+                  <span class="strategy-filter-label">地区：</span>
+                  <div class="strategy-region-selects">
+                    <select id="strategy-province" aria-label="筛选省份"></select>
+                    <select id="strategy-city" aria-label="筛选城市"></select>
+                  </div>
+                </div>
+                <div class="strategy-filter-row">
+                  <span class="strategy-filter-label">类型：</span>
+                  <div class="strategy-filter-pills" aria-label="类型筛选">
+                    <button class="is-active" type="button" data-strategy-type="" aria-pressed="true">全部</button>
+                    <button type="button" data-strategy-type="中考真题" aria-pressed="false">中考真题</button>
+                    <button type="button" data-strategy-type="中考模拟" aria-pressed="false">中考模拟</button>
+                    <button type="button" data-strategy-type="智能解析" aria-pressed="false">智能解析</button>
+                    <button type="button" data-strategy-type="期末" aria-pressed="false">期末</button>
+                    <button type="button" data-strategy-type="期中" aria-pressed="false">期中</button>
+                    <button type="button" data-strategy-type="月考" aria-pressed="false">月考</button>
+                  </div>
+                </div>
+                <div class="strategy-filter-row has-divider">
+                  <span class="strategy-filter-label">年份：</span>
+                  <div class="strategy-filter-pills" aria-label="年份筛选">
+                    <button class="is-active" type="button" data-strategy-year="" aria-pressed="true">全部</button>
+                    <button type="button" data-strategy-year="2026" aria-pressed="false">2026</button>
+                    <button type="button" data-strategy-year="2025" aria-pressed="false">2025</button>
+                    <button type="button" data-strategy-year="2024" aria-pressed="false">2024</button>
+                    <button type="button" data-strategy-year="2023" aria-pressed="false">2023</button>
+                    <button type="button" data-strategy-year="2022" aria-pressed="false">2022</button>
+                    <button type="button" data-strategy-year="2021" aria-pressed="false">2021</button>
+                    <button type="button" data-strategy-year="2020" aria-pressed="false">2020</button>
+                    <button type="button" data-strategy-year="earlier" aria-pressed="false">更早</button>
+                  </div>
+                </div>
+                <div class="strategy-filter-row has-divider">
+                  <span class="strategy-filter-label">时间段：</span>
+                  <div class="strategy-date-range">
+                    <input id="strategy-start-date" type="date" aria-label="开始日期" title="开始日期" />
+                    <span>至</span>
+                    <input id="strategy-end-date" type="date" aria-label="结束日期" title="结束日期" />
+                  </div>
+                </div>
+                <div class="strategy-filter-footer">
+                  <label><span>学校：</span><input id="strategy-school" type="text" placeholder="请输入学校名称" /></label>
+                  <div class="strategy-search-group">
+                    <strong id="strategy-result-count" aria-live="polite">0套</strong>
+                    <input id="strategy-keyword" type="search" placeholder="请输入关键字搜索试卷" aria-label="搜索策略库" />
+                  </div>
+                </div>
+              </section>
+
               <div
-                class="library-list"
+                class="library-list strategy-record-list"
                 id="strategy-library-list"
                 aria-label="本地策略页列表"
                 aria-live="polite"
               ></div>
 
               <div class="library-empty" id="strategy-library-empty">
-                <span class="library-empty-mark" aria-hidden="true">03</span>
-                <h2>还没有本地策略页</h2>
-                <p>前往源码建站，填写页面信息和源码后点击“存入策略库”。</p>
+                <span class="library-empty-mark" aria-hidden="true">⌕</span>
+                <h2 id="strategy-empty-title">还没有本地策略页</h2>
+                <p id="strategy-empty-description">前往源码建站，填写页面信息和源码后点击“存入策略库”。</p>
                 <button class="library-empty-action" type="button" data-page-target="build">
                   去源码建站
                 </button>

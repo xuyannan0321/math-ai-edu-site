@@ -146,6 +146,7 @@ const LIBRARY_CONFIG = Object.freeze({
 const state = {
   activePage: "workspace",
   activeView: "preview",
+  activeOriginalTab: "my",
   toastTimer: null,
   generationTimer: null,
   filePreviewUrl: null,
@@ -176,11 +177,27 @@ function cacheElements() {
   elements.clearFileButton = document.querySelector("#clear-file-button");
   elements.originalLibraryList = document.querySelector("#original-library-list");
   elements.originalLibraryEmpty = document.querySelector("#original-library-empty");
+  elements.originalLocalCount = document.querySelector("#original-local-count");
+  elements.originalTabButtons = Array.from(document.querySelectorAll("[data-original-tab]"));
+  elements.originalTabPanels = Array.from(document.querySelectorAll("[data-original-panel]"));
+  elements.originalGradeButtons = Array.from(document.querySelectorAll("[data-grade-filter]"));
   elements.exportOriginalLibraryButton = document.querySelector("#export-original-library");
   elements.importOriginalLibraryButton = document.querySelector("#import-original-library");
   elements.importOriginalFile = document.querySelector("#import-original-file");
   elements.strategyLibraryList = document.querySelector("#strategy-library-list");
   elements.strategyLibraryEmpty = document.querySelector("#strategy-library-empty");
+  elements.strategyEmptyTitle = document.querySelector("#strategy-empty-title");
+  elements.strategyEmptyDescription = document.querySelector("#strategy-empty-description");
+  elements.strategyResultCount = document.querySelector("#strategy-result-count");
+  elements.strategySubject = document.querySelector("#strategy-subject");
+  elements.strategyProvince = document.querySelector("#strategy-province");
+  elements.strategyCity = document.querySelector("#strategy-city");
+  elements.strategyTypeButtons = Array.from(document.querySelectorAll("[data-strategy-type]"));
+  elements.strategyYearButtons = Array.from(document.querySelectorAll("[data-strategy-year]"));
+  elements.strategyStartDate = document.querySelector("#strategy-start-date");
+  elements.strategyEndDate = document.querySelector("#strategy-end-date");
+  elements.strategySchool = document.querySelector("#strategy-school");
+  elements.strategyKeyword = document.querySelector("#strategy-keyword");
   elements.exportStrategyLibraryButton = document.querySelector("#export-strategy-library");
   elements.importStrategyLibraryButton = document.querySelector("#import-strategy-library");
   elements.importStrategyFile = document.querySelector("#import-strategy-file");
@@ -201,6 +218,7 @@ function cacheElements() {
   elements.renderBuildPreviewButton = document.querySelector("#render-build-preview");
   elements.publishOriginalButton = document.querySelector("#publish-original-button");
   elements.saveStrategyButton = document.querySelector("#save-strategy-button");
+  elements.toastButtons = Array.from(document.querySelectorAll("[data-toast-message]"));
   elements.toast = document.querySelector("#toast");
   elements.toastMessage = document.querySelector("#toast-message");
 }
@@ -237,6 +255,41 @@ function switchPage(pageId) {
   } else if (pageId === "strategy") {
     renderLibraryList("strategy");
   }
+}
+
+function switchOriginalTab(tabName) {
+  const targetPanel = elements.originalTabPanels.find(
+    (panel) => panel.dataset.originalPanel === tabName,
+  );
+
+  if (!targetPanel) {
+    return;
+  }
+
+  state.activeOriginalTab = tabName;
+
+  elements.originalTabPanels.forEach((panel) => {
+    panel.hidden = panel !== targetPanel;
+  });
+
+  elements.originalTabButtons.forEach((button) => {
+    const isActive = button.dataset.originalTab === tabName;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+  });
+
+  if (tabName === "my") {
+    renderLibraryList("original");
+  }
+}
+
+function selectPillButton(buttons, selectedButton) {
+  buttons.forEach((button) => {
+    const isActive = button === selectedButton;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
 }
 
 function switchResultView(viewName) {
@@ -728,24 +781,7 @@ function createLibraryActionButton(action, label, item, targetLibrary, extraClas
   return button;
 }
 
-function createLibraryCard(item, targetLibrary) {
-  const card = document.createElement("article");
-  card.className = "library-card";
-
-  const main = document.createElement("div");
-  main.className = "library-card-main";
-
-  const top = document.createElement("div");
-  top.className = "library-card-top";
-  top.append(
-    createTextElement(
-      "h2",
-      "library-card-title",
-      item.title || LIBRARY_CONFIG[targetLibrary].defaultTitle,
-    ),
-    createTextElement("time", "library-card-time", formatCreatedAt(item.createdAt)),
-  );
-
+function createRecordMeta(item) {
   const meta = document.createElement("div");
   meta.className = "library-card-meta";
   meta.append(
@@ -754,21 +790,100 @@ function createLibraryCard(item, targetLibrary) {
     createTextElement("span", "library-meta-pill", item.questionType || "类型未填写"),
     createTextElement("span", "library-meta-pill", item.year || "年份未填写"),
   );
+  return meta;
+}
 
-  main.append(top, meta);
+function createOriginalLibraryCard(item) {
+  const card = document.createElement("article");
+  card.className = "library-card original-record-card";
+
+  const identity = document.createElement("div");
+  identity.className = "original-record-identity";
+  identity.append(createTextElement("span", "original-record-icon", "▤"));
+
+  const main = document.createElement("div");
+  main.className = "original-record-main";
+
+  const top = document.createElement("div");
+  top.className = "original-record-title-row";
+  top.append(
+    createTextElement(
+      "h2",
+      "library-card-title",
+      item.title || LIBRARY_CONFIG.original.defaultTitle,
+    ),
+    createTextElement("span", "original-record-status", "未发布"),
+  );
+
+  main.append(top, createRecordMeta(item));
+
+  if (item.school) {
+    main.append(createTextElement("p", "library-card-school", `学校：${item.school}`));
+  }
+
+  main.append(createTextElement("time", "library-card-time", `创建于 ${formatCreatedAt(item.createdAt)}`));
+  identity.append(main);
+
+  const actions = document.createElement("div");
+  actions.className = "original-record-actions";
+  actions.append(
+    createLibraryActionButton("set-points", "★ 设置积分", item, "original", "is-points"),
+    createLibraryActionButton("edit", "编辑", item, "original", "is-edit"),
+    createLibraryActionButton("publish", "发布", item, "original", "is-primary"),
+  );
+
+  const moreActions = document.createElement("details");
+  moreActions.className = "original-record-more";
+  const summary = document.createElement("summary");
+  summary.textContent = "更多操作";
+  const moreMenu = document.createElement("div");
+  moreMenu.className = "original-more-menu";
+  moreMenu.append(
+    createLibraryActionButton("view", "查看", item, "original"),
+    createLibraryActionButton("download", "下载 HTML", item, "original"),
+    createLibraryActionButton("copy", "复制源码", item, "original"),
+    createLibraryActionButton("delete", "删除", item, "original", "is-danger"),
+  );
+  moreActions.append(summary, moreMenu);
+  actions.append(moreActions);
+
+  card.append(identity, actions);
+  return card;
+}
+
+function createStrategyLibraryCard(item) {
+  const card = document.createElement("article");
+  card.className = "library-card strategy-record-card";
+
+  const main = document.createElement("div");
+  main.className = "strategy-record-main";
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "strategy-record-title-row";
+  titleRow.append(
+    createTextElement("span", "strategy-type-tag", item.questionType || "教学策略"),
+    createTextElement("h2", "library-card-title", item.title || LIBRARY_CONFIG.strategy.defaultTitle),
+  );
+
+  main.append(
+    titleRow,
+    createTextElement("time", "strategy-record-time", `入库时间：${formatCreatedAt(item.createdAt)}`),
+    createRecordMeta(item),
+  );
 
   if (item.school) {
     main.append(createTextElement("p", "library-card-school", `学校：${item.school}`));
   }
 
   const actions = document.createElement("div");
-  actions.className = "library-card-actions";
+  actions.className = "library-card-actions strategy-record-actions";
   actions.append(
-    createLibraryActionButton("view", "查看", item, targetLibrary, "is-primary"),
-    createLibraryActionButton("edit", "编辑", item, targetLibrary),
-    createLibraryActionButton("download", "下载 HTML", item, targetLibrary),
-    createLibraryActionButton("copy", "复制源码", item, targetLibrary),
-    createLibraryActionButton("delete", "删除", item, targetLibrary, "is-danger"),
+    createLibraryActionButton("view", "查看", item, "strategy", "is-primary"),
+    createLibraryActionButton("edit", "编辑", item, "strategy", "is-edit"),
+    createLibraryActionButton("share", "分享", item, "strategy", "is-share"),
+    createLibraryActionButton("download", "下载 HTML", item, "strategy"),
+    createLibraryActionButton("copy", "复制源码", item, "strategy"),
+    createLibraryActionButton("delete", "删除", item, "strategy", "is-danger"),
   );
 
   card.append(main, actions);
@@ -789,16 +904,128 @@ function getLibraryElements(targetLibrary) {
   };
 }
 
+function getStrategyFilterState() {
+  const activeTypeButton = elements.strategyTypeButtons.find((button) =>
+    button.classList.contains("is-active"),
+  );
+  const activeYearButton = elements.strategyYearButtons.find((button) =>
+    button.classList.contains("is-active"),
+  );
+
+  return {
+    subject: elements.strategySubject.value,
+    province: elements.strategyProvince.value,
+    city: elements.strategyCity.value,
+    questionType: activeTypeButton?.dataset.strategyType || "",
+    year: activeYearButton?.dataset.strategyYear || "",
+    startDate: elements.strategyStartDate.value,
+    endDate: elements.strategyEndDate.value,
+    school: elements.strategySchool.value.trim().toLocaleLowerCase("zh-CN"),
+    keyword: elements.strategyKeyword.value.trim().toLocaleLowerCase("zh-CN"),
+  };
+}
+
+function filterStrategyItems(items) {
+  const filters = getStrategyFilterState();
+
+  return items.filter((item) => {
+    if (filters.subject && item.subject !== filters.subject) {
+      return false;
+    }
+
+    if (filters.province && item.province !== filters.province) {
+      return false;
+    }
+
+    if (filters.city && item.city !== filters.city) {
+      return false;
+    }
+
+    if (filters.questionType && !String(item.questionType || "").includes(filters.questionType)) {
+      return false;
+    }
+
+    if (filters.year === "earlier") {
+      const numericYear = Number.parseInt(item.year, 10);
+
+      if (!Number.isFinite(numericYear) || numericYear >= 2020) {
+        return false;
+      }
+    } else if (filters.year && item.year !== filters.year) {
+      return false;
+    }
+
+    const createdTime = new Date(item.createdAt).getTime();
+
+    if (filters.startDate) {
+      const startTime = new Date(`${filters.startDate}T00:00:00`).getTime();
+
+      if (Number.isNaN(createdTime) || createdTime < startTime) {
+        return false;
+      }
+    }
+
+    if (filters.endDate) {
+      const endTime = new Date(`${filters.endDate}T23:59:59.999`).getTime();
+
+      if (Number.isNaN(createdTime) || createdTime > endTime) {
+        return false;
+      }
+    }
+
+    if (filters.school && !String(item.school || "").toLocaleLowerCase("zh-CN").includes(filters.school)) {
+      return false;
+    }
+
+    if (filters.keyword) {
+      const searchableText = [
+        item.title,
+        item.subject,
+        item.province,
+        item.city,
+        item.questionType,
+        item.year,
+        item.school,
+      ]
+        .filter((value) => typeof value === "string")
+        .join(" ")
+        .toLocaleLowerCase("zh-CN");
+
+      if (!searchableText.includes(filters.keyword)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
 function renderLibraryList(targetLibrary) {
-  const items = readLibraryItems(targetLibrary, true) || [];
+  const storedItems = readLibraryItems(targetLibrary, true) || [];
+  const items = targetLibrary === "strategy" ? filterStrategyItems(storedItems) : storedItems;
   const { list, empty } = getLibraryElements(targetLibrary);
 
   list.replaceChildren();
   list.hidden = items.length === 0;
   empty.hidden = items.length > 0;
 
+  if (targetLibrary === "original") {
+    elements.originalLocalCount.textContent = `${storedItems.length} 道`;
+  } else {
+    elements.strategyResultCount.textContent = `${items.length}套`;
+    const isFiltered = items.length === 0 && storedItems.length > 0;
+    elements.strategyEmptyTitle.textContent = isFiltered ? "没有符合条件的策略页" : "还没有本地策略页";
+    elements.strategyEmptyDescription.textContent = isFiltered
+      ? "请调整筛选条件或搜索关键词后再试。"
+      : "前往源码建站，填写页面信息和源码后点击“存入策略库”。";
+  }
+
   items.forEach((item) => {
-    list.append(createLibraryCard(item, targetLibrary));
+    list.append(
+      targetLibrary === "original"
+        ? createOriginalLibraryCard(item)
+        : createStrategyLibraryCard(item),
+    );
   });
 }
 
@@ -879,6 +1106,12 @@ function handleLibraryAction(event) {
     switchPage("build");
     fillBuildFormFromItem(item);
     showToast("记录已回填到源码建站，再次保存会创建一条新记录。");
+  } else if (button.dataset.libraryAction === "set-points") {
+    showToast("积分设置为静态演示，本阶段不会产生真实积分交易。");
+  } else if (button.dataset.libraryAction === "publish") {
+    showToast("发布到原创题大厅为静态演示，本阶段不会上传数据。");
+  } else if (button.dataset.libraryAction === "share") {
+    showToast("分享功能将在接入真实分享系统后开放。");
   } else if (button.dataset.libraryAction === "download") {
     downloadLibraryItemHtml(item);
   } else if (button.dataset.libraryAction === "copy") {
@@ -916,6 +1149,50 @@ function initializeBuildSelectors() {
 
   elements.buildProvince.value = "辽宁省";
   updateBuildCities();
+}
+
+function updateStrategyCities() {
+  const selectedProvince = elements.strategyProvince.value;
+  const previousCity = elements.strategyCity.value;
+  const cities = PROVINCE_CITY_MAP[selectedProvince] || [];
+
+  elements.strategyCity.replaceChildren();
+
+  const allCitiesOption = document.createElement("option");
+  allCitiesOption.value = "";
+  allCitiesOption.textContent = "全部城市";
+  elements.strategyCity.append(allCitiesOption);
+
+  cities.forEach((city) => {
+    const option = document.createElement("option");
+    option.value = city;
+    option.textContent = city;
+    elements.strategyCity.append(option);
+  });
+
+  elements.strategyCity.disabled = !selectedProvince;
+
+  if (cities.includes(previousCity)) {
+    elements.strategyCity.value = previousCity;
+  }
+}
+
+function initializeStrategyFilters() {
+  elements.strategyProvince.replaceChildren();
+
+  const allProvincesOption = document.createElement("option");
+  allProvincesOption.value = "";
+  allProvincesOption.textContent = "全部省份";
+  elements.strategyProvince.append(allProvincesOption);
+
+  Object.keys(PROVINCE_CITY_MAP).forEach((province) => {
+    const option = document.createElement("option");
+    option.value = province;
+    option.textContent = province;
+    elements.strategyProvince.append(option);
+  });
+
+  updateStrategyCities();
 }
 
 function escapeHtml(text) {
@@ -1001,6 +1278,18 @@ function bindEvents() {
     button.addEventListener("click", () => switchPage(button.dataset.pageTarget));
   });
 
+  elements.originalTabButtons.forEach((button) => {
+    button.addEventListener("click", () => switchOriginalTab(button.dataset.originalTab));
+  });
+
+  elements.originalGradeButtons.forEach((button) => {
+    button.addEventListener("click", () => selectPillButton(elements.originalGradeButtons, button));
+  });
+
+  elements.toastButtons.forEach((button) => {
+    button.addEventListener("click", () => showToast(button.dataset.toastMessage));
+  });
+
   elements.viewButtons.forEach((button) => {
     button.addEventListener("click", () => switchResultView(button.dataset.resultView));
   });
@@ -1013,6 +1302,28 @@ function bindEvents() {
     showToast("无法生成这张图片的缩略图，请尝试其他图片。");
   });
   elements.buildProvince.addEventListener("change", updateBuildCities);
+  elements.strategySubject.addEventListener("change", () => renderLibraryList("strategy"));
+  elements.strategyProvince.addEventListener("change", () => {
+    updateStrategyCities();
+    renderLibraryList("strategy");
+  });
+  elements.strategyCity.addEventListener("change", () => renderLibraryList("strategy"));
+  elements.strategyTypeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      selectPillButton(elements.strategyTypeButtons, button);
+      renderLibraryList("strategy");
+    });
+  });
+  elements.strategyYearButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      selectPillButton(elements.strategyYearButtons, button);
+      renderLibraryList("strategy");
+    });
+  });
+  elements.strategyStartDate.addEventListener("change", () => renderLibraryList("strategy"));
+  elements.strategyEndDate.addEventListener("change", () => renderLibraryList("strategy"));
+  elements.strategySchool.addEventListener("input", () => renderLibraryList("strategy"));
+  elements.strategyKeyword.addEventListener("input", () => renderLibraryList("strategy"));
   elements.renderBuildPreviewButton.addEventListener("click", renderBuildPreview);
   elements.closeBuildPreviewButton.addEventListener("click", closeBuildPreview);
   elements.publishOriginalButton.addEventListener("click", () => saveBuildRecord("original"));
@@ -1051,8 +1362,9 @@ function bindEvents() {
 function initializeApp() {
   cacheElements();
   initializeBuildSelectors();
+  initializeStrategyFilters();
   bindEvents();
-  renderLibraryList("original");
+  switchOriginalTab(state.activeOriginalTab);
   renderLibraryList("strategy");
   switchPage(state.activePage);
   switchResultView(state.activeView);
