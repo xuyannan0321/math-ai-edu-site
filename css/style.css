@@ -774,6 +774,52 @@ select.form-control {
   border-radius: 999px;
 }
 
+.library-header-tools {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.library-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.library-tool-button {
+  min-height: 36px;
+  padding: 7px 12px;
+  color: var(--blue-700);
+  font-size: 12px;
+  font-weight: 750;
+  background: var(--white);
+  border: 1px solid var(--blue-200);
+  border-radius: 9px;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.library-tool-button:hover {
+  background: var(--blue-50);
+  border-color: var(--blue-500);
+}
+
+.library-tool-button.is-primary {
+  color: var(--white);
+  background: var(--blue-600);
+  border-color: var(--blue-600);
+}
+
+.library-tool-button.is-primary:hover {
+  background: var(--blue-700);
+  border-color: var(--blue-700);
+}
+
 .library-list {
   display: grid;
   gap: 12px;
@@ -915,6 +961,16 @@ select.form-control {
 .library-action-button.is-danger:hover {
   background: #fef2f2;
   border-color: #fca5a5;
+}
+
+.clipboard-copy-target {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .library-empty {
@@ -1624,6 +1680,16 @@ body.is-preview-open {
     gap: 12px;
   }
 
+  .library-header-tools {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .library-tool-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .library-card {
     align-items: stretch;
     flex-direction: column;
@@ -1647,7 +1713,7 @@ body.is-preview-open {
 
   .library-card-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: stretch;
   }
 
@@ -1736,6 +1802,10 @@ body.is-preview-open {
 
   .library-card-actions {
     grid-template-columns: 1fr;
+  }
+
+  .library-tool-button {
+    flex: 1 1 140px;
   }
 }
 

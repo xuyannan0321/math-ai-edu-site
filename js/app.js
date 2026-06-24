@@ -127,6 +127,8 @@ const LIBRARY_CONFIG = Object.freeze({
     listId: "original-library-list",
     emptyId: "original-library-empty",
     defaultTitle: "未命名原创题",
+    displayName: "原创题库",
+    exportPrefix: "original-library",
     savedMessage: "已发布至本地原创题库。",
     deletedMessage: "已从本地原创题库删除。",
   },
@@ -134,6 +136,8 @@ const LIBRARY_CONFIG = Object.freeze({
     listId: "strategy-library-list",
     emptyId: "strategy-library-empty",
     defaultTitle: "未命名策略页",
+    displayName: "策略库",
+    exportPrefix: "strategy-library",
     savedMessage: "已存入本地策略库。",
     deletedMessage: "已从本地策略库删除。",
   },
@@ -172,8 +176,14 @@ function cacheElements() {
   elements.clearFileButton = document.querySelector("#clear-file-button");
   elements.originalLibraryList = document.querySelector("#original-library-list");
   elements.originalLibraryEmpty = document.querySelector("#original-library-empty");
+  elements.exportOriginalLibraryButton = document.querySelector("#export-original-library");
+  elements.importOriginalLibraryButton = document.querySelector("#import-original-library");
+  elements.importOriginalFile = document.querySelector("#import-original-file");
   elements.strategyLibraryList = document.querySelector("#strategy-library-list");
   elements.strategyLibraryEmpty = document.querySelector("#strategy-library-empty");
+  elements.exportStrategyLibraryButton = document.querySelector("#export-strategy-library");
+  elements.importStrategyLibraryButton = document.querySelector("#import-strategy-library");
+  elements.importStrategyFile = document.querySelector("#import-strategy-file");
   elements.buildPageScroll = document.querySelector("#page-build .build-page-scroll");
   elements.buildSubject = document.querySelector("#build-subject");
   elements.buildProvince = document.querySelector("#build-province");
@@ -432,6 +442,197 @@ function createLocalItemId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function formatDateForFilename(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function downloadBlob(blob, filename) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
+function exportLibrary(targetLibrary) {
+  const items = readLibraryItems(targetLibrary, true);
+
+  if (!items) {
+    return;
+  }
+
+  if (items.length === 0) {
+    showToast(`${LIBRARY_CONFIG[targetLibrary].displayName}暂无可导出的本地数据。`);
+    return;
+  }
+
+  const json = JSON.stringify(items, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+  const filename = `${LIBRARY_CONFIG[targetLibrary].exportPrefix}-${formatDateForFilename()}.json`;
+  downloadBlob(blob, filename);
+  showToast(`已导出 ${items.length} 条${LIBRARY_CONFIG[targetLibrary].displayName}数据。`);
+}
+
+function normalizeImportedItem(item, targetLibrary, usedIds) {
+  if (
+    !item ||
+    typeof item !== "object" ||
+    Array.isArray(item) ||
+    typeof item.title !== "string" ||
+    !item.title.trim() ||
+    typeof item.sourceCode !== "string" ||
+    !item.sourceCode.trim()
+  ) {
+    return null;
+  }
+
+  let id = typeof item.id === "string" ? item.id.trim() : "";
+
+  if (!id || usedIds.has(id)) {
+    do {
+      id = createLocalItemId();
+    } while (usedIds.has(id));
+  }
+
+  usedIds.add(id);
+
+  const importedCreatedAt = typeof item.createdAt === "string" ? item.createdAt : "";
+  const createdAt = Number.isNaN(new Date(importedCreatedAt).getTime())
+    ? new Date().toISOString()
+    : importedCreatedAt;
+
+  return {
+    id,
+    title: item.title.trim(),
+    subject: typeof item.subject === "string" ? item.subject : "",
+    province: typeof item.province === "string" ? item.province : "",
+    city: typeof item.city === "string" ? item.city : "",
+    questionType: typeof item.questionType === "string" ? item.questionType : "",
+    year: typeof item.year === "string" ? item.year : "",
+    school: typeof item.school === "string" ? item.school : "",
+    sourceCode: item.sourceCode,
+    targetLibrary,
+    createdAt,
+  };
+}
+
+async function importLibraryFile(targetLibrary, fileInput) {
+  const [file] = fileInput.files;
+
+  if (!file) {
+    return;
+  }
+
+  try {
+    const importedValue = JSON.parse(await file.text());
+
+    if (!Array.isArray(importedValue)) {
+      throw new TypeError("Imported library value is not an array.");
+    }
+
+    const currentItems = readLibraryItems(targetLibrary, true);
+
+    if (!currentItems) {
+      return;
+    }
+
+    const usedIds = new Set(currentItems.map((item) => item.id));
+    const importedItems = importedValue.map((item) =>
+      normalizeImportedItem(item, targetLibrary, usedIds),
+    );
+
+    if (importedItems.some((item) => item === null)) {
+      throw new TypeError("Imported library contains invalid items.");
+    }
+
+    if (importedItems.length === 0) {
+      showToast("备份文件中没有可导入的记录。");
+      return;
+    }
+
+    if (!writeLibraryItems(targetLibrary, [...currentItems, ...importedItems])) {
+      return;
+    }
+
+    renderLibraryList(targetLibrary);
+    showToast(`已追加导入 ${importedItems.length} 条${LIBRARY_CONFIG[targetLibrary].displayName}数据。`);
+  } catch {
+    showToast("导入失败：请选择结构正确、记录完整的 JSON 备份文件。");
+  } finally {
+    fileInput.value = "";
+  }
+}
+
+function createSafeHtmlFilename(title) {
+  const sanitizedTitle = title
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "")
+    .trim()
+    .slice(0, 80);
+
+  return `${sanitizedTitle || "untitled-math-page"}.html`;
+}
+
+function downloadLibraryItemHtml(item) {
+  if (!item.sourceCode.trim()) {
+    showToast("这条记录没有可下载的源码。");
+    return;
+  }
+
+  const blob = new Blob([item.sourceCode], { type: "text/html;charset=utf-8" });
+  downloadBlob(blob, createSafeHtmlFilename(item.title || "untitled-math-page"));
+  showToast("HTML 文件已开始下载。");
+}
+
+function copyTextWithFallback(text) {
+  const textarea = document.createElement("textarea");
+  textarea.className = "clipboard-copy-target";
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  document.body.append(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  return copied;
+}
+
+async function copyLibraryItemSource(item) {
+  if (!item.sourceCode.trim()) {
+    showToast("这条记录没有可复制的源码。");
+    return;
+  }
+
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      try {
+        await navigator.clipboard.writeText(item.sourceCode);
+        showToast("源码已复制到剪贴板。");
+        return;
+      } catch {
+        // 剪贴板权限不可用时，继续使用兼容旧浏览器的复制方案。
+      }
+    }
+
+    if (!copyTextWithFallback(item.sourceCode)) {
+      throw new Error("Fallback copy command failed.");
+    }
+
+    showToast("源码已复制到剪贴板。");
+  } catch {
+    showToast("复制失败，请打开编辑页面后手动复制源码。");
+  }
+}
+
 function collectBuildRecord(targetLibrary) {
   const sourceCode = elements.buildSourceCode.value;
 
@@ -565,6 +766,8 @@ function createLibraryCard(item, targetLibrary) {
   actions.append(
     createLibraryActionButton("view", "查看", item, targetLibrary, "is-primary"),
     createLibraryActionButton("edit", "编辑", item, targetLibrary),
+    createLibraryActionButton("download", "下载 HTML", item, targetLibrary),
+    createLibraryActionButton("copy", "复制源码", item, targetLibrary),
     createLibraryActionButton("delete", "删除", item, targetLibrary, "is-danger"),
   );
 
@@ -676,6 +879,10 @@ function handleLibraryAction(event) {
     switchPage("build");
     fillBuildFormFromItem(item);
     showToast("记录已回填到源码建站，再次保存会创建一条新记录。");
+  } else if (button.dataset.libraryAction === "download") {
+    downloadLibraryItemHtml(item);
+  } else if (button.dataset.libraryAction === "copy") {
+    copyLibraryItemSource(item);
   } else if (button.dataset.libraryAction === "delete") {
     deleteLibraryItem(targetLibrary, item);
   }
@@ -810,6 +1017,20 @@ function bindEvents() {
   elements.closeBuildPreviewButton.addEventListener("click", closeBuildPreview);
   elements.publishOriginalButton.addEventListener("click", () => saveBuildRecord("original"));
   elements.saveStrategyButton.addEventListener("click", () => saveBuildRecord("strategy"));
+  elements.exportOriginalLibraryButton.addEventListener("click", () => exportLibrary("original"));
+  elements.importOriginalLibraryButton.addEventListener("click", () =>
+    elements.importOriginalFile.click(),
+  );
+  elements.importOriginalFile.addEventListener("change", () =>
+    importLibraryFile("original", elements.importOriginalFile),
+  );
+  elements.exportStrategyLibraryButton.addEventListener("click", () => exportLibrary("strategy"));
+  elements.importStrategyLibraryButton.addEventListener("click", () =>
+    elements.importStrategyFile.click(),
+  );
+  elements.importStrategyFile.addEventListener("change", () =>
+    importLibraryFile("strategy", elements.importStrategyFile),
+  );
   elements.originalLibraryList.addEventListener("click", handleLibraryAction);
   elements.strategyLibraryList.addEventListener("click", handleLibraryAction);
   document.addEventListener("keydown", (event) => {

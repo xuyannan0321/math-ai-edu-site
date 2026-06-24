@@ -236,7 +236,32 @@
                   <h1>原创题库</h1>
                   <p>查看和管理从源码建站发布到当前浏览器的原创教学页面。</p>
                 </div>
-                <span class="library-storage-badge">浏览器本地存储</span>
+                <div class="library-header-tools" aria-label="原创题库数据工具">
+                  <span class="library-storage-badge">浏览器本地存储</span>
+                  <div class="library-tool-actions">
+                    <button
+                      class="library-tool-button"
+                      id="export-original-library"
+                      type="button"
+                    >
+                      导出原创题库
+                    </button>
+                    <button
+                      class="library-tool-button is-primary"
+                      id="import-original-library"
+                      type="button"
+                    >
+                      导入原创题库
+                    </button>
+                    <input
+                      class="visually-hidden"
+                      id="import-original-file"
+                      type="file"
+                      accept="application/json,.json"
+                      aria-label="选择原创题库 JSON 备份文件"
+                    />
+                  </div>
+                </div>
               </header>
 
               <div
@@ -273,7 +298,32 @@
                   <h1>策略库</h1>
                   <p>查看和管理从源码建站保存到当前浏览器的教研策略页面。</p>
                 </div>
-                <span class="library-storage-badge">浏览器本地存储</span>
+                <div class="library-header-tools" aria-label="策略库数据工具">
+                  <span class="library-storage-badge">浏览器本地存储</span>
+                  <div class="library-tool-actions">
+                    <button
+                      class="library-tool-button"
+                      id="export-strategy-library"
+                      type="button"
+                    >
+                      导出策略库
+                    </button>
+                    <button
+                      class="library-tool-button is-primary"
+                      id="import-strategy-library"
+                      type="button"
+                    >
+                      导入策略库
+                    </button>
+                    <input
+                      class="visually-hidden"
+                      id="import-strategy-file"
+                      type="file"
+                      accept="application/json,.json"
+                      aria-label="选择策略库 JSON 备份文件"
+                    />
+                  </div>
+                </div>
               </header>
 
               <div
