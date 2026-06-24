@@ -485,6 +485,14 @@ select.form-control {
   border-top: 1px solid var(--gray-100);
 }
 
+.generate-hint {
+  margin: 9px 2px 0;
+  color: var(--gray-500);
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: center;
+}
+
 .primary-button {
   display: flex;
   width: 100%;
@@ -523,6 +531,130 @@ select.form-control {
   min-height: 0;
   flex-direction: column;
   background: var(--gray-100);
+}
+
+.welcome-guide-card {
+  flex: none;
+  min-width: 0;
+  padding: 16px 18px;
+  margin: 16px 18px 0;
+  background: linear-gradient(135deg, var(--white), var(--blue-50));
+  border: 1px solid var(--blue-200);
+  border-radius: 15px;
+  box-shadow: 0 8px 24px rgb(37 99 235 / 8%);
+}
+
+.welcome-guide-card > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.welcome-guide-card > header > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.welcome-guide-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  font-size: 18px;
+  background: var(--white);
+  border: 1px solid var(--blue-100);
+  border-radius: 11px;
+}
+
+.welcome-guide-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--blue-600);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.welcome-guide-card h2 {
+  margin: 0;
+  color: var(--gray-800);
+  font-size: 16px;
+}
+
+.welcome-guide-card > header button {
+  flex: none;
+  min-height: 34px;
+  padding: 6px 11px;
+  color: var(--blue-700);
+  font-size: 11px;
+  font-weight: 750;
+  background: var(--white);
+  border: 1px solid var(--blue-200);
+  border-radius: 8px;
+}
+
+.welcome-guide-card > header button:hover {
+  background: var(--blue-100);
+}
+
+.welcome-guide-steps {
+  display: grid;
+  min-width: 0;
+  margin: 13px 0 0;
+  padding: 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  list-style: none;
+  counter-reset: welcome-step;
+}
+
+.welcome-guide-steps li {
+  position: relative;
+  min-width: 0;
+  padding: 10px 9px 10px 34px;
+  counter-increment: welcome-step;
+  background: rgb(255 255 255 / 78%);
+  border: 1px solid var(--blue-100);
+  border-radius: 9px;
+}
+
+.welcome-guide-steps li::before {
+  position: absolute;
+  top: 10px;
+  left: 9px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: var(--white);
+  font-size: 9px;
+  font-weight: 800;
+  content: counter(welcome-step);
+  background: var(--blue-600);
+  border-radius: 6px;
+}
+
+.welcome-guide-steps strong,
+.welcome-guide-steps span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.welcome-guide-steps strong {
+  margin-bottom: 3px;
+  color: var(--gray-700);
+  font-size: 11px;
+}
+
+.welcome-guide-steps span {
+  color: var(--gray-500);
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .result-toolbar {
@@ -1014,10 +1146,19 @@ select.form-control {
   line-height: 1.7;
 }
 
+.library-empty-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 18px;
+}
+
 .library-empty-action {
   min-height: 40px;
   padding: 8px 15px;
-  margin-top: 18px;
   color: var(--white);
   font-size: 13px;
   font-weight: 750;
@@ -1029,6 +1170,22 @@ select.form-control {
 
 .library-empty-action:hover {
   background: var(--blue-700);
+}
+
+.library-empty-secondary {
+  min-height: 40px;
+  padding: 8px 15px;
+  color: var(--blue-700);
+  font-size: 13px;
+  font-weight: 750;
+  background: var(--white);
+  border: 1px solid var(--blue-200);
+  border-radius: 9px;
+}
+
+.library-empty-secondary:hover {
+  background: var(--blue-50);
+  border-color: var(--blue-400);
 }
 
 .library-container.is-wide {
@@ -1859,6 +2016,48 @@ select.form-control {
   border-radius: 999px;
 }
 
+.build-guide-steps {
+  display: grid;
+  min-width: 0;
+  margin: 0 0 20px;
+  padding: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  list-style: none;
+}
+
+.build-guide-steps li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+  color: var(--gray-600);
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.build-guide-steps span {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  flex: none;
+  place-items: center;
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 800;
+  background: var(--blue-600);
+  border-radius: 7px;
+}
+
+.build-guide-steps strong {
+  min-width: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .build-form-card,
 .build-panel {
   background: var(--white);
@@ -2093,6 +2292,44 @@ select.form-control {
 
 .build-secondary-button.is-blue:hover {
   background: var(--blue-100);
+}
+
+.build-safety-note {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 15px 17px;
+  margin-top: 20px;
+  color: var(--blue-800);
+  background: var(--blue-50);
+  border: 1px solid var(--blue-200);
+  border-radius: 12px;
+}
+
+.build-safety-note > span {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  flex: none;
+  place-items: center;
+  font-size: 15px;
+  background: var(--white);
+  border: 1px solid var(--blue-100);
+  border-radius: 9px;
+}
+
+.build-safety-note h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.build-safety-note p {
+  margin: 0;
+  color: var(--blue-700);
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
 .build-preview-modal {
@@ -2674,6 +2911,66 @@ body.is-preview-open {
   font-size: 19px;
 }
 
+.profile-backup-health {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  margin-top: 13px;
+  border: 1px solid;
+  border-radius: 10px;
+}
+
+.profile-backup-health > span {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: none;
+  place-items: center;
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 850;
+  border-radius: 50%;
+}
+
+.profile-backup-health strong,
+.profile-backup-health p {
+  overflow-wrap: anywhere;
+}
+
+.profile-backup-health strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+}
+
+.profile-backup-health p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.profile-backup-health.is-warning {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.profile-backup-health.is-warning > span {
+  background: #f59e0b;
+}
+
+.profile-backup-health.is-good {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.profile-backup-health.is-good > span {
+  background: #22c55e;
+}
+
 .profile-backup-tip {
   margin: 14px 0 0;
   padding: 10px 12px;
@@ -3068,6 +3365,24 @@ body.is-preview-open {
   color: var(--gray-500);
   font-size: 14px;
   line-height: 1.8;
+}
+
+.help-reopen-guide {
+  min-height: 38px;
+  padding: 8px 13px;
+  margin-top: 14px;
+  color: var(--blue-700);
+  font-size: 12px;
+  font-weight: 750;
+  background: var(--white);
+  border: 1px solid var(--blue-200);
+  border-radius: 9px;
+  box-shadow: var(--shadow-sm);
+}
+
+.help-reopen-guide:hover {
+  background: var(--blue-50);
+  border-color: var(--blue-400);
 }
 
 .help-card {
@@ -3477,6 +3792,11 @@ body.is-preview-open {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .welcome-guide-steps,
+  .build-guide-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .workspace-page {
     grid-template-columns: minmax(290px, 330px) minmax(0, 1fr);
   }
@@ -3582,6 +3902,15 @@ body.is-preview-open {
 
   .workspace-result {
     min-height: 650px;
+  }
+
+  .welcome-guide-card {
+    margin: 12px 12px 0;
+  }
+
+  .welcome-guide-card > header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .result-stage {
@@ -3872,6 +4201,29 @@ body.is-preview-open {
 }
 
 @media (max-width: 420px) {
+  .welcome-guide-card {
+    padding: 14px;
+    margin: 10px 10px 0;
+  }
+
+  .welcome-guide-card > header button,
+  .help-reopen-guide {
+    width: 100%;
+  }
+
+  .welcome-guide-steps,
+  .build-guide-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .library-empty-actions {
+    width: 100%;
+  }
+
+  .library-empty-actions button {
+    width: 100%;
+  }
+
   .help-container {
     padding-inline: 10px;
   }

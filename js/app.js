@@ -123,6 +123,7 @@ const STORAGE_KEYS = Object.freeze({
 });
 
 const LAST_FULL_BACKUP_KEY = "mathAiEduLastFullBackupAt";
+const WELCOME_GUIDE_KEY = "mathAiEduHasSeenWelcomeGuide";
 const FULL_BACKUP_VERSION = 1;
 
 const LIBRARY_CONFIG = Object.freeze({
@@ -179,6 +180,9 @@ function cacheElements() {
   elements.previewFileSize = document.querySelector("#preview-file-size");
   elements.previewFileType = document.querySelector("#preview-file-type");
   elements.clearFileButton = document.querySelector("#clear-file-button");
+  elements.welcomeGuide = document.querySelector("#welcome-guide");
+  elements.dismissWelcomeGuideButton = document.querySelector("#dismiss-welcome-guide");
+  elements.reopenWelcomeGuideButton = document.querySelector("#reopen-welcome-guide");
   elements.originalLibraryList = document.querySelector("#original-library-list");
   elements.originalLibraryEmpty = document.querySelector("#original-library-empty");
   elements.originalLocalCount = document.querySelector("#original-local-count");
@@ -193,6 +197,9 @@ function cacheElements() {
   elements.originalResultCount = document.querySelector("#original-result-count");
   elements.originalEmptyTitle = document.querySelector("#original-empty-title");
   elements.originalEmptyDescription = document.querySelector("#original-empty-description");
+  elements.originalEmptyBuildButton = document.querySelector("#original-empty-build");
+  elements.originalEmptyImportButton = document.querySelector("#original-empty-import");
+  elements.originalEmptyResetButton = document.querySelector("#original-empty-reset");
   elements.exportOriginalLibraryButton = document.querySelector("#export-original-library");
   elements.importOriginalLibraryButton = document.querySelector("#import-original-library");
   elements.importOriginalFile = document.querySelector("#import-original-file");
@@ -200,6 +207,9 @@ function cacheElements() {
   elements.strategyLibraryEmpty = document.querySelector("#strategy-library-empty");
   elements.strategyEmptyTitle = document.querySelector("#strategy-empty-title");
   elements.strategyEmptyDescription = document.querySelector("#strategy-empty-description");
+  elements.strategyEmptyBuildButton = document.querySelector("#strategy-empty-build");
+  elements.strategyEmptyImportButton = document.querySelector("#strategy-empty-import");
+  elements.strategyEmptyResetButton = document.querySelector("#strategy-empty-reset");
   elements.strategyResultCount = document.querySelector("#strategy-result-count");
   elements.strategySubject = document.querySelector("#strategy-subject");
   elements.strategyProvince = document.querySelector("#strategy-province");
@@ -223,6 +233,12 @@ function cacheElements() {
   elements.fullBackupOriginalCount = document.querySelector("#full-backup-original-count");
   elements.fullBackupStrategyCount = document.querySelector("#full-backup-strategy-count");
   elements.fullBackupLastTime = document.querySelector("#full-backup-last-time");
+  elements.fullBackupHealth = document.querySelector("#full-backup-health");
+  elements.fullBackupHealthIcon = document.querySelector("#full-backup-health-icon");
+  elements.fullBackupHealthTitle = document.querySelector("#full-backup-health-title");
+  elements.fullBackupHealthDescription = document.querySelector(
+    "#full-backup-health-description",
+  );
   elements.exportFullBackupButton = document.querySelector("#export-full-backup");
   elements.importFullBackupButton = document.querySelector("#import-full-backup");
   elements.importFullBackupFile = document.querySelector("#import-full-backup-file");
@@ -297,6 +313,41 @@ function switchPage(pageId) {
   } else if (pageId === "profile") {
     renderProfileRecentItems();
   }
+}
+
+function initializeWelcomeGuide() {
+  let hasSeenGuide = false;
+
+  try {
+    hasSeenGuide = window.localStorage.getItem(WELCOME_GUIDE_KEY) === "true";
+  } catch {
+    // 本地存储不可用时仍显示引导，不影响工作台其他功能。
+  }
+
+  elements.welcomeGuide.hidden = hasSeenGuide;
+}
+
+function dismissWelcomeGuide() {
+  elements.welcomeGuide.hidden = true;
+
+  try {
+    window.localStorage.setItem(WELCOME_GUIDE_KEY, "true");
+    showToast("新手引导已收起，可在帮助中心重新查看。");
+  } catch {
+    showToast("新手引导已暂时收起；当前浏览器无法保存引导状态。");
+  }
+}
+
+function reopenWelcomeGuide() {
+  try {
+    window.localStorage.removeItem(WELCOME_GUIDE_KEY);
+  } catch {
+    // 即使无法更新本地状态，本次仍可以重新显示引导。
+  }
+
+  elements.welcomeGuide.hidden = false;
+  switchPage("workspace");
+  showToast("新手引导已重新打开。");
 }
 
 function switchOriginalTab(tabName) {
@@ -735,6 +786,27 @@ function readLastFullBackupAt() {
   }
 }
 
+function renderFullBackupHealth(lastBackupAt) {
+  const hasBackup = Boolean(lastBackupAt);
+  const backupAge = hasBackup ? Date.now() - new Date(lastBackupAt).getTime() : Infinity;
+  const isRecent = hasBackup && backupAge <= 7 * 24 * 60 * 60 * 1000;
+
+  elements.fullBackupHealth.classList.toggle("is-good", isRecent);
+  elements.fullBackupHealth.classList.toggle("is-warning", !isRecent);
+  elements.fullBackupHealthIcon.textContent = isRecent ? "✓" : "!";
+
+  if (!hasBackup) {
+    elements.fullBackupHealthTitle.textContent = "建议立即导出完整备份";
+    elements.fullBackupHealthDescription.textContent = "当前浏览器还没有完整备份记录。";
+  } else if (!isRecent) {
+    elements.fullBackupHealthTitle.textContent = "建议更新备份";
+    elements.fullBackupHealthDescription.textContent = "距离上次完整备份已超过 7 天，请及时保存最新数据。";
+  } else {
+    elements.fullBackupHealthTitle.textContent = "备份状态良好";
+    elements.fullBackupHealthDescription.textContent = "最近 7 天内已完成完整备份，请继续保持。";
+  }
+}
+
 function renderFullBackupStats() {
   const originalItems = readLibraryItems("original") || [];
   const strategyItems = readLibraryItems("strategy") || [];
@@ -745,6 +817,7 @@ function renderFullBackupStats() {
   elements.fullBackupLastTime.textContent = lastBackupAt
     ? formatCreatedAt(lastBackupAt)
     : "尚未导出";
+  renderFullBackupHealth(lastBackupAt);
 }
 
 function exportFullBackup() {
@@ -1432,6 +1505,25 @@ function filterStrategyItems(items) {
   return sortLibraryItems(filteredItems, filters.sortMode);
 }
 
+function updateLibraryEmptyActions(targetLibrary, isFiltered) {
+  const buildButton =
+    targetLibrary === "original"
+      ? elements.originalEmptyBuildButton
+      : elements.strategyEmptyBuildButton;
+  const importButton =
+    targetLibrary === "original"
+      ? elements.originalEmptyImportButton
+      : elements.strategyEmptyImportButton;
+  const resetButton =
+    targetLibrary === "original"
+      ? elements.originalEmptyResetButton
+      : elements.strategyEmptyResetButton;
+
+  buildButton.hidden = isFiltered;
+  importButton.hidden = isFiltered;
+  resetButton.hidden = !isFiltered;
+}
+
 function renderLibraryList(targetLibrary) {
   const storedItems = readLibraryItems(targetLibrary, true) || [];
   const items =
@@ -1450,15 +1542,17 @@ function renderLibraryList(targetLibrary) {
     const isFiltered = items.length === 0 && storedItems.length > 0;
     elements.originalEmptyTitle.textContent = isFiltered ? "没有找到匹配内容" : "还没有本地原创题";
     elements.originalEmptyDescription.textContent = isFiltered
-      ? "请调整搜索关键词、类型、年份或排序条件后再试。"
-      : "前往源码建站，填写页面信息和源码后点击“发布至原创题库”。";
+      ? "当前筛选条件没有匹配记录，可以重置筛选后查看全部原创题。"
+      : "前往源码建站创建第一道原创题，或导入已有 JSON 备份。";
+    updateLibraryEmptyActions("original", isFiltered);
   } else {
     elements.strategyResultCount.textContent = `${items.length}套`;
     const isFiltered = items.length === 0 && storedItems.length > 0;
     elements.strategyEmptyTitle.textContent = isFiltered ? "没有符合条件的策略页" : "还没有本地策略页";
     elements.strategyEmptyDescription.textContent = isFiltered
-      ? "请调整筛选条件或搜索关键词后再试。"
-      : "前往源码建站，填写页面信息和源码后点击“存入策略库”。";
+      ? "当前筛选条件没有匹配记录，可以重置筛选后查看全部策略页。"
+      : "前往源码建站创建第一份策略页，或导入已有 JSON 备份。";
+    updateLibraryEmptyActions("strategy", isFiltered);
   }
 
   items.forEach((item) => {
@@ -1816,10 +1910,17 @@ function bindEvents() {
   });
   elements.originalSort.addEventListener("change", () => renderLibraryList("original"));
   elements.resetOriginalFiltersButton.addEventListener("click", () => resetOriginalFilters());
+  elements.originalEmptyImportButton.addEventListener("click", () =>
+    elements.importOriginalFile.click(),
+  );
+  elements.originalEmptyResetButton.addEventListener("click", () => resetOriginalFilters());
 
   elements.toastButtons.forEach((button) => {
     button.addEventListener("click", () => showToast(button.dataset.toastMessage));
   });
+
+  elements.dismissWelcomeGuideButton.addEventListener("click", dismissWelcomeGuide);
+  elements.reopenWelcomeGuideButton.addEventListener("click", reopenWelcomeGuide);
 
   elements.helpFaqButtons.forEach((button) => {
     button.addEventListener("click", () => toggleHelpFaq(button));
@@ -1861,6 +1962,10 @@ function bindEvents() {
   elements.strategyKeyword.addEventListener("input", () => renderLibraryList("strategy"));
   elements.strategySort.addEventListener("change", () => renderLibraryList("strategy"));
   elements.resetStrategyFiltersButton.addEventListener("click", () => resetStrategyFilters());
+  elements.strategyEmptyImportButton.addEventListener("click", () =>
+    elements.importStrategyFile.click(),
+  );
+  elements.strategyEmptyResetButton.addEventListener("click", () => resetStrategyFilters());
   elements.renderBuildPreviewButton.addEventListener("click", renderBuildPreview);
   elements.closeBuildPreviewButton.addEventListener("click", closeBuildPreview);
   elements.publishOriginalButton.addEventListener("click", () => saveBuildRecord("original"));
@@ -1910,6 +2015,8 @@ function bindEvents() {
       }
     } else if (event.key === LAST_FULL_BACKUP_KEY && state.activePage === "profile") {
       renderFullBackupStats();
+    } else if (event.key === WELCOME_GUIDE_KEY) {
+      initializeWelcomeGuide();
     }
   });
   window.addEventListener("beforeunload", revokeFilePreviewUrl);
@@ -1917,6 +2024,7 @@ function bindEvents() {
 
 function initializeApp() {
   cacheElements();
+  initializeWelcomeGuide();
   initializeBuildSelectors();
   initializeStrategyFilters();
   bindEvents();
