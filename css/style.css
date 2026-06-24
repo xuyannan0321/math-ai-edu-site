@@ -2717,6 +2717,353 @@ body.is-preview-open {
   font-size: 12px;
 }
 
+.help-page {
+  min-width: 0;
+  background:
+    radial-gradient(circle at 8% 4%, rgb(219 234 254 / 62%), transparent 28%),
+    var(--gray-50);
+}
+
+.help-page-scroll {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.help-container {
+  width: min(100%, 1120px);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 34px 26px 54px;
+}
+
+.help-page-header {
+  margin-bottom: 22px;
+}
+
+.help-kicker,
+.help-section-label {
+  display: block;
+  color: var(--blue-600);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.help-page-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 7px 0 8px;
+  color: var(--gray-900);
+  font-size: clamp(26px, 4vw, 36px);
+  line-height: 1.2;
+}
+
+.help-page-header h1 span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--white);
+  font-size: 20px;
+  background: linear-gradient(135deg, var(--blue-500), var(--blue-700));
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgb(37 99 235 / 20%);
+}
+
+.help-page-header p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.help-card {
+  min-width: 0;
+  padding: 24px;
+  background: rgb(255 255 255 / 96%);
+  border: 1px solid var(--gray-200);
+  border-radius: 17px;
+  box-shadow: var(--shadow-sm);
+}
+
+.help-card + .help-card,
+.help-guide-grid + .help-card {
+  margin-top: 18px;
+}
+
+.help-card-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.help-card-heading h2 {
+  margin: 0;
+  color: var(--gray-800);
+  font-size: 19px;
+  line-height: 1.35;
+}
+
+.help-card-icon {
+  display: grid;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  font-size: 19px;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 12px;
+}
+
+.help-section-label {
+  margin-bottom: 3px;
+  font-size: 9px;
+}
+
+.help-step-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  counter-reset: help-step;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+}
+
+.help-step-list li {
+  position: relative;
+  min-width: 0;
+  padding: 0 20px 0 46px;
+  counter-increment: help-step;
+}
+
+.help-step-list li:not(:last-child)::after {
+  position: absolute;
+  top: 16px;
+  right: 0;
+  width: 20px;
+  height: 1px;
+  content: "";
+  background: var(--blue-200);
+}
+
+.help-step-list li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 800;
+  content: counter(help-step);
+  background: var(--blue-600);
+  border-radius: 10px;
+}
+
+.help-step-list strong,
+.help-step-list span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.help-step-list strong {
+  margin-bottom: 5px;
+  color: var(--gray-800);
+  font-size: 14px;
+}
+
+.help-step-list span {
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.help-guide-grid {
+  display: grid;
+  min-width: 0;
+  margin-top: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.help-guide-grid .help-card {
+  height: 100%;
+}
+
+.help-check-list,
+.help-limit-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 10px;
+  list-style: none;
+}
+
+.help-check-list li,
+.help-limit-list li {
+  position: relative;
+  min-width: 0;
+  padding-left: 24px;
+  color: var(--gray-600);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.help-check-list li::before {
+  position: absolute;
+  top: 1px;
+  left: 0;
+  color: var(--blue-600);
+  font-weight: 800;
+  content: "✓";
+}
+
+.help-note {
+  margin: 17px 0 0;
+  padding: 12px 14px;
+  color: var(--blue-800);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 10px;
+}
+
+.help-backup-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.help-backup-grid > div {
+  min-width: 0;
+  padding: 15px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 11px;
+}
+
+.help-backup-grid strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--gray-800);
+  font-size: 13px;
+}
+
+.help-backup-grid p {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.help-limit-card {
+  border-color: #fde68a;
+  background: linear-gradient(135deg, #fffdf5, var(--white));
+}
+
+.help-limit-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.help-limit-list li::before {
+  position: absolute;
+  top: 2px;
+  left: 1px;
+  color: #d97706;
+  content: "•";
+}
+
+.help-faq-list {
+  display: grid;
+  gap: 10px;
+}
+
+.help-faq-item {
+  overflow: hidden;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 11px;
+  transition: border-color 160ms ease;
+}
+
+.help-faq-item:has(button[aria-expanded="true"]) {
+  border-color: var(--blue-200);
+}
+
+.help-faq-item h3 {
+  margin: 0;
+}
+
+.help-faq-item button {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  color: var(--gray-700);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+
+.help-faq-item button:hover,
+.help-faq-item button[aria-expanded="true"] {
+  color: var(--blue-700);
+  background: var(--blue-50);
+}
+
+.help-faq-item button span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.help-faq-item button span:last-child {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  color: var(--blue-600);
+  font-size: 17px;
+  background: var(--white);
+  border: 1px solid var(--blue-100);
+  border-radius: 8px;
+}
+
+.help-faq-answer {
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--gray-100);
+}
+
+.help-faq-answer[hidden] {
+  display: none;
+}
+
+.help-faq-answer p {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
 .placeholder-page {
   display: grid;
   place-items: center;
@@ -2826,6 +3173,15 @@ body.is-preview-open {
     display: none;
   }
 
+  .help-step-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 0;
+  }
+
+  .help-step-list li:not(:last-child)::after {
+    display: none;
+  }
+
   .workspace-page {
     grid-template-columns: minmax(290px, 330px) minmax(0, 1fr);
   }
@@ -2892,6 +3248,31 @@ body.is-preview-open {
 
   .app-page {
     min-height: calc(100vh - var(--header-height));
+  }
+
+  .help-page-scroll {
+    height: auto;
+    overflow: visible;
+  }
+
+  .help-container {
+    padding: 24px 14px 40px;
+  }
+
+  .help-step-list,
+  .help-guide-grid,
+  .help-backup-grid,
+  .help-limit-list {
+    grid-template-columns: 1fr;
+  }
+
+  .help-step-list {
+    gap: 15px;
+  }
+
+  .help-step-list li {
+    min-height: 42px;
+    padding-right: 0;
   }
 
   .workspace-page {
@@ -3186,6 +3567,28 @@ body.is-preview-open {
 }
 
 @media (max-width: 420px) {
+  .help-container {
+    padding-inline: 10px;
+  }
+
+  .help-card {
+    padding: 17px;
+    border-radius: 14px;
+  }
+
+  .help-page-header h1 {
+    font-size: 27px;
+  }
+
+  .help-card-heading {
+    align-items: flex-start;
+  }
+
+  .help-faq-item button {
+    min-height: 58px;
+    padding-inline: 13px;
+  }
+
   .file-preview {
     grid-template-columns: 60px minmax(0, 1fr);
   }

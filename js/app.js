@@ -234,6 +234,7 @@ function cacheElements() {
   elements.publishOriginalButton = document.querySelector("#publish-original-button");
   elements.saveStrategyButton = document.querySelector("#save-strategy-button");
   elements.toastButtons = Array.from(document.querySelectorAll("[data-toast-message]"));
+  elements.helpFaqButtons = Array.from(document.querySelectorAll("[data-help-faq]"));
   elements.toast = document.querySelector("#toast");
   elements.toastMessage = document.querySelector("#toast-message");
 }
@@ -344,6 +345,24 @@ function resetLibraryFilters(targetLibrary, shouldRender = true) {
     resetOriginalFilters(shouldRender);
   } else if (targetLibrary === "strategy") {
     resetStrategyFilters(shouldRender);
+  }
+}
+
+function toggleHelpFaq(button) {
+  const answerId = button.getAttribute("aria-controls");
+  const answer = answerId ? document.getElementById(answerId) : null;
+
+  if (!answer) {
+    return;
+  }
+
+  const willExpand = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(willExpand));
+  answer.hidden = !willExpand;
+
+  const marker = button.lastElementChild;
+  if (marker) {
+    marker.textContent = willExpand ? "−" : "＋";
   }
 }
 
@@ -1511,6 +1530,10 @@ function bindEvents() {
 
   elements.toastButtons.forEach((button) => {
     button.addEventListener("click", () => showToast(button.dataset.toastMessage));
+  });
+
+  elements.helpFaqButtons.forEach((button) => {
+    button.addEventListener("click", () => toggleHelpFaq(button));
   });
 
   elements.viewButtons.forEach((button) => {

@@ -64,6 +64,15 @@
           </button>
           <button
             class="nav-button"
+            id="nav-help"
+            type="button"
+            data-page-target="help"
+            aria-controls="page-help"
+          >
+            帮助中心
+          </button>
+          <button
+            class="nav-button"
             id="nav-profile"
             type="button"
             data-page-target="profile"
@@ -849,6 +858,192 @@
                   </div>
                 </section>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="app-page help-page fade-in"
+          id="page-help"
+          data-page="help"
+          aria-labelledby="nav-help"
+          hidden
+        >
+          <div class="help-page-scroll">
+            <div class="help-container">
+              <header class="help-page-header">
+                <span class="help-kicker">USER GUIDE</span>
+                <h1><span aria-hidden="true">?</span> 帮助中心</h1>
+                <p>帮助您快速了解原题真解 Pro 的使用方式、数据迁移方法和当前功能限制。</p>
+              </header>
+
+              <section class="help-card help-quick-start" aria-labelledby="help-quick-title">
+                <div class="help-card-heading">
+                  <span class="help-card-icon" aria-hidden="true">🚀</span>
+                  <div>
+                    <span class="help-section-label">QUICK START</span>
+                    <h2 id="help-quick-title">快速开始</h2>
+                  </div>
+                </div>
+                <ol class="help-step-list">
+                  <li><strong>进入工作台</strong><span>从顶部导航进入工作台，准备试题和解题要求。</span></li>
+                  <li><strong>提供试题信息</strong><span>上传试题图片或 PDF，也可以直接输入解题指令。</span></li>
+                  <li><strong>生成模拟解析</strong><span>点击生成按钮，查看教学风格的模拟解析、代码与预览效果。</span></li>
+                  <li><strong>保存完整页面</strong><span>已有完整 HTML 时，可进入源码建站并保存到原创题库或策略库。</span></li>
+                </ol>
+              </section>
+
+              <div class="help-guide-grid">
+                <section class="help-card" aria-labelledby="help-workspace-title">
+                  <div class="help-card-heading">
+                    <span class="help-card-icon" aria-hidden="true">🧭</span>
+                    <h2 id="help-workspace-title">工作台怎么用</h2>
+                  </div>
+                  <ul class="help-check-list">
+                    <li>选择图片或 PDF 后，可在浏览器本地查看缩略图或文件信息。</li>
+                    <li>点击“清除文件”可移除当前选择，不会上传到服务器。</li>
+                    <li>输入教学要求后，点击按钮生成模拟解析报告。</li>
+                    <li>使用“代码 / 预览”切换查看生成内容。</li>
+                  </ul>
+                  <p class="help-note"><strong>请注意：</strong>当前工作台尚未连接真实 AI，生成内容仅为教学结构演示。</p>
+                </section>
+
+                <section class="help-card" aria-labelledby="help-builder-title">
+                  <div class="help-card-heading">
+                    <span class="help-card-icon" aria-hidden="true">🧩</span>
+                    <h2 id="help-builder-title">源码建站怎么用</h2>
+                  </div>
+                  <ul class="help-check-list">
+                    <li>填写科目、省份、城市、类型、年份、学校和页面标题。</li>
+                    <li>在源码输入区粘贴完整 HTML 或 JSON 内容。</li>
+                    <li>点击“渲染本地预览效果”，在大尺寸窗口中检查页面。</li>
+                    <li>确认后发布至原创题库，或存入策略库。</li>
+                  </ul>
+                  <p class="help-note"><strong>预览说明：</strong>iframe 在隔离来源中允许脚本运行；请只预览自己编写或确认可信的源码，联网资源需保持网络畅通。</p>
+                </section>
+
+                <section class="help-card" aria-labelledby="help-original-title">
+                  <div class="help-card-heading">
+                    <span class="help-card-icon" aria-hidden="true">💡</span>
+                    <h2 id="help-original-title">原创题库怎么用</h2>
+                  </div>
+                  <ul class="help-check-list">
+                    <li>通过关键词、类型和年份筛选本地原创题，并按时间或标题排序。</li>
+                    <li>使用“查看”打开大尺寸页面预览，使用“编辑”回填源码建站表单。</li>
+                    <li>支持删除记录、下载 HTML 和复制源码。</li>
+                    <li>支持导出 JSON 备份，也可以追加导入已有 JSON 数据。</li>
+                  </ul>
+                </section>
+
+                <section class="help-card" aria-labelledby="help-strategy-title">
+                  <div class="help-card-heading">
+                    <span class="help-card-icon" aria-hidden="true">📚</span>
+                    <h2 id="help-strategy-title">策略库怎么用</h2>
+                  </div>
+                  <ul class="help-check-list">
+                    <li>可按科目、省市、类型、年份、日期、学校和关键词组合筛选。</li>
+                    <li>支持按入库时间或标题排序，也可一键重置全部筛选条件。</li>
+                    <li>支持查看、编辑、删除、下载 HTML 和复制源码。</li>
+                    <li>通过 JSON 导入、导出完成策略页备份和迁移。</li>
+                  </ul>
+                </section>
+              </div>
+
+              <section class="help-card help-backup-card" aria-labelledby="help-backup-title">
+                <div class="help-card-heading">
+                  <span class="help-card-icon" aria-hidden="true">🛡️</span>
+                  <div>
+                    <span class="help-section-label">LOCAL DATA</span>
+                    <h2 id="help-backup-title">数据备份与迁移</h2>
+                  </div>
+                </div>
+                <div class="help-backup-grid">
+                  <div><strong>数据保存位置</strong><p>原创题和策略页保存在当前浏览器的 localStorage 中，不会自动上传服务器。</p></div>
+                  <div><strong>不同来源不互通</strong><p>Live Server、GitHub Pages、不同手机及不同浏览器的数据不会自动同步。</p></div>
+                  <div><strong>推荐迁移方式</strong><p>在原环境导出 JSON，再到新环境的对应题库中导入 JSON。</p></div>
+                  <div><strong>定期做好备份</strong><p>清理浏览器站点数据可能导致本地题库丢失，请定期保存 JSON 备份。</p></div>
+                </div>
+              </section>
+
+              <section class="help-card help-limit-card" aria-labelledby="help-limit-title">
+                <div class="help-card-heading">
+                  <span class="help-card-icon" aria-hidden="true">⚠️</span>
+                  <div>
+                    <span class="help-section-label">CURRENT LIMITS</span>
+                    <h2 id="help-limit-title">当前限制</h2>
+                  </div>
+                </div>
+                <ul class="help-limit-list">
+                  <li>当前是纯静态前端项目，未连接真实 AI。</li>
+                  <li>未接后端、数据库和真实登录系统。</li>
+                  <li>积分、提现、分享和支付均为静态演示。</li>
+                  <li>题库数据只保存在当前浏览器，不会跨设备自动同步。</li>
+                  <li>当前下载格式为 HTML；真正的 Word 文档（.docx）下载留到后端阶段实现。</li>
+                </ul>
+              </section>
+
+              <section class="help-card help-faq-card" aria-labelledby="help-faq-title">
+                <div class="help-card-heading">
+                  <span class="help-card-icon" aria-hidden="true">💬</span>
+                  <div>
+                    <span class="help-section-label">FAQ</span>
+                    <h2 id="help-faq-title">常见问题</h2>
+                  </div>
+                </div>
+
+                <div class="help-faq-list">
+                  <article class="help-faq-item">
+                    <h3>
+                      <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-1">
+                        <span>为什么手机打开没有我电脑上的题库？</span><span aria-hidden="true">＋</span>
+                      </button>
+                    </h3>
+                    <div class="help-faq-answer" id="help-faq-answer-1" hidden>
+                      <p>题库保存在各自浏览器的 localStorage 中，电脑和手机属于不同环境。请先在电脑导出 JSON，再在手机端导入。</p>
+                    </div>
+                  </article>
+                  <article class="help-faq-item">
+                    <h3>
+                      <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-2">
+                        <span>为什么生成的是模拟解析？</span><span aria-hidden="true">＋</span>
+                      </button>
+                    </h3>
+                    <div class="help-faq-answer" id="help-faq-answer-2" hidden>
+                      <p>当前项目还没有连接真实 AI 接口，工作台只用于演示教学解析结构和页面交互。</p>
+                    </div>
+                  </article>
+                  <article class="help-faq-item">
+                    <h3>
+                      <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-3">
+                        <span>为什么下载的是 HTML？</span><span aria-hidden="true">＋</span>
+                      </button>
+                    </h3>
+                    <div class="help-faq-answer" id="help-faq-answer-3" hidden>
+                      <p>现阶段是静态前端项目，可以直接保存页面源码。真正的 Word 文档生成需要后端文档处理能力，将在后续阶段实现。</p>
+                    </div>
+                  </article>
+                  <article class="help-faq-item">
+                    <h3>
+                      <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-4">
+                        <span>换浏览器后数据为什么不见了？</span><span aria-hidden="true">＋</span>
+                      </button>
+                    </h3>
+                    <div class="help-faq-answer" id="help-faq-answer-4" hidden>
+                      <p>不同浏览器拥有独立的 localStorage。更换前请导出对应题库的 JSON 文件，再在新浏览器中导入。</p>
+                    </div>
+                  </article>
+                  <article class="help-faq-item">
+                    <h3>
+                      <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-5">
+                        <span>后面能不能接数据库和真实 AI？</span><span aria-hidden="true">＋</span>
+                      </button>
+                    </h3>
+                    <div class="help-faq-answer" id="help-faq-answer-5" hidden>
+                      <p>可以。后续可增加安全的服务端接口、数据库、账号系统和真实 AI，但 API key 必须保存在服务端，不能写进前端代码。</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
             </div>
           </div>
         </section>
