@@ -30,6 +30,27 @@ const env = {
     database: process.env.DB_NAME || "math_ai_edu",
     connectionLimit: parsePort(process.env.DB_CONNECTION_LIMIT, 10),
   },
+  ai: {
+    dashscope: {
+      apiKey: process.env.DASHSCOPE_API_KEY || "",
+      baseUrl: process.env.DASHSCOPE_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: process.env.DASHSCOPE_MODEL || "qwen-plus",
+    },
+    deepseek: {
+      apiKey: process.env.DEEPSEEK_API_KEY || "",
+      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+    },
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY || "",
+      baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    },
+    gemini: {
+      apiKey: process.env.GEMINI_API_KEY || "",
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    },
+  },
 };
 
 function assertRuntimeEnv() {

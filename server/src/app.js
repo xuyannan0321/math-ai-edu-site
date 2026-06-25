@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const authRoutes = require("./routes/auth.routes");
+const solveRoutes = require("./routes/solve.routes");
 const { env } = require("./config/env");
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
 
@@ -35,6 +36,7 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api", solveRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

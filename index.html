@@ -97,12 +97,21 @@
               <div class="field-group">
                 <label class="field-label" for="model-select">AI 中枢模型</label>
                 <select id="model-select" class="form-control">
-                  <option>Gemini 3.1 Pro（界面演示）</option>
-                  <option>DeepSeek（界面演示）</option>
-                  <option>豆包 Doubao（界面演示）</option>
-                  <option>Qwen（界面演示）</option>
+                  <option value="dashscope">阿里通义 / DashScope（已接入）</option>
+                  <option value="deepseek">DeepSeek（预留）</option>
+                  <option value="openai">GPT / OpenAI（预留）</option>
+                  <option value="gemini">Gemini（预留）</option>
                 </select>
-                <p class="field-help">当前仅用于界面展示，尚未连接真实 AI。</p>
+                <p class="field-help">API Key 只在后端读取；前端只调用自己的后端接口。</p>
+              </div>
+
+              <div class="field-group">
+                <label class="field-label" for="solve-library-type">保存位置</label>
+                <select id="solve-library-type" class="form-control">
+                  <option value="original">原创题库</option>
+                  <option value="strategy">策略库</option>
+                </select>
+                <p class="field-help">本阶段 AI 结果先保存到数据库；题库页面读取数据库会在后续阶段接入。</p>
               </div>
 
               <div class="field-group">
@@ -213,7 +222,7 @@
                   预览
                 </button>
               </div>
-              <span class="demo-badge">模拟模式 · 未连接 AI</span>
+              <span class="demo-badge">真实 AI · 需登录</span>
             </div>
 
             <div class="result-stage">

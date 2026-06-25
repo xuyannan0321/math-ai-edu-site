@@ -11,7 +11,7 @@ function errorHandler(error, req, res, next) {
 
   const statusCode = error.statusCode || 500;
   const message =
-    statusCode >= 500
+    statusCode >= 500 && !error.expose
       ? "服务器暂时无法处理请求，请稍后再试。"
       : error.message || "请求处理失败，请稍后再试。";
 

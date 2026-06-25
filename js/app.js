@@ -180,6 +180,7 @@ const state = {
   activeOriginalTab: "my",
   toastTimer: null,
   generationTimer: null,
+  generationStatusTimers: [],
   filePreviewUrl: null,
   previewReturnFocus: null,
   pendingFullBackup: null,
@@ -201,6 +202,9 @@ function cacheElements() {
   elements.resultCode = document.querySelector("#result-code");
   elements.generateButton = document.querySelector("#generate-report");
   elements.generateButtonText = document.querySelector("#generate-button-text");
+  elements.modelSelect = document.querySelector("#model-select");
+  elements.solveLibraryType = document.querySelector("#solve-library-type");
+  elements.instructionInput = document.querySelector("#instruction-input");
   elements.fileInput = document.querySelector("#problem-file");
   elements.uploadEmptyState = document.querySelector("#upload-empty-state");
   elements.filePreview = document.querySelector("#file-preview");
@@ -698,21 +702,105 @@ function renderMockReport() {
   switchResultView("preview");
 }
 
-function generateMockReport() {
+function renderAiHtmlResult(htmlResult) {
+  elements.resultCode.value = htmlResult;
+  elements.resultIframe.srcdoc = htmlResult;
+  elements.previewPlaceholder.hidden = true;
+  elements.resultIframe.hidden = false;
+  switchResultView("preview");
+}
+
+function clearGenerationStatusTimers() {
+  state.generationStatusTimers.forEach((timerId) => window.clearTimeout(timerId));
+  state.generationStatusTimers = [];
+}
+
+function startGenerationStatusUpdates() {
+  clearGenerationStatusTimers();
+
+  const statuses = [
+    "正在整理题目...",
+    "正在调用 AI...",
+    "正在生成解析...",
+    "正在保存记录...",
+  ];
+
+  elements.generateButtonText.textContent = statuses[0];
+
+  statuses.slice(1).forEach((status, index) => {
+    const timerId = window.setTimeout(() => {
+      elements.generateButtonText.textContent = status;
+    }, (index + 1) * 1400);
+    state.generationStatusTimers.push(timerId);
+  });
+}
+
+function getQuestionTypeFromText(text) {
+  if (/函数|一次函数|二次函数|抛物线|坐标系/.test(text)) {
+    return "函数";
+  }
+
+  if (/三角形|圆|几何|角|平行|垂直|相似|全等/.test(text)) {
+    return "几何";
+  }
+
+  if (/方程|不等式|因式分解|代数式|整式/.test(text)) {
+    return "代数";
+  }
+
+  return "综合";
+}
+
+async function generateAiTextSolution() {
   if (state.generationTimer) {
     return;
   }
 
-  elements.generateButton.disabled = true;
-  elements.generateButtonText.textContent = "正在整理教学解析...";
+  if (!state.currentUser || !state.authToken) {
+    showToast("请先登录后再使用 AI 解题。");
+    switchPage("profile");
+    return;
+  }
 
-  state.generationTimer = window.setTimeout(() => {
-    renderMockReport();
+  const questionText = elements.instructionInput.value.trim();
+
+  if (!questionText) {
+    showToast("请先输入需要解析的文字题目。");
+    return;
+  }
+
+  if (questionText.length > 5000) {
+    showToast("题目文字不能超过 5000 字。");
+    return;
+  }
+
+  elements.generateButton.disabled = true;
+  state.generationTimer = true;
+  startGenerationStatusUpdates();
+
+  try {
+    const data = await requestApi("/api/solve-text", {
+      method: "POST",
+      body: JSON.stringify({
+        questionText,
+        subject: "数学",
+        gradeLevel: "初中",
+        questionType: getQuestionTypeFromText(questionText),
+        libraryType: elements.solveLibraryType.value,
+        preferredProvider: elements.modelSelect.value,
+      }),
+    });
+
+    renderAiHtmlResult(data.htmlResult);
+    showToast(`AI 解析已生成并保存到数据库，记录 ID：${data.recordId}。`);
+  } catch (error) {
+    showToast(error.message || "AI 解题失败，请稍后再试。");
+  } finally {
+    clearGenerationStatusTimers();
     elements.generateButton.disabled = false;
     elements.generateButtonText.textContent = "生成标准解析报告";
     state.generationTimer = null;
-    showToast("模拟解析已生成，并切换到预览视图。");
-  }, 900);
+  }
 }
 
 function formatFileSize(bytes) {
@@ -2434,7 +2522,7 @@ function bindEvents() {
     button.addEventListener("click", () => switchResultView(button.dataset.resultView));
   });
 
-  elements.generateButton.addEventListener("click", generateMockReport);
+  elements.generateButton.addEventListener("click", generateAiTextSolution);
   elements.fileInput.addEventListener("change", handleFileSelection);
   elements.clearFileButton.addEventListener("click", () => clearFileSelection());
   elements.imagePreview.addEventListener("error", () => {
