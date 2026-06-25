@@ -2,7 +2,7 @@
 
 原题真解 Pro 是一个面向学生和教师的数学教育网站项目。项目目标不是只给最终答案，而是帮助使用者理解题意、掌握知识点、查看分步解析、发现易错点，并完成验算检查。
 
-当前项目正在从静态前端升级为真实 AI 大模型解题网站。目前已完成前端基础、后端 API 骨架、阿里云 RDS MySQL、注册登录、JWT 鉴权、真实 AI 文字解题基础版，以及图片识题 + 解题基础版。真实 AI 调用需要在 `server/.env` 中配置模型 API Key，API Key 不得写入前端。
+当前项目正在从静态前端升级为真实 AI 大模型解题网站。目前已完成前端基础、后端 API 骨架、阿里云 RDS MySQL、注册登录、JWT 鉴权、真实 AI 文字解题基础版、图片识题 + 解题基础版、明确模型选择、题库保存按钮、Word 可打开文档导出基础版、GeoGebra 图形数据导出基础版，以及 `visualizationSpec` 图示渲染基础能力。真实 AI 调用需要在 `server/.env` 中配置模型 API Key，API Key 不得写入前端。
 
 ## 在线访问
 
@@ -41,14 +41,19 @@ https://xuyannan0321.github.io/math-ai-edu-site/
 21. GPT / Gemini 通过后端可配置 Base URL 的基础接入；
 22. AI 解题结果保存到 `solve_records`；
 23. 图片附件元数据保存到 `attachments`；
-24. 模型调用日志写入 `model_calls`。
+24. 模型调用日志写入 `model_calls`；
+25. 明确模型选择：自动推荐、阿里通义 Qwen、DeepSeek、GPT、Gemini；
+26. AI 结果生成后可明确保存到原创题库或策略库；
+27. Word 可打开文档导出基础版；
+28. GeoGebra 图形数据导出基础版；
+29. `visualizationSpec` 前端图示渲染基础能力。
 
 仍在后续阶段推进：
 
 - PDF 识题；
 - 数据库题库读取与云端题库管理；
-- Word `.docx` 导出；
-- GGB 导出；
+- 真正完整 `.docx` 导出；
+- 复杂 `.ggb` zip 包导出；
 - 真实积分、支付、公开发布和分享系统；
 - OSS 长期文件存储。
 
@@ -269,8 +274,8 @@ Content-Type: multipart/form-data
 - `gradeLevel`：默认初中；
 - `questionType`：代数 / 几何 / 函数 / 综合；
 - `libraryType`：`original` 或 `strategy`；
-- `preferredVisionProvider`：`qwen-vl` / `gemini-vision` / `openai-vision`；
-- `preferredSolveProvider`：`dashscope` / `deepseek` / `openai` / `gemini`。
+- `preferredVisionProvider`：`auto` / `qwen-vl` / `gemini-vision` / `openai-vision`；
+- `preferredSolveProvider`：`auto` / `dashscope` / `deepseek` / `openai` / `gemini`。
 
 限制：
 
@@ -286,6 +291,52 @@ Content-Type: multipart/form-data
 - `solveProvider`；
 - `result`；
 - `htmlResult`。
+
+### 模型配置状态检测
+
+```http
+GET /api/models/status
+```
+
+返回各模型是否已配置文字能力和视觉能力，例如 `textConfigured`、`visionConfigured`。接口不会返回 API Key、Base URL、数据库信息或其他敏感配置。前端只据此显示“可用 / 未配置”，并在用户点击未配置模型时提示切换其他模型或使用自动推荐。
+
+### 保存记录到题库
+
+```http
+PATCH /api/solve-records/:id/library
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+请求示例：
+
+```json
+{
+  "libraryType": "strategy"
+}
+```
+
+只能修改当前登录用户自己的记录，`libraryType` 只能是 `original` 或 `strategy`。
+
+### Word 可打开文档导出基础版
+
+```http
+GET /api/solve-records/:id/export/word
+Authorization: Bearer <token>
+```
+
+当前返回 Word 可打开的 `.doc` 文档，内容来自结构化解题字段，包括标题、原题、识别文本、考点、题意分析、步骤、答案、易错提醒、验算检查和质量检查。动画不会保留。真正完整 `.docx` 为后续增强。
+
+### GeoGebra 图形数据导出基础版
+
+```http
+GET /api/solve-records/:id/export/ggb
+Authorization: Bearer <token>
+```
+
+当前导出基础 GeoGebra XML 图形数据，只在 `visualizationSpec` 足够可靠时输出。支持的对象包括 `point`、`segment`、`line`、`circle`、`angle`、`function`、`auxiliaryLine`。
+
+如果当前记录没有可靠图示数据，接口会返回友好提示：当前题目暂无可导出的 GGB 图形，请先生成图示数据。复杂 `.ggb` zip 包后续再做。
 
 ## AI 解题输出结构
 
@@ -305,18 +356,34 @@ Content-Type: multipart/form-data
 - `visualizationSpec`
 - `qualityCheck`
 
+`visualizationSpec` 基础结构：
+
+```json
+{
+  "type": "equation_balance | function_graph | geometry | dynamic_point | number_line | none",
+  "title": "",
+  "description": "",
+  "objects": [],
+  "steps": []
+}
+```
+
 教学结构强调题意分析、本题考点、分步解析、最终答案、易错提醒、验算检查和质量检查。默认优先使用初中数学方法，不默认使用高中向量、导数或复杂解析几何。题目条件不足时应明确说明，不编造题目中没有的条件。
+
+前端会根据 `visualizationSpec` 用 SVG / 安全动画基础能力渲染图示。缺少图示数据时，会尝试对简单一元方程生成 `equation_balance` 基础示意，或对安全的基础函数表达式生成 `function_graph`；几何题没有可靠点线圆数据时显示“暂无可靠图示，可查看文字解析”，不会为了好看而编造图形。
 
 ## modelRouter 与 visionRouter
 
 `modelRouter` 当前支持：
 
-1. `preferredProvider` 优先尝试；
-2. provider fallback；
-3. 跳过未配置 API Key 的 provider；
-4. 记录模型调用成功 / 失败日志；
-5. 返回结构化 JSON；
-6. 每用户每日调用次数限制。
+1. 明确模型选择：自动推荐、阿里通义 Qwen、DeepSeek、GPT、Gemini；
+2. `preferredProvider` 优先尝试；
+3. `auto` 自动 fallback；
+4. provider fallback；
+5. 跳过未配置 API Key 的 provider；
+6. 记录模型调用成功 / 失败日志；
+7. 返回结构化 JSON；
+8. 每用户每日调用次数限制。
 
 文字模型默认优先级：
 
@@ -340,11 +407,17 @@ Content-Type: multipart/form-data
 - 工作台；
 - 文字解题入口；
 - 拍照 / 图片解题入口；
+- 明确模型选择：自动推荐、阿里通义 Qwen、DeepSeek、GPT、Gemini；
+- 模型配置状态检测：可用 / 未配置；
 - 图片 / PDF 本地预览；
 - 识别文本可编辑；
 - 用修改后的识别文本重新解析；
-- 保存到原创题库 / 策略库选择；
-- 代码 / 预览切换；
+- AI 结果区顶部固定操作条；
+- AI 结果生成后可点击保存到原创题库 / 保存到策略库；
+- Word 可打开文档导出按钮；
+- GeoGebra 图形数据导出按钮；
+- 图示讲解基础渲染；
+- 高级预览 / 源码折叠区；
 - 源码建站；
 - 大尺寸 iframe 本地预览；
 - 原创题库；
@@ -368,8 +441,12 @@ Content-Type: multipart/form-data
 - `POST /api/auth/register`；
 - `POST /api/auth/login`；
 - `GET /api/auth/me`；
+- `GET /api/models/status`；
 - `POST /api/solve-text`；
 - `POST /api/solve-image`；
+- `PATCH /api/solve-records/:id/library`；
+- `GET /api/solve-records/:id/export/word`；
+- `GET /api/solve-records/:id/export/ggb`；
 - AI 解题结果保存到 `solve_records`；
 - 图片附件元数据保存到 `attachments`；
 - 模型调用日志写入 `model_calls`。
@@ -402,13 +479,15 @@ mathAiEduAuthToken
 2. Qwen-VL / GPT Vision / Gemini Vision 的实际可用性取决于后端配置；
 3. PDF 识题暂未完成；
 4. 数据库题库读取页面暂未完成；
-5. Word `.docx` 暂未完成；
-6. GGB 导出暂未完成；
+5. 当前 Word 导出是 Word 可打开文档基础版，不是完整复杂 `.docx`；
+6. 当前 GeoGebra 导出是图形数据基础版，复杂 `.ggb` zip 包暂未完成；
 7. 支付、积分、公开发布、分享仍为后续功能；
 8. API Key 不得写入前端；
 9. `server/.env` 不得提交；
 10. 本阶段不做 OSS 长期保存，只保存附件元数据；
-11. 源码预览 iframe 允许脚本在隔离环境中运行，只应预览自己编写或确认可信的源码。
+11. 源码预览 iframe 允许脚本在隔离环境中运行，只应预览自己编写或确认可信的源码；
+12. Word 导出不保留网页动图；
+13. 复杂几何动图和高级 GGB 导出仍需后续增强。
 
 ## 后续计划
 
@@ -418,8 +497,8 @@ mathAiEduAuthToken
 4. 数据库题库读取与云端题库管理；
 5. 收藏、发布状态和用户隔离题库；
 6. 高质量数学图形 SVG / Canvas；
-7. Word `.docx` 导出；
-8. GGB 导出；
+7. 真正完整 `.docx` 导出；
+8. 复杂 `.ggb` zip 包导出；
 9. OSS 文件存储；
 10. 正式部署后端到阿里云服务器；
 11. 配置生产环境 HTTPS、CORS、日志和限流。
@@ -438,6 +517,7 @@ npm run lint
 
 ```bash
 node --check js/app.js
+node --check js/visualization.js
 git diff --check
 ```
 
@@ -449,22 +529,30 @@ git diff --check
 2. `POST /api/auth/register` 可以创建测试用户；
 3. `POST /api/auth/login` 可以返回 token；
 4. `GET /api/auth/me` 携带 token 后可以返回当前用户；
-5. 未携带 token 调用 `POST /api/solve-text` 应返回 401；
-6. 未携带 token 调用 `POST /api/solve-image` 应返回 401；
-7. 非 jpg/png/webp 上传到 `POST /api/solve-image` 应被拒绝；
-8. 超过 3MB 的图片应被拒绝；
-9. 配置视觉模型 Key 后，登录用户调用 `POST /api/solve-image` 应返回 `recognizedText`；
-10. 配置文字模型 Key 后，登录用户调用 `POST /api/solve-text` 应返回结构化解析并保存到数据库。
+5. `GET /api/models/status` 应返回各模型 `textConfigured` / `visionConfigured`，且不包含任何密钥或模型地址；
+6. 未携带 token 调用 `POST /api/solve-text` 应返回 401；
+7. 未携带 token 调用 `POST /api/solve-image` 应返回 401；
+8. 非 jpg/png/webp 上传到 `POST /api/solve-image` 应被拒绝；
+9. 超过 3MB 的图片应被拒绝；
+10. 配置视觉模型 Key 后，登录用户调用 `POST /api/solve-image` 应返回 `recognizedText`；
+11. 配置文字模型 Key 后，登录用户调用 `POST /api/solve-text` 应返回结构化解析并保存到数据库；
+12. `PATCH /api/solve-records/:id/library` 应只能更新当前用户自己的记录；
+13. `GET /api/solve-records/:id/export/word` 应能下载 Word 可打开文档；
+14. `GET /api/solve-records/:id/export/ggb` 在无可靠图示数据时应返回友好提示。
 
 浏览器手动测试：
 
 - 导航入口是否正常切换；
 - 工作台“文字解题 / 拍照图片解题”是否可切换；
+- 模型卡片是否显示“可用 / 未配置”，未配置模型是否阻止并提示；
 - 上传图片是否显示缩略图；
 - PDF 是否只显示文件信息；
 - 图片识题后是否显示可编辑识别文本；
 - 修改识别文本后是否可重新解析；
-- 保存位置是否可选择原创题库 / 策略库；
+- 左侧不再显示保存位置选择；
+- AI 结果区顶部是否始终显示保存到原创题库 / 策略库、导出 Word、导出 GGB 按钮；
+- Word 和 GeoGebra 导出按钮是否可用；
+- 无可靠图示数据时是否显示“暂无可靠图示，可查看文字解析”；
 - 未登录时 AI 解题是否提示先登录；
 - 登录后我的中心是否显示用户名；
 - 源码建站预览是否正常；

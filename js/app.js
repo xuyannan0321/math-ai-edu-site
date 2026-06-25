@@ -133,6 +133,13 @@ const MAX_IMAGE_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024;
 const ALLOWED_SOLVE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const FULL_BACKUP_VERSION = 1;
 const VISUALIZATION_DATA_VERSION = 1;
+const MODEL_PROVIDER_CONFIG = Object.freeze({
+  auto: { solveProvider: "auto", visionProvider: "auto" },
+  dashscope: { solveProvider: "dashscope", visionProvider: "qwen-vl" },
+  deepseek: { solveProvider: "deepseek", visionProvider: "auto" },
+  openai: { solveProvider: "openai", visionProvider: "openai-vision" },
+  gemini: { solveProvider: "gemini", visionProvider: "gemini-vision" },
+});
 
 const VISUALIZATION_KIND_LABELS = Object.freeze({
   point: "点",
@@ -185,6 +192,12 @@ const state = {
   generationTimer: null,
   generationStatusTimers: [],
   selectedProblemFile: null,
+  selectedModelProvider: "auto",
+  currentSolveRecordId: null,
+  currentSolveResult: null,
+  currentHtmlResult: "",
+  currentLibraryType: null,
+  modelStatuses: {},
   filePreviewUrl: null,
   previewReturnFocus: null,
   pendingFullBackup: null,
@@ -208,11 +221,13 @@ function cacheElements() {
   elements.textSolvePanel = document.querySelector("#text-solve-panel");
   elements.imageSolvePanel = document.querySelector("#image-solve-panel");
   elements.textGenerateArea = document.querySelector("#text-generate-area");
+  elements.modelButtons = Array.from(document.querySelectorAll("[data-model-provider]"));
   elements.generateButton = document.querySelector("#generate-report");
   elements.generateButtonText = document.querySelector("#generate-button-text");
   elements.modelSelect = document.querySelector("#model-select");
   elements.visionProviderSelect = document.querySelector("#vision-provider-select");
   elements.solveLibraryType = document.querySelector("#solve-library-type");
+  elements.aiStatusBadge = document.querySelector("#ai-status-badge");
   elements.instructionInput = document.querySelector("#instruction-input");
   elements.fileInput = document.querySelector("#problem-file");
   elements.uploadEmptyState = document.querySelector("#upload-empty-state");
@@ -228,6 +243,20 @@ function cacheElements() {
   elements.recognizedTextPanel = document.querySelector("#recognized-text-panel");
   elements.recognizedTextInput = document.querySelector("#recognized-text-input");
   elements.reanalyzeRecognizedTextButton = document.querySelector("#reanalyze-recognized-text");
+  elements.resultActions = document.querySelector("#result-actions");
+  elements.saveResultOriginalButton = document.querySelector("#save-result-original");
+  elements.saveResultStrategyButton = document.querySelector("#save-result-strategy");
+  elements.exportResultWordButton = document.querySelector("#export-result-word");
+  elements.exportResultGgbButton = document.querySelector("#export-result-ggb");
+  elements.structuredResult = document.querySelector("#structured-result");
+  elements.structuredProblemText = document.querySelector("#structured-problem-text");
+  elements.visualizationPanel = document.querySelector("#visualization-panel");
+  elements.structuredKnowledgePoints = document.querySelector("#structured-knowledge-points");
+  elements.structuredAnalysis = document.querySelector("#structured-analysis");
+  elements.structuredSteps = document.querySelector("#structured-steps");
+  elements.structuredFinalAnswer = document.querySelector("#structured-final-answer");
+  elements.structuredCommonMistakes = document.querySelector("#structured-common-mistakes");
+  elements.structuredVerification = document.querySelector("#structured-verification");
   elements.welcomeGuide = document.querySelector("#welcome-guide");
   elements.dismissWelcomeGuideButton = document.querySelector("#dismiss-welcome-guide");
   elements.reopenWelcomeGuideButton = document.querySelector("#reopen-welcome-guide");
@@ -287,7 +316,6 @@ function cacheElements() {
   elements.authPassword = document.querySelector("#auth-password");
   elements.authLoginButton = document.querySelector("#auth-login-button");
   elements.authRegisterButton = document.querySelector("#auth-register-button");
-  elements.apiBaseUrlDisplay = document.querySelector("#api-base-url-display");
   elements.profileOriginalList = document.querySelector("#profile-original-list");
   elements.profileOriginalEmpty = document.querySelector("#profile-original-empty");
   elements.profileStrategyList = document.querySelector("#profile-strategy-list");
@@ -586,7 +614,7 @@ async function requestApi(path, options = {}) {
       headers,
     });
   } catch {
-    throw new Error(`无法连接后端服务，请确认 ${API_BASE_URL} 已启动。`);
+    throw new Error("无法连接后端服务，请确认服务已启动。");
   }
 
   let payload = null;
@@ -622,10 +650,6 @@ function renderAuthState() {
   const user = state.currentUser;
   const isLoggedIn = Boolean(user);
 
-  if (elements.apiBaseUrlDisplay) {
-    elements.apiBaseUrlDisplay.textContent = API_BASE_URL;
-  }
-
   elements.profileAvatar.textContent = isLoggedIn ? getAuthInitial(user.username) : "—";
   elements.profileRoleBadge.textContent = isLoggedIn ? "身份：教师" : "未登录";
   elements.profileUserName.textContent = isLoggedIn ? user.username : "未登录";
@@ -639,6 +663,11 @@ function renderAuthState() {
     : "本地数据仍保存在当前浏览器";
   elements.profileLogoutButton.hidden = !isLoggedIn;
   elements.profileAuthCard.hidden = isLoggedIn;
+
+  if (elements.aiStatusBadge) {
+    elements.aiStatusBadge.textContent = isLoggedIn ? "真实 AI · 已登录" : "真实 AI · 需登录";
+    elements.aiStatusBadge.classList.toggle("is-online", isLoggedIn);
+  }
 }
 
 function setAuthButtonsDisabled(disabled) {
@@ -720,11 +749,195 @@ function renderMockReport() {
 }
 
 function renderAiHtmlResult(htmlResult) {
-  elements.resultCode.value = htmlResult;
-  elements.resultIframe.srcdoc = htmlResult;
+  const safeHtmlResult = htmlResult || "";
+  state.currentHtmlResult = safeHtmlResult;
+  elements.resultCode.value = safeHtmlResult || "// 暂无解析页面源码。";
+  elements.resultIframe.srcdoc = safeHtmlResult;
   elements.previewPlaceholder.hidden = true;
-  elements.resultIframe.hidden = false;
+  elements.resultIframe.hidden = !safeHtmlResult;
   switchResultView("preview");
+}
+
+function appendTextList(container, items) {
+  container.replaceChildren();
+  const values = Array.isArray(items) ? items : [];
+
+  if (!values.length) {
+    const item = document.createElement("li");
+    item.textContent = "暂无明确条目。";
+    container.append(item);
+    return;
+  }
+
+  values.forEach((value) => {
+    const item = document.createElement("li");
+    item.textContent = String(value || "");
+    container.append(item);
+  });
+}
+
+function renderStructuredSteps(steps) {
+  elements.structuredSteps.replaceChildren();
+  const values = Array.isArray(steps) ? steps : [];
+
+  if (!values.length) {
+    const item = document.createElement("li");
+    item.textContent = "暂无完整步骤。";
+    elements.structuredSteps.append(item);
+    return;
+  }
+
+  values.forEach((step) => {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    const content = document.createElement("p");
+    title.textContent = step.title || "步骤";
+    content.textContent = step.content || "";
+    item.append(title, content);
+    elements.structuredSteps.append(item);
+  });
+}
+
+function hasRenderableVisualizationSpec(spec) {
+  return Boolean(spec && typeof spec === "object" && spec.type && spec.type !== "none");
+}
+
+function normalizeMathText(text) {
+  return String(text || "")
+    .replaceAll("−", "-")
+    .replaceAll("，", ",")
+    .replaceAll("：", ":")
+    .replace(/\s+/g, "");
+}
+
+function createEquationBalanceFallback(text) {
+  const normalized = normalizeMathText(text);
+  const match = normalized.match(/([+-]?\d*)x([+-]\d+(?:\.\d+)?)?=([+-]?\d+(?:\.\d+)?)/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const coefficient = match[1] && !["+", "-"].includes(match[1]) ? match[1] : `${match[1] || ""}1`;
+  const constant = match[2] || "";
+  const rightValue = match[3];
+
+  return {
+    type: "equation_balance",
+    title: "方程平衡示意",
+    description: "根据题目中的一元一次方程生成的基础图示，仅用于辅助理解等式两边保持平衡。",
+    objects: [
+      { kind: "term", id: "left-x", label: `${coefficient}x` },
+      { kind: "term", id: "right-value", label: rightValue },
+      ...(constant ? [{ kind: "term", id: "left-constant", label: constant }] : []),
+    ],
+    steps: [
+      {
+        stepTitle: "等式两边",
+        explanation: "解方程时，对等式两边做同样的运算，才能保持结果不变。",
+      },
+    ],
+  };
+}
+
+function createFunctionGraphFallback(text) {
+  const normalized = String(text || "")
+    .replaceAll("−", "-")
+    .replaceAll("²", "^2");
+  const match = normalized.match(/(?:y|f\(x\))\s*=\s*([+\-0-9.xX^*²\s]+)/i);
+
+  if (!match || !/[xX]/.test(match[1])) {
+    return null;
+  }
+
+  const expression = match[1].replace(/\s+/g, "");
+
+  if (!/^[+\-0-9.xX^*²]+$/.test(expression)) {
+    return null;
+  }
+
+  return {
+    type: "function_graph",
+    title: "函数图像基础示意",
+    description: "根据题目中可识别的函数表达式生成的安全基础图像；复杂表达式会自动跳过。",
+    objects: [
+      {
+        kind: "function",
+        id: "f",
+        expression,
+        range: [-5, 5],
+      },
+    ],
+  };
+}
+
+function createVisualizationFallback(result) {
+  const combinedText = [
+    result?.problemText,
+    result?.topic,
+    result?.analysis,
+    result?.finalAnswer,
+  ].filter(Boolean).join("\n");
+
+  return createEquationBalanceFallback(combinedText)
+    || createFunctionGraphFallback(combinedText)
+    || {
+      type: "none",
+      title: "图示讲解",
+      description: /三角形|几何|圆|角|线段|平行|垂直|相似|全等/.test(combinedText)
+        ? "暂无可靠图示，可查看文字解析。几何题需要明确的点、线、角或圆数据后再绘制。"
+        : "暂无可靠图示，可查看文字解析。",
+    };
+}
+
+function renderStructuredResult(result) {
+  state.currentSolveResult = result || null;
+
+  if (!result) {
+    elements.structuredResult.hidden = true;
+    return;
+  }
+
+  elements.structuredProblemText.textContent = result.problemText || "暂无题目文本。";
+  appendTextList(elements.structuredKnowledgePoints, result.knowledgePoints);
+  elements.structuredAnalysis.textContent = result.analysis || "暂无题意分析。";
+  renderStructuredSteps(result.steps);
+  elements.structuredFinalAnswer.textContent = result.finalAnswer || "暂无最终答案。";
+  appendTextList(elements.structuredCommonMistakes, result.commonMistakes);
+  elements.structuredVerification.textContent = result.verification || "暂无验算检查。";
+
+  const visualizationSpec = hasRenderableVisualizationSpec(result.visualizationSpec)
+    ? result.visualizationSpec
+    : createVisualizationFallback(result);
+
+  if (window.MathVisualization?.render) {
+    window.MathVisualization.render(elements.visualizationPanel, visualizationSpec);
+  } else {
+    elements.visualizationPanel.textContent = "暂无图示";
+  }
+
+  elements.structuredResult.hidden = false;
+}
+
+function showResultActions(recordId) {
+  state.currentSolveRecordId = recordId || null;
+  const hasRecord = Boolean(state.currentSolveRecordId);
+  [
+    elements.saveResultOriginalButton,
+    elements.saveResultStrategyButton,
+    elements.exportResultWordButton,
+    elements.exportResultGgbButton,
+  ].forEach((button) => {
+    button.disabled = !hasRecord;
+  });
+  elements.saveResultOriginalButton.classList.toggle(
+    "is-saved",
+    hasRecord && state.currentLibraryType === "original",
+  );
+  elements.saveResultStrategyButton.classList.toggle(
+    "is-saved",
+    hasRecord && state.currentLibraryType === "strategy",
+  );
 }
 
 function clearGenerationStatusTimers() {
@@ -770,7 +983,200 @@ function getQuestionTypeFromText(text) {
 }
 
 function getSelectedLibraryDisplayName() {
-  return elements.solveLibraryType.value === "strategy" ? "策略库" : "原创题库";
+  return state.currentLibraryType === "strategy" ? "策略库" : "原创题库";
+}
+
+function getModelStatus(provider) {
+  return state.modelStatuses[provider] || null;
+}
+
+function isProviderAvailableForCurrentMode(provider) {
+  if (provider === "auto") {
+    return true;
+  }
+
+  const status = getModelStatus(provider);
+
+  if (!status) {
+    return true;
+  }
+
+  if (state.activeSolveMode === "image") {
+    const providerConfig = MODEL_PROVIDER_CONFIG[provider];
+    const usesAutoVision = providerConfig?.visionProvider === "auto";
+    return Boolean(status.textConfigured && (usesAutoVision || status.visionConfigured));
+  }
+
+  return Boolean(status.textConfigured);
+}
+
+function ensureModelStatusBadge(button) {
+  let statusBadge = button.querySelector(".model-card-status");
+
+  if (!statusBadge) {
+    statusBadge = document.createElement("em");
+    statusBadge.className = "model-card-status";
+    statusBadge.textContent = "检测中";
+    button.append(statusBadge);
+  }
+
+  return statusBadge;
+}
+
+function renderModelStatuses() {
+  elements.modelButtons.forEach((button) => {
+    const provider = button.dataset.modelProvider;
+    const statusBadge = ensureModelStatusBadge(button);
+
+    if (provider === "auto") {
+      button.classList.add("is-available");
+      button.classList.remove("is-unavailable");
+      statusBadge.textContent = "自动推荐";
+      button.title = "自动选择当前可用模型";
+      return;
+    }
+
+    const status = getModelStatus(provider);
+
+    if (!status) {
+      button.classList.remove("is-available", "is-unavailable");
+      statusBadge.textContent = "检测中";
+      button.title = "正在检测模型配置状态";
+      return;
+    }
+
+    const available = isProviderAvailableForCurrentMode(provider);
+    button.classList.toggle("is-available", available);
+    button.classList.toggle("is-unavailable", !available);
+    statusBadge.textContent = available ? "可用" : "未配置";
+    button.title = available
+      ? "当前模型可用于本模式"
+      : "当前模型暂不可用，请使用自动推荐或切换其他模型";
+
+    if (!available) {
+      button.title = state.activeSolveMode === "image"
+        ? status.visionMessage || status.message || button.title
+        : status.message || button.title;
+    }
+  });
+}
+
+async function refreshModelStatuses() {
+  try {
+    const data = await requestApi("/api/models/status", { auth: false });
+    const providers = Array.isArray(data.providers) ? data.providers : [];
+    state.modelStatuses = providers.reduce((map, provider) => {
+      map[provider.id] = provider;
+      return map;
+    }, {});
+  } catch {
+    state.modelStatuses = {};
+  }
+
+  renderModelStatuses();
+}
+
+function selectModelProvider(provider) {
+  const nextProvider = MODEL_PROVIDER_CONFIG[provider] ? provider : "auto";
+
+  if (!isProviderAvailableForCurrentMode(nextProvider)) {
+    showToast("当前模型暂不可用，请使用自动推荐或切换其他模型。");
+    renderModelStatuses();
+    return;
+  }
+
+  const config = MODEL_PROVIDER_CONFIG[nextProvider];
+  state.selectedModelProvider = nextProvider;
+  elements.modelSelect.value = config.solveProvider;
+  elements.visionProviderSelect.value = config.visionProvider;
+
+  elements.modelButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.modelProvider === nextProvider);
+  });
+  renderModelStatuses();
+}
+
+function getFriendlyAiError(error) {
+  if (error.status === 503) {
+    return "当前模型暂不可用，请切换其他模型或使用自动推荐。";
+  }
+
+  return error.message || "AI 解题失败，请稍后再试。";
+}
+
+async function saveCurrentRecordToLibrary(libraryType) {
+  if (!state.currentSolveRecordId) {
+    showToast("请先生成解析结果。");
+    return;
+  }
+
+  try {
+    await requestApi(`/api/solve-records/${state.currentSolveRecordId}/library`, {
+      method: "PATCH",
+      body: JSON.stringify({ libraryType }),
+    });
+    state.currentLibraryType = libraryType;
+    showResultActions(state.currentSolveRecordId);
+    showToast(libraryType === "strategy" ? "已保存到策略库。" : "已保存到原创题库。");
+  } catch (error) {
+    showToast(error.message || "保存位置更新失败，请稍后再试。");
+  }
+}
+
+async function downloadProtectedFile(path, fallbackFilename) {
+  if (!state.currentSolveRecordId) {
+    showToast("请先生成解析结果。");
+    return;
+  }
+
+  const headers = new Headers();
+
+  if (state.authToken) {
+    headers.set("Authorization", `Bearer ${state.authToken}`);
+  }
+
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { headers });
+  } catch {
+    showToast("无法连接后端服务，请确认服务已启动。");
+    return;
+  }
+
+  if (!response.ok) {
+    let message = "导出失败，请稍后再试。";
+
+    try {
+      const payload = await response.json();
+      message = payload.message || message;
+    } catch {
+      // 非 JSON 错误响应使用默认提示。
+    }
+
+    showToast(message);
+    return;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const filename = match?.[1] || fallbackFilename;
+  downloadBlob(blob, filename);
+}
+
+function exportCurrentRecordWord() {
+  downloadProtectedFile(
+    `/api/solve-records/${state.currentSolveRecordId}/export/word`,
+    `math-solution-record-${state.currentSolveRecordId}.doc`,
+  );
+}
+
+function exportCurrentRecordGgb() {
+  downloadProtectedFile(
+    `/api/solve-records/${state.currentSolveRecordId}/export/ggb`,
+    `math-solution-record-${state.currentSolveRecordId}-geogebra.xml`,
+  );
 }
 
 async function submitTextSolution(questionText, {
@@ -814,15 +1220,21 @@ async function submitTextSolution(questionText, {
         subject: "数学",
         gradeLevel: "初中",
         questionType: getQuestionTypeFromText(questionText),
-        libraryType: elements.solveLibraryType.value,
+        libraryType: "original",
         preferredProvider: elements.modelSelect.value,
       }),
     });
 
     renderAiHtmlResult(data.htmlResult);
-    showToast(`AI 解析已生成，已保存到${getSelectedLibraryDisplayName()}。`);
+    renderStructuredResult(data.result);
+    state.currentSolveRecordId = data.recordId || null;
+    state.currentSolveResult = data.result || null;
+    state.currentHtmlResult = data.htmlResult || "";
+    state.currentLibraryType = "original";
+    showResultActions(data.recordId);
+    showToast("AI 解析已生成，可保存到原创题库或策略库。");
   } catch (error) {
-    showToast(error.message || "AI 解题失败，请稍后再试。");
+    showToast(getFriendlyAiError(error));
   } finally {
     clearGenerationStatusTimers();
     button.disabled = false;
@@ -855,6 +1267,11 @@ function switchSolveMode(mode) {
   elements.textSolvePanel.hidden = nextMode !== "text";
   elements.imageSolvePanel.hidden = nextMode !== "image";
   elements.textGenerateArea.hidden = nextMode !== "text";
+  renderModelStatuses();
+
+  if (!isProviderAvailableForCurrentMode(state.selectedModelProvider)) {
+    selectModelProvider("auto");
+  }
 }
 
 function isAllowedSolveImage(file) {
@@ -909,7 +1326,7 @@ async function solveImageFromUpload() {
   formData.append("subject", "数学");
   formData.append("gradeLevel", "初中");
   formData.append("questionType", getQuestionTypeFromText(elements.instructionInput.value || ""));
-  formData.append("libraryType", elements.solveLibraryType.value);
+  formData.append("libraryType", "original");
   formData.append("preferredVisionProvider", elements.visionProviderSelect.value);
   formData.append("preferredSolveProvider", elements.modelSelect.value);
 
@@ -928,13 +1345,19 @@ async function solveImageFromUpload() {
 
     showRecognizedText(data.recognizedText);
     renderAiHtmlResult(data.htmlResult);
-    showToast(`图片题已解析，已保存到${getSelectedLibraryDisplayName()}。`);
+    renderStructuredResult(data.result);
+    state.currentSolveRecordId = data.recordId || null;
+    state.currentSolveResult = data.result || null;
+    state.currentHtmlResult = data.htmlResult || "";
+    state.currentLibraryType = "original";
+    showResultActions(data.recordId);
+    showToast("图片题已解析，可保存到原创题库或策略库。");
   } catch (error) {
     if (error.data?.recognizedText) {
       showRecognizedText(error.data.recognizedText);
     }
 
-    showToast(error.message || "图片解析失败，请稍后再试。");
+    showToast(getFriendlyAiError(error));
   } finally {
     clearGenerationStatusTimers();
     elements.solveImageButton.disabled = false;
@@ -2680,9 +3103,20 @@ function bindEvents() {
   elements.solveModeButtons.forEach((button) => {
     button.addEventListener("click", () => switchSolveMode(button.dataset.solveMode));
   });
+  elements.modelButtons.forEach((button) => {
+    button.addEventListener("click", () => selectModelProvider(button.dataset.modelProvider));
+  });
   elements.generateButton.addEventListener("click", generateAiTextSolution);
   elements.solveImageButton.addEventListener("click", solveImageFromUpload);
   elements.reanalyzeRecognizedTextButton.addEventListener("click", reanalyzeRecognizedText);
+  elements.saveResultOriginalButton.addEventListener("click", () =>
+    saveCurrentRecordToLibrary("original"),
+  );
+  elements.saveResultStrategyButton.addEventListener("click", () =>
+    saveCurrentRecordToLibrary("strategy"),
+  );
+  elements.exportResultWordButton.addEventListener("click", exportCurrentRecordWord);
+  elements.exportResultGgbButton.addEventListener("click", exportCurrentRecordGgb);
   elements.fileInput.addEventListener("change", handleFileSelection);
   elements.clearFileButton.addEventListener("click", () => clearFileSelection());
   elements.imagePreview.addEventListener("error", () => {
@@ -2790,6 +3224,9 @@ function initializeApp() {
   initializeBuildSelectors();
   initializeStrategyFilters();
   bindEvents();
+  selectModelProvider(state.selectedModelProvider);
+  showResultActions(null);
+  refreshModelStatuses();
   switchSolveMode(state.activeSolveMode);
   switchOriginalTab(state.activeOriginalTab);
   renderLibraryList("strategy");

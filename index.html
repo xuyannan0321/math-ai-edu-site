@@ -9,6 +9,7 @@
     />
     <title>原题真解 Pro - 数学学习工作台</title>
     <link rel="stylesheet" href="css/style.css" />
+    <script src="js/visualization.js" defer></script>
     <script src="js/app.js" defer></script>
   </head>
   <body>
@@ -116,15 +117,6 @@
                 </button>
               </div>
 
-              <div class="field-group">
-                <label class="field-label" for="solve-library-type">保存位置</label>
-                <select id="solve-library-type" class="form-control">
-                  <option value="original">原创题库</option>
-                  <option value="strategy">策略库</option>
-                </select>
-                <p class="field-help">生成成功后，会保存到你选择的位置。</p>
-              </div>
-
               <section
                 class="solve-entry-panel is-active"
                 id="text-solve-panel"
@@ -212,28 +204,33 @@
                 </div>
               </section>
 
-              <details class="advanced-settings">
-                <summary>AI 模型：自动</summary>
-                <div class="advanced-settings-grid">
-                  <label>
-                    <span>文字解析</span>
-                    <select id="model-select" class="form-control">
-                      <option value="dashscope">自动推荐</option>
-                      <option value="deepseek">备用模型一</option>
-                      <option value="openai">备用模型二</option>
-                      <option value="gemini">备用模型三</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>图片识别</span>
-                    <select id="vision-provider-select" class="form-control">
-                      <option value="qwen-vl">自动推荐</option>
-                      <option value="gemini-vision">备用识别一</option>
-                      <option value="openai-vision">备用识别二</option>
-                    </select>
-                  </label>
+              <section class="model-picker" aria-labelledby="model-picker-title">
+                <h2 id="model-picker-title">选择 AI 模型</h2>
+                <input id="model-select" type="hidden" value="auto" />
+                <input id="vision-provider-select" type="hidden" value="auto" />
+                <div class="model-card-grid">
+                  <button class="model-card is-active" type="button" data-model-provider="auto">
+                    <strong>自动推荐</strong>
+                    <span>优先选择可用模型</span>
+                  </button>
+                  <button class="model-card" type="button" data-model-provider="dashscope">
+                    <strong>阿里通义 Qwen</strong>
+                    <span>适合中文数学解析</span>
+                  </button>
+                  <button class="model-card" type="button" data-model-provider="deepseek">
+                    <strong>DeepSeek</strong>
+                    <span>适合文字推理</span>
+                  </button>
+                  <button class="model-card" type="button" data-model-provider="openai">
+                    <strong>GPT</strong>
+                    <span>适合综合讲解</span>
+                  </button>
+                  <button class="model-card" type="button" data-model-provider="gemini">
+                    <strong>Gemini</strong>
+                    <span>适合多模态理解</span>
+                  </button>
                 </div>
-              </details>
+              </section>
             </div>
 
             <div class="generate-area" id="text-generate-area">
@@ -271,67 +268,119 @@
               </ol>
             </section>
 
-            <div class="result-toolbar">
-              <div class="view-switch" role="group" aria-label="结果展示方式">
-                <button
-                  class="view-button"
-                  id="view-code-button"
-                  type="button"
-                  data-result-view="code"
-                  aria-pressed="false"
-                >
-                  代码
-                </button>
-                <button
-                  class="view-button is-active"
-                  id="view-preview-button"
-                  type="button"
-                  data-result-view="preview"
-                  aria-pressed="true"
-                >
-                  预览
-                </button>
+            <div class="result-actions" id="result-actions" aria-label="解析结果操作">
+              <div>
+                <span class="result-actions-label">解析完成后可操作</span>
+                <span class="demo-badge" id="ai-status-badge">真实 AI · 需登录</span>
               </div>
-              <span class="demo-badge">真实 AI · 需登录</span>
-            </div>
-
-            <div class="result-stage">
-              <div class="result-panel preview-panel" id="preview-view">
-                <iframe
-                  id="result-iframe"
-                  class="result-iframe"
-                  title="数学解析报告预览"
-                  sandbox=""
-                  hidden
-                ></iframe>
-                <div class="preview-placeholder" id="preview-placeholder">
-                  <span class="placeholder-mark" aria-hidden="true">∴</span>
-                  <h1>从一道题开始你的教学解析</h1>
-                  <p>输入题目文字，或上传题目图片识别后解析，这里会展示教学式分步讲解。</p>
-                  <ul aria-label="解析报告包含的内容">
-                    <li>题意分析</li>
-                    <li>本题考点</li>
-                    <li>解题步骤</li>
-                    <li>最终答案</li>
-                    <li>易错提醒</li>
-                    <li>验算或检查</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div class="result-panel code-panel" id="code-view" hidden>
-                <div class="code-header">
-                  <span>HTML</span>
-                  <span>模拟解析源码</span>
-                </div>
-                <textarea
-                  id="result-code"
-                  aria-label="生成的 HTML 代码"
-                  readonly
-                  spellcheck="false"
-                >// 等待生成教学解析 HTML...</textarea>
+              <div class="result-actions-buttons">
+                <button type="button" id="save-result-original" disabled>保存到原创题库</button>
+                <button type="button" id="save-result-strategy" disabled>保存到策略库</button>
+                <button type="button" id="export-result-word" disabled>导出 Word</button>
+                <button type="button" id="export-result-ggb" disabled>导出 GGB</button>
               </div>
             </div>
+
+            <section class="structured-result" id="structured-result" hidden>
+              <article class="structured-card">
+                <h2>题目</h2>
+                <p id="structured-problem-text"></p>
+              </article>
+              <article class="structured-card">
+                <h2>图示讲解</h2>
+                <div id="visualization-panel"></div>
+              </article>
+              <article class="structured-card">
+                <h2>考点</h2>
+                <ul id="structured-knowledge-points"></ul>
+              </article>
+              <article class="structured-card">
+                <h2>题意分析</h2>
+                <p id="structured-analysis"></p>
+              </article>
+              <article class="structured-card">
+                <h2>分步解析</h2>
+                <ol id="structured-steps"></ol>
+              </article>
+              <article class="structured-card is-answer">
+                <h2>最终答案</h2>
+                <p id="structured-final-answer"></p>
+              </article>
+              <article class="structured-card is-warning">
+                <h2>易错提醒</h2>
+                <ul id="structured-common-mistakes"></ul>
+              </article>
+              <article class="structured-card">
+                <h2>验算检查</h2>
+                <p id="structured-verification"></p>
+              </article>
+            </section>
+
+            <details class="advanced-result-preview">
+              <summary>高级预览 / 源码</summary>
+
+              <div class="result-toolbar">
+                <div class="view-switch" role="group" aria-label="结果展示方式">
+                  <button
+                    class="view-button"
+                    id="view-code-button"
+                    type="button"
+                    data-result-view="code"
+                    aria-pressed="false"
+                  >
+                    源码
+                  </button>
+                  <button
+                    class="view-button is-active"
+                    id="view-preview-button"
+                    type="button"
+                    data-result-view="preview"
+                    aria-pressed="true"
+                  >
+                    iframe 预览
+                  </button>
+                </div>
+                <span>仅用于检查生成页面源码，不作为默认解题阅读区。</span>
+              </div>
+
+              <div class="result-stage">
+                <div class="result-panel preview-panel" id="preview-view">
+                  <iframe
+                    id="result-iframe"
+                    class="result-iframe"
+                    title="数学解析报告预览"
+                    sandbox=""
+                    hidden
+                  ></iframe>
+                  <div class="preview-placeholder" id="preview-placeholder">
+                    <span class="placeholder-mark" aria-hidden="true">∴</span>
+                    <h1>从一道题开始你的教学解析</h1>
+                    <p>输入题目文字，或上传题目图片识别后解析，这里会展示教学式分步讲解。</p>
+                    <ul aria-label="解析报告包含的内容">
+                      <li>题意分析</li>
+                      <li>本题考点</li>
+                      <li>解题步骤</li>
+                      <li>最终答案</li>
+                      <li>易错提醒</li>
+                      <li>验算或检查</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="result-panel code-panel" id="code-view" hidden>
+                  <div class="code-header">
+                    <span>HTML</span>
+                    <span>解析页面源码</span>
+                  </div>
+                  <textarea
+                    id="result-code"
+                    aria-label="生成的 HTML 代码"
+                    readonly
+                    spellcheck="false"
+                  >// 等待生成教学解析 HTML...</textarea>
+                </div>
+              </div>
+            </details>
           </section>
         </section>
 
@@ -997,10 +1046,6 @@
                     <button id="auth-register-button" type="button">注册</button>
                   </div>
                 </form>
-
-                <p class="profile-auth-endpoint">
-                  后端地址：<code id="api-base-url-display">http://localhost:3001</code>
-                </p>
               </section>
 
               <section class="profile-asset-card" aria-labelledby="profile-assets-title">
@@ -1231,10 +1276,10 @@
                   <ul class="help-check-list">
                     <li>选择图片或 PDF 后，可在浏览器本地查看缩略图或文件信息。</li>
                     <li>点击“清除文件”可移除当前选择，不会上传到服务器。</li>
-                    <li>输入教学要求后，点击按钮生成模拟解析报告。</li>
-                    <li>使用“代码 / 预览”切换查看生成内容。</li>
+                    <li>输入教学要求后，登录账号并点击按钮生成真实 AI 解析。</li>
+                    <li>默认查看结构化解析；高级预览中可检查生成页面源码。</li>
                   </ul>
-                  <p class="help-note"><strong>请注意：</strong>当前工作台尚未连接真实 AI，生成内容仅为教学结构演示。</p>
+                  <p class="help-note"><strong>请注意：</strong>真实 AI 调用需要后端服务和模型 Key 配置完成，失败时请切换模型或使用自动推荐。</p>
                 </section>
 
                 <section class="help-card" aria-labelledby="help-builder-title">
@@ -1303,11 +1348,11 @@
                   </div>
                 </div>
                 <ul class="help-limit-list">
-                  <li>当前是纯静态前端项目，未连接真实 AI。</li>
-                  <li>未接后端、数据库和真实登录系统。</li>
+                  <li>当前前端仍是原生 HTML/CSS/JS，后端 API 需要单独部署运行。</li>
+                  <li>真实 AI 依赖后端环境变量中的模型 Key，不能写入前端。</li>
                   <li>积分、提现、分享和支付均为静态演示。</li>
                   <li>题库数据只保存在当前浏览器，不会跨设备自动同步。</li>
-                  <li>当前下载格式为 HTML；真正的 Word 文档（.docx）下载留到后端阶段实现。</li>
+                  <li>Word 当前为可打开文档基础版，复杂 .docx 与完整 GGB 导出仍需后续增强。</li>
                 </ul>
               </section>
 
@@ -1334,21 +1379,21 @@
                   <article class="help-faq-item">
                     <h3>
                       <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-2">
-                        <span>为什么生成的是模拟解析？</span><span aria-hidden="true">＋</span>
+                        <span>为什么生成解析前需要登录？</span><span aria-hidden="true">＋</span>
                       </button>
                     </h3>
                     <div class="help-faq-answer" id="help-faq-answer-2" hidden>
-                      <p>当前项目还没有连接真实 AI 接口，工作台只用于演示教学解析结构和页面交互。</p>
+                      <p>真实 AI 调用会写入用户自己的解题记录，并受每日调用次数限制，所以需要先登录账号。</p>
                     </div>
                   </article>
                   <article class="help-faq-item">
                     <h3>
                       <button type="button" data-help-faq aria-expanded="false" aria-controls="help-faq-answer-3">
-                        <span>为什么下载的是 HTML？</span><span aria-hidden="true">＋</span>
+                        <span>为什么 Word / GGB 还是基础版？</span><span aria-hidden="true">＋</span>
                       </button>
                     </h3>
                     <div class="help-faq-answer" id="help-faq-answer-3" hidden>
-                      <p>现阶段是静态前端项目，可以直接保存页面源码。真正的 Word 文档生成需要后端文档处理能力，将在后续阶段实现。</p>
+                      <p>当前 Word 是可打开文档基础版，GeoGebra 是图形数据导出基础版。复杂 .docx、动画保留和完整 .ggb zip 包会在后续增强。</p>
                     </div>
                   </article>
                   <article class="help-faq-item">
