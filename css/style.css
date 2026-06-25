@@ -3,6 +3,7 @@
   --blue-50: #eff6ff;
   --blue-100: #dbeafe;
   --blue-200: #bfdbfe;
+  --blue-300: #93c5fd;
   --blue-500: #3b82f6;
   --blue-600: #2563eb;
   --blue-700: #1d4ed8;
@@ -232,6 +233,46 @@ label[for]:focus-within {
   min-height: 0;
   padding: 24px 22px;
   overflow-y: auto;
+}
+
+.solve-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 5px;
+  margin-bottom: 18px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 14px;
+}
+
+.solve-mode-switch button {
+  min-height: 40px;
+  padding: 8px 10px;
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 800;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.solve-mode-switch button.is-active {
+  color: var(--blue-700);
+  background: var(--white);
+  box-shadow: 0 8px 20px rgb(15 23 42 / 8%);
+}
+
+.solve-entry-panel {
+  min-width: 0;
+}
+
+.solve-entry-panel[hidden] {
+  display: none;
 }
 
 .field-group {
@@ -467,6 +508,67 @@ select.form-control {
   border-color: var(--blue-200);
 }
 
+.secondary-action-button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  color: var(--blue-700);
+  font-weight: 800;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-200);
+  border-radius: 12px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 120ms ease;
+}
+
+.secondary-action-button:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: var(--blue-300);
+}
+
+.secondary-action-button:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.secondary-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.secondary-action-button.is-soft {
+  margin-top: 10px;
+  color: var(--gray-600);
+  background: var(--white);
+  border-color: var(--gray-200);
+}
+
+.recognized-text-panel {
+  padding: 14px;
+  margin-top: 14px;
+  background: var(--white);
+  border: 1px solid var(--blue-100);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgb(37 99 235 / 8%);
+  animation: fade-in 200ms ease-out;
+}
+
+.recognized-text-panel[hidden] {
+  display: none;
+}
+
+.recognized-text-input {
+  min-height: 138px;
+  padding: 12px;
+  line-height: 1.65;
+  resize: vertical;
+}
+
 .instruction-input {
   min-height: 170px;
   padding: 14px;
@@ -491,6 +593,43 @@ select.form-control {
   font-size: 11px;
   line-height: 1.55;
   text-align: center;
+}
+
+.advanced-settings {
+  margin-top: 18px;
+  color: var(--gray-500);
+  font-size: 12px;
+}
+
+.advanced-settings summary {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  color: var(--gray-600);
+  font-weight: 800;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.advanced-settings-grid {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  margin-top: 10px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+}
+
+.advanced-settings-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--gray-500);
+  font-weight: 700;
 }
 
 .primary-button {

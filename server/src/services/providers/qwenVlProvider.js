@@ -1,35 +1,38 @@
 const { env } = require("../../config/env");
 const { callJsonChatCompletion } = require("./openAiCompatible");
 
-const PROVIDER_NAME = "dashscope";
-
 function isConfigured() {
-  return Boolean(env.ai.dashscope.apiKey && env.ai.dashscope.baseUrl && env.ai.dashscope.model);
+  return Boolean(
+    env.ai.dashscope.apiKey
+      && env.ai.dashscope.baseUrl
+      && env.ai.dashscope.visionModel,
+  );
 }
 
 function getModelName() {
-  return env.ai.dashscope.model;
+  return env.ai.dashscope.visionModel;
 }
 
-async function callSolve(messages) {
+async function callRecognize(messages) {
   if (!isConfigured()) {
-    const error = new Error("DashScope API Key 未配置。");
+    const error = new Error("Qwen-VL 未配置。");
     error.code = "PROVIDER_NOT_CONFIGURED";
     throw error;
   }
 
   return callJsonChatCompletion({
-    providerLabel: "DashScope",
+    providerLabel: "Qwen-VL",
     apiKey: env.ai.dashscope.apiKey,
     baseUrl: env.ai.dashscope.baseUrl,
     model: getModelName(),
     messages,
+    temperature: 0.1,
   });
 }
 
 module.exports = {
-  name: PROVIDER_NAME,
+  name: "qwen-vl",
   isConfigured,
   getModelName,
-  callSolve,
+  callRecognize,
 };

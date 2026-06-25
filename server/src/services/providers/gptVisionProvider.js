@@ -2,32 +2,33 @@ const { env } = require("../../config/env");
 const { callJsonChatCompletion } = require("./openAiCompatible");
 
 function isConfigured() {
-  return Boolean(env.ai.openai.apiKey && env.ai.openai.baseUrl && env.ai.openai.model);
+  return Boolean(env.ai.openai.apiKey && env.ai.openai.baseUrl && env.ai.openai.visionModel);
 }
 
 function getModelName() {
-  return env.ai.openai.model;
+  return env.ai.openai.visionModel;
 }
 
-async function callSolve(messages) {
+async function callRecognize(messages) {
   if (!isConfigured()) {
-    const error = new Error("GPT 模型未配置。");
+    const error = new Error("GPT Vision 未配置。");
     error.code = "PROVIDER_NOT_CONFIGURED";
     throw error;
   }
 
   return callJsonChatCompletion({
-    providerLabel: "GPT",
+    providerLabel: "GPT Vision",
     apiKey: env.ai.openai.apiKey,
     baseUrl: env.ai.openai.baseUrl,
     model: getModelName(),
     messages,
+    temperature: 0.1,
   });
 }
 
 module.exports = {
-  name: "openai",
+  name: "openai-vision",
   isConfigured,
   getModelName,
-  callSolve,
+  callRecognize,
 };

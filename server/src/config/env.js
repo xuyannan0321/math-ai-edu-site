@@ -9,6 +9,11 @@ function parsePort(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parsePositiveNumber(value, fallback) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function parseCorsOrigins(value) {
   return String(value || "")
     .split(",")
@@ -31,10 +36,12 @@ const env = {
     connectionLimit: parsePort(process.env.DB_CONNECTION_LIMIT, 10),
   },
   ai: {
+    dailyLimit: parsePort(process.env.DAILY_AI_LIMIT, 20),
     dashscope: {
       apiKey: process.env.DASHSCOPE_API_KEY || "",
       baseUrl: process.env.DASHSCOPE_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1",
       model: process.env.DASHSCOPE_MODEL || "qwen-plus",
+      visionModel: process.env.DASHSCOPE_VISION_MODEL || "",
     },
     deepseek: {
       apiKey: process.env.DEEPSEEK_API_KEY || "",
@@ -43,15 +50,23 @@ const env = {
     },
     openai: {
       apiKey: process.env.OPENAI_API_KEY || "",
-      baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      baseUrl: process.env.OPENAI_BASE_URL || "",
+      model: process.env.OPENAI_MODEL || "",
+      visionModel: process.env.OPENAI_VISION_MODEL || "",
     },
     gemini: {
       apiKey: process.env.GEMINI_API_KEY || "",
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      baseUrl: process.env.GEMINI_BASE_URL || "",
+      model: process.env.GEMINI_MODEL || "",
+      visionModel: process.env.GEMINI_VISION_MODEL || "",
     },
   },
+  upload: {
+    maxImageSizeMb: parsePositiveNumber(process.env.MAX_IMAGE_SIZE_MB, 3),
+  },
 };
+
+env.upload.maxImageSizeBytes = Math.round(env.upload.maxImageSizeMb * 1024 * 1024);
 
 function assertRuntimeEnv() {
   if (!env.jwtSecret || env.jwtSecret === "replace-with-a-long-random-secret") {

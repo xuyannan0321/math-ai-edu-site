@@ -129,6 +129,8 @@ const API_BASE_URL = String(window.MATH_AI_API_BASE_URL || "http://localhost:300
   /\/+$/,
   "",
 );
+const MAX_IMAGE_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024;
+const ALLOWED_SOLVE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const FULL_BACKUP_VERSION = 1;
 const VISUALIZATION_DATA_VERSION = 1;
 
@@ -177,10 +179,12 @@ const LIBRARY_CONFIG = Object.freeze({
 const state = {
   activePage: "workspace",
   activeView: "preview",
+  activeSolveMode: "text",
   activeOriginalTab: "my",
   toastTimer: null,
   generationTimer: null,
   generationStatusTimers: [],
+  selectedProblemFile: null,
   filePreviewUrl: null,
   previewReturnFocus: null,
   pendingFullBackup: null,
@@ -200,9 +204,14 @@ function cacheElements() {
   elements.previewPlaceholder = document.querySelector("#preview-placeholder");
   elements.resultIframe = document.querySelector("#result-iframe");
   elements.resultCode = document.querySelector("#result-code");
+  elements.solveModeButtons = Array.from(document.querySelectorAll("[data-solve-mode]"));
+  elements.textSolvePanel = document.querySelector("#text-solve-panel");
+  elements.imageSolvePanel = document.querySelector("#image-solve-panel");
+  elements.textGenerateArea = document.querySelector("#text-generate-area");
   elements.generateButton = document.querySelector("#generate-report");
   elements.generateButtonText = document.querySelector("#generate-button-text");
   elements.modelSelect = document.querySelector("#model-select");
+  elements.visionProviderSelect = document.querySelector("#vision-provider-select");
   elements.solveLibraryType = document.querySelector("#solve-library-type");
   elements.instructionInput = document.querySelector("#instruction-input");
   elements.fileInput = document.querySelector("#problem-file");
@@ -214,6 +223,11 @@ function cacheElements() {
   elements.previewFileSize = document.querySelector("#preview-file-size");
   elements.previewFileType = document.querySelector("#preview-file-type");
   elements.clearFileButton = document.querySelector("#clear-file-button");
+  elements.solveImageButton = document.querySelector("#solve-image-button");
+  elements.solveImageButtonText = document.querySelector("#solve-image-button-text");
+  elements.recognizedTextPanel = document.querySelector("#recognized-text-panel");
+  elements.recognizedTextInput = document.querySelector("#recognized-text-input");
+  elements.reanalyzeRecognizedTextButton = document.querySelector("#reanalyze-recognized-text");
   elements.welcomeGuide = document.querySelector("#welcome-guide");
   elements.dismissWelcomeGuideButton = document.querySelector("#dismiss-welcome-guide");
   elements.reopenWelcomeGuideButton = document.querySelector("#reopen-welcome-guide");
@@ -590,7 +604,10 @@ async function requestApi(path, options = {}) {
       renderAuthState();
     }
 
-    throw new Error(payload.message || "请求失败，请稍后再试。");
+    const error = new Error(payload.message || "请求失败，请稍后再试。");
+    error.status = response.status;
+    error.data = payload.data || null;
+    throw error;
   }
 
   return payload.data || {};
@@ -715,21 +732,22 @@ function clearGenerationStatusTimers() {
   state.generationStatusTimers = [];
 }
 
-function startGenerationStatusUpdates() {
-  clearGenerationStatusTimers();
-
-  const statuses = [
+function startGenerationStatusUpdates({
+  target = elements.generateButtonText,
+  statuses = [
     "正在整理题目...",
     "正在调用 AI...",
     "正在生成解析...",
     "正在保存记录...",
-  ];
+  ],
+} = {}) {
+  clearGenerationStatusTimers();
 
-  elements.generateButtonText.textContent = statuses[0];
+  target.textContent = statuses[0] || "正在处理...";
 
   statuses.slice(1).forEach((status, index) => {
     const timerId = window.setTimeout(() => {
-      elements.generateButtonText.textContent = status;
+      target.textContent = status;
     }, (index + 1) * 1400);
     state.generationStatusTimers.push(timerId);
   });
@@ -751,7 +769,16 @@ function getQuestionTypeFromText(text) {
   return "综合";
 }
 
-async function generateAiTextSolution() {
+function getSelectedLibraryDisplayName() {
+  return elements.solveLibraryType.value === "strategy" ? "策略库" : "原创题库";
+}
+
+async function submitTextSolution(questionText, {
+  button,
+  buttonText,
+  idleText,
+  loadingStatuses,
+}) {
   if (state.generationTimer) {
     return;
   }
@@ -761,8 +788,6 @@ async function generateAiTextSolution() {
     switchPage("profile");
     return;
   }
-
-  const questionText = elements.instructionInput.value.trim();
 
   if (!questionText) {
     showToast("请先输入需要解析的文字题目。");
@@ -774,9 +799,12 @@ async function generateAiTextSolution() {
     return;
   }
 
-  elements.generateButton.disabled = true;
+  button.disabled = true;
   state.generationTimer = true;
-  startGenerationStatusUpdates();
+  startGenerationStatusUpdates({
+    target: buttonText,
+    statuses: loadingStatuses,
+  });
 
   try {
     const data = await requestApi("/api/solve-text", {
@@ -792,15 +820,138 @@ async function generateAiTextSolution() {
     });
 
     renderAiHtmlResult(data.htmlResult);
-    showToast(`AI 解析已生成并保存到数据库，记录 ID：${data.recordId}。`);
+    showToast(`AI 解析已生成，已保存到${getSelectedLibraryDisplayName()}。`);
   } catch (error) {
     showToast(error.message || "AI 解题失败，请稍后再试。");
   } finally {
     clearGenerationStatusTimers();
-    elements.generateButton.disabled = false;
-    elements.generateButtonText.textContent = "生成标准解析报告";
+    button.disabled = false;
+    buttonText.textContent = idleText;
     state.generationTimer = null;
   }
+}
+
+async function generateAiTextSolution() {
+  const questionText = elements.instructionInput.value.trim();
+
+  return submitTextSolution(questionText, {
+    button: elements.generateButton,
+    buttonText: elements.generateButtonText,
+    idleText: "生成标准解析报告",
+    loadingStatuses: ["正在整理题目...", "正在生成解析...", "正在保存记录..."],
+  });
+}
+
+function switchSolveMode(mode) {
+  const nextMode = mode === "image" ? "image" : "text";
+  state.activeSolveMode = nextMode;
+
+  elements.solveModeButtons.forEach((button) => {
+    const isActive = button.dataset.solveMode === nextMode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  elements.textSolvePanel.hidden = nextMode !== "text";
+  elements.imageSolvePanel.hidden = nextMode !== "image";
+  elements.textGenerateArea.hidden = nextMode !== "text";
+}
+
+function isAllowedSolveImage(file) {
+  return ALLOWED_SOLVE_IMAGE_TYPES.has(file.type);
+}
+
+function validateSelectedImageForSolve() {
+  const file = state.selectedProblemFile;
+
+  if (!file) {
+    showToast("请先上传题目图片。");
+    return null;
+  }
+
+  if (!isAllowedSolveImage(file)) {
+    showToast("图片解题仅支持 jpg、png 或 webp；PDF 本阶段只做本地预览。");
+    return null;
+  }
+
+  if (file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+    showToast("图片大小不能超过 3MB，请压缩后再上传。");
+    return null;
+  }
+
+  return file;
+}
+
+function showRecognizedText(text) {
+  elements.recognizedTextInput.value = text || "";
+  elements.recognizedTextPanel.hidden = false;
+}
+
+async function solveImageFromUpload() {
+  if (state.generationTimer) {
+    return;
+  }
+
+  if (!state.currentUser || !state.authToken) {
+    showToast("请先登录后再使用 AI 解题。");
+    switchPage("profile");
+    return;
+  }
+
+  const file = validateSelectedImageForSolve();
+
+  if (!file) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("image", file);
+  formData.append("subject", "数学");
+  formData.append("gradeLevel", "初中");
+  formData.append("questionType", getQuestionTypeFromText(elements.instructionInput.value || ""));
+  formData.append("libraryType", elements.solveLibraryType.value);
+  formData.append("preferredVisionProvider", elements.visionProviderSelect.value);
+  formData.append("preferredSolveProvider", elements.modelSelect.value);
+
+  elements.solveImageButton.disabled = true;
+  state.generationTimer = true;
+  startGenerationStatusUpdates({
+    target: elements.solveImageButtonText,
+    statuses: ["正在识别题目...", "正在生成解析...", "正在保存记录..."],
+  });
+
+  try {
+    const data = await requestApi("/api/solve-image", {
+      method: "POST",
+      body: formData,
+    });
+
+    showRecognizedText(data.recognizedText);
+    renderAiHtmlResult(data.htmlResult);
+    showToast(`图片题已解析，已保存到${getSelectedLibraryDisplayName()}。`);
+  } catch (error) {
+    if (error.data?.recognizedText) {
+      showRecognizedText(error.data.recognizedText);
+    }
+
+    showToast(error.message || "图片解析失败，请稍后再试。");
+  } finally {
+    clearGenerationStatusTimers();
+    elements.solveImageButton.disabled = false;
+    elements.solveImageButtonText.textContent = "识别并解析";
+    state.generationTimer = null;
+  }
+}
+
+async function reanalyzeRecognizedText() {
+  const questionText = elements.recognizedTextInput.value.trim();
+
+  return submitTextSolution(questionText, {
+    button: elements.reanalyzeRecognizedTextButton,
+    buttonText: elements.reanalyzeRecognizedTextButton,
+    idleText: "用修改后的文本重新解析",
+    loadingStatuses: ["正在整理修改后的题目...", "正在生成解析...", "正在保存记录..."],
+  });
 }
 
 function formatFileSize(bytes) {
@@ -847,12 +998,15 @@ function resetPreviewMedia() {
 
 function clearFileSelection(showConfirmation = true) {
   resetPreviewMedia();
+  state.selectedProblemFile = null;
   elements.fileInput.value = "";
   elements.filePreview.hidden = true;
   elements.uploadEmptyState.hidden = false;
   elements.previewFileName.textContent = "";
   elements.previewFileSize.textContent = "";
   elements.previewFileType.textContent = "";
+  elements.recognizedTextPanel.hidden = true;
+  elements.recognizedTextInput.value = "";
 
   if (showConfirmation) {
     showToast("已清除当前文件，本地预览也已释放。");
@@ -870,6 +1024,7 @@ function showFilePreview(file) {
   }
 
   resetPreviewMedia();
+  state.selectedProblemFile = file;
   elements.previewFileName.textContent = file.name;
   elements.previewFileSize.textContent = formatFileSize(file.size);
   elements.uploadEmptyState.hidden = true;
@@ -881,13 +1036,13 @@ function showFilePreview(file) {
     elements.imagePreview.alt = `${file.name} 的本地缩略图`;
     elements.imagePreview.hidden = false;
     elements.previewFileType.textContent = "图片";
-    showToast("图片已在浏览器本地生成缩略图，不会上传服务器。");
+    showToast("图片已生成缩略图，可以点击“识别并解析”。");
     return;
   }
 
   elements.pdfPreview.hidden = false;
   elements.previewFileType.textContent = "PDF 文档";
-  showToast("PDF 已在浏览器本地读取文件信息，不会预览或上传内容。");
+  showToast("PDF 已在浏览器本地读取文件信息，本阶段不做识题。");
 }
 
 function handleFileSelection() {
@@ -2522,7 +2677,12 @@ function bindEvents() {
     button.addEventListener("click", () => switchResultView(button.dataset.resultView));
   });
 
+  elements.solveModeButtons.forEach((button) => {
+    button.addEventListener("click", () => switchSolveMode(button.dataset.solveMode));
+  });
   elements.generateButton.addEventListener("click", generateAiTextSolution);
+  elements.solveImageButton.addEventListener("click", solveImageFromUpload);
+  elements.reanalyzeRecognizedTextButton.addEventListener("click", reanalyzeRecognizedText);
   elements.fileInput.addEventListener("change", handleFileSelection);
   elements.clearFileButton.addEventListener("click", () => clearFileSelection());
   elements.imagePreview.addEventListener("error", () => {
@@ -2630,6 +2790,7 @@ function initializeApp() {
   initializeBuildSelectors();
   initializeStrategyFilters();
   bindEvents();
+  switchSolveMode(state.activeSolveMode);
   switchOriginalTab(state.activeOriginalTab);
   renderLibraryList("strategy");
   switchPage(state.activePage);

@@ -1,4 +1,5 @@
 const pool = require("../db/pool");
+const { env } = require("../config/env");
 const { truncateForLog } = require("../utils/json");
 const { buildSolveMessages } = require("./solvePrompt");
 const { normalizeSolution } = require("./solveSchema");
@@ -8,7 +9,7 @@ const openaiProvider = require("./providers/openaiProvider");
 const geminiProvider = require("./providers/geminiProvider");
 
 const PROVIDERS = [dashscopeProvider, deepseekProvider, openaiProvider, geminiProvider];
-const DAILY_SOLVE_LIMIT = 20;
+const DAILY_SOLVE_LIMIT = env.ai.dailyLimit;
 
 function orderProviders(preferredProvider) {
   const preferred = String(preferredProvider || "").trim().toLowerCase();
@@ -92,7 +93,7 @@ async function runSolve({ userId, preferredProvider, input }) {
   const usedToday = await countTodaySuccessfulSolves(userId);
 
   if (usedToday >= DAILY_SOLVE_LIMIT) {
-    const error = new Error("今日 AI 解题次数已达 20 次，请明天再试。");
+    const error = new Error(`今日 AI 解题次数已达 ${DAILY_SOLVE_LIMIT} 次，请明天再试。`);
     error.statusCode = 429;
     throw error;
   }
@@ -166,5 +167,6 @@ async function runSolve({ userId, preferredProvider, input }) {
 module.exports = {
   DAILY_SOLVE_LIMIT,
   runSolve,
+  insertModelCallLog,
   attachRecordToModelCall,
 };
