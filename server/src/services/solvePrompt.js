@@ -34,7 +34,13 @@ function buildSolveMessages({ questionText, subject, gradeLevel, questionType })
     '  "finalAnswer": "最终答案",',
     '  "commonMistakes": ["易错提醒"],',
     '  "verification": "验算或检查",',
-    '  "visualizationSpec": null,',
+    '  "visualizationSpec": {',
+    '    "type": "equation_balance | function_graph | geometry | dynamic_point | number_line | none",',
+    '    "title": "图示标题",',
+    '    "description": "图示说明",',
+    '    "objects": [],',
+    '    "steps": [{"stepTitle": "步骤标题", "highlightObjects": [], "explanation": "说明", "action": "show|highlight|move"}]',
+    "  },",
     '  "qualityCheck": {"checked": true, "confidence": "low|medium|high", "issues": []}',
     "}",
     "",
@@ -48,6 +54,9 @@ function buildSolveMessages({ questionText, subject, gradeLevel, questionType })
     "7. 做验算检查；",
     "8. 检查是否使用初中方法；",
     "9. 做质量检查，说明条件是否充分、答案是否一致、步骤是否跳步。",
+    "10. 如题目适合画图，请返回 visualizationSpec；如果无法可靠画图，type 使用 none，objects 为空。",
+    "11. visualizationSpec 只描述结构化对象，不要生成图片，不要写可执行代码。",
+    "12. 函数图只返回基础表达式和关键点；几何图只返回题目中明确存在或解析中明确构造的点、线、圆和辅助线。",
   ].join("\n");
 
   return [

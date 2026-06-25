@@ -68,7 +68,67 @@ async function createAttachmentMetadata({ userId, recordId, file }) {
   return result.insertId;
 }
 
+function parseJsonField(value, fallback) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value === "object") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeRecord(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    knowledge_points: parseJsonField(row.knowledge_points, []),
+    steps: parseJsonField(row.steps, []),
+    common_mistakes: parseJsonField(row.common_mistakes, []),
+    visualization_spec: parseJsonField(row.visualization_spec, null),
+    quality_check: parseJsonField(row.quality_check, {}),
+  };
+}
+
+async function getSolveRecordForUser({ userId, recordId }) {
+  const [rows] = await pool.execute(
+    `SELECT *
+       FROM solve_records
+      WHERE id = :recordId
+        AND user_id = :userId
+        AND deleted_at IS NULL
+      LIMIT 1`,
+    { userId, recordId },
+  );
+
+  return normalizeRecord(rows[0]);
+}
+
+async function updateSolveRecordLibrary({ userId, recordId, libraryType }) {
+  const [result] = await pool.execute(
+    `UPDATE solve_records
+        SET library_type = :libraryType
+      WHERE id = :recordId
+        AND user_id = :userId
+        AND deleted_at IS NULL`,
+    { userId, recordId, libraryType },
+  );
+
+  return result.affectedRows > 0;
+}
+
 module.exports = {
   createSolveRecord,
   createAttachmentMetadata,
+  getSolveRecordForUser,
+  updateSolveRecordLibrary,
 };

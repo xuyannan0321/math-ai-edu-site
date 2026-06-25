@@ -1,4 +1,24 @@
 const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
+const VISUALIZATION_TYPES = new Set([
+  "equation_balance",
+  "function_graph",
+  "geometry",
+  "dynamic_point",
+  "number_line",
+  "none",
+]);
+const VISUALIZATION_OBJECT_KINDS = new Set([
+  "point",
+  "line",
+  "segment",
+  "circle",
+  "angle",
+  "polygon",
+  "function",
+  "axis",
+  "label",
+  "auxiliaryLine",
+]);
 
 function asString(value, fallback = "") {
   if (value === null || value === undefined) {
@@ -61,6 +81,83 @@ function normalizeQualityCheck(value) {
   };
 }
 
+function normalizeVisualizationObject(object) {
+  if (!object || typeof object !== "object" || Array.isArray(object)) {
+    return null;
+  }
+
+  const kind = asString(object.kind || object.type);
+
+  if (!VISUALIZATION_OBJECT_KINDS.has(kind)) {
+    return null;
+  }
+
+  return {
+    ...object,
+    kind,
+    id: asString(object.id || object.label || `${kind}-${Math.random().toString(36).slice(2, 8)}`),
+    label: asString(object.label || object.id || ""),
+  };
+}
+
+function normalizeVisualizationStep(step, index) {
+  if (!step || typeof step !== "object" || Array.isArray(step)) {
+    return null;
+  }
+
+  return {
+    stepTitle: asString(step.stepTitle || step.title, `图示步骤 ${index + 1}`),
+    highlightObjects: asStringArray(step.highlightObjects),
+    explanation: asString(step.explanation || step.content),
+    action: asString(step.action, "highlight"),
+  };
+}
+
+function normalizeVisualizationSpec(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : null;
+
+  if (!source) {
+    return null;
+  }
+
+  const type = VISUALIZATION_TYPES.has(source.type) ? source.type : "none";
+
+  if (type === "none") {
+    return {
+      type: "none",
+      title: asString(source.title, "暂无图示"),
+      description: asString(source.description, "当前题目暂无可靠图示数据。"),
+      objects: [],
+      steps: [],
+    };
+  }
+
+  const objects = Array.isArray(source.objects)
+    ? source.objects.map(normalizeVisualizationObject).filter(Boolean)
+    : [];
+  const steps = Array.isArray(source.steps)
+    ? source.steps.map(normalizeVisualizationStep).filter(Boolean)
+    : [];
+
+  if (!objects.length) {
+    return {
+      type: "none",
+      title: "暂无图示",
+      description: "当前题目暂无可靠图示数据。",
+      objects: [],
+      steps: [],
+    };
+  }
+
+  return {
+    type,
+    title: asString(source.title, "图示讲解"),
+    description: asString(source.description),
+    objects,
+    steps,
+  };
+}
+
 function normalizeSolution(raw, fallback = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const problemText = asString(source.problemText, fallback.questionText || "");
@@ -87,10 +184,7 @@ function normalizeSolution(raw, fallback = {}) {
     finalAnswer: asString(source.finalAnswer, "条件不足，暂不能确定唯一答案。"),
     commonMistakes: commonMistakes.length ? commonMistakes : ["不要只抄最终答案，要核对每一步依据。"],
     verification: asString(source.verification, "请将答案代回原题条件进行检查。"),
-    visualizationSpec:
-      source.visualizationSpec && typeof source.visualizationSpec === "object"
-        ? source.visualizationSpec
-        : null,
+    visualizationSpec: normalizeVisualizationSpec(source.visualizationSpec),
     qualityCheck: normalizeQualityCheck(source.qualityCheck),
   };
 }
@@ -120,7 +214,7 @@ function validateQuestionInput(body) {
       gradeLevel: asString(body.gradeLevel, "初中"),
       questionType: asString(body.questionType, "综合"),
       libraryType,
-      preferredProvider: asString(body.preferredProvider, "dashscope"),
+      preferredProvider: asString(body.preferredProvider, "auto"),
     },
   };
 }
@@ -128,4 +222,5 @@ function validateQuestionInput(body) {
 module.exports = {
   normalizeSolution,
   validateQuestionInput,
+  normalizeVisualizationSpec,
 };

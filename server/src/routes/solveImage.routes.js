@@ -31,8 +31,8 @@ function validateImageInput(body) {
       gradeLevel: asString(body.gradeLevel, "初中"),
       questionType: asString(body.questionType, "综合"),
       libraryType,
-      preferredVisionProvider: asString(body.preferredVisionProvider, "qwen-vl"),
-      preferredSolveProvider: asString(body.preferredSolveProvider, "dashscope"),
+      preferredVisionProvider: asString(body.preferredVisionProvider, "auto"),
+      preferredSolveProvider: asString(body.preferredSolveProvider, "auto"),
     },
   };
 }
