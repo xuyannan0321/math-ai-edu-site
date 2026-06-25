@@ -879,8 +879,8 @@ function createVisualizationFallback(result) {
     result?.finalAnswer,
   ].filter(Boolean).join("\n");
 
-  return createEquationBalanceFallback(combinedText)
-    || createFunctionGraphFallback(combinedText)
+  return createFunctionGraphFallback(combinedText)
+    || createEquationBalanceFallback(combinedText)
     || {
       type: "none",
       title: "图示讲解",

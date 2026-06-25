@@ -7,18 +7,30 @@ const VISUALIZATION_TYPES = new Set([
   "number_line",
   "none",
 ]);
-const VISUALIZATION_OBJECT_KINDS = new Set([
+const GEOMETRY_OBJECT_KINDS = new Set([
   "point",
-  "line",
   "segment",
+  "line",
+  "ray",
   "circle",
+  "arc",
   "angle",
+  "rightAngle",
   "polygon",
+  "auxiliaryLine",
+  "label",
+  "highlight",
+]);
+const VISUALIZATION_OBJECT_KINDS = new Set([
+  ...GEOMETRY_OBJECT_KINDS,
   "function",
   "axis",
-  "label",
-  "auxiliaryLine",
+  "term",
+  "marker",
 ]);
+const GEOMETRY_ROLES = new Set(["original", "auxiliary", "highlight"]);
+const GEOMETRY_KEYWORDS = /三角形|几何|圆|四点共圆|相似|全等|角平分线|垂直|平行|中点|动点|最值|轨迹|辅助线|切线|弦|垂足/;
+const DANGEROUS_VISUALIZATION_PATTERN = /<\s*\/?\s*(script|svg|canvas|iframe|html|body|style)\b|javascript:/i;
 
 function asString(value, fallback = "") {
   if (value === null || value === undefined) {
@@ -42,6 +54,54 @@ function asStringArray(value) {
   return [];
 }
 
+function isPlainObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isFiniteNumber(value) {
+  return Number.isFinite(Number(value));
+}
+
+function toFiniteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function hasDangerousVisualizationCode(value) {
+  if (typeof value === "string") {
+    return DANGEROUS_VISUALIZATION_PATTERN.test(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(hasDangerousVisualizationCode);
+  }
+
+  if (isPlainObject(value)) {
+    return Object.values(value).some(hasDangerousVisualizationCode);
+  }
+
+  return false;
+}
+
+function createNoneVisualizationSpec(description = "暂无可靠图示，可查看文字解析。") {
+  return {
+    type: "none",
+    title: "图示讲解",
+    description,
+    confidence: "low",
+    orientation: {
+      baseline: "",
+      baselineDirection: "left-to-right",
+      above: [],
+      below: [],
+    },
+    points: {},
+    objects: [],
+    views: [],
+    steps: [],
+  };
+}
+
 function normalizeSteps(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -56,7 +116,7 @@ function normalizeSteps(value) {
         };
       }
 
-      if (!step || typeof step !== "object") {
+      if (!isPlainObject(step)) {
         return null;
       }
 
@@ -69,7 +129,7 @@ function normalizeSteps(value) {
 }
 
 function normalizeQualityCheck(value) {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const source = isPlainObject(value) ? value : {};
   const confidence = REQUIRED_CONFIDENCE_VALUES.has(source.confidence)
     ? source.confidence
     : "medium";
@@ -81,89 +141,476 @@ function normalizeQualityCheck(value) {
   };
 }
 
-function normalizeVisualizationObject(object) {
-  if (!object || typeof object !== "object" || Array.isArray(object)) {
+function normalizeOrientation(value) {
+  const source = isPlainObject(value) ? value : {};
+  const direction = source.baselineDirection === "right-to-left" ? "right-to-left" : "left-to-right";
+
+  return {
+    baseline: asString(source.baseline),
+    baselineDirection: direction,
+    above: asStringArray(source.above),
+    below: asStringArray(source.below),
+  };
+}
+
+function normalizePoint(id, value) {
+  if (!isPlainObject(value)) {
     return null;
+  }
+
+  const x = toFiniteNumber(value.x);
+  const y = toFiniteNumber(value.y);
+
+  if (x === null || y === null) {
+    return null;
+  }
+
+  return {
+    id,
+    x,
+    y,
+    label: asString(value.label, id),
+  };
+}
+
+function collectPoints(source) {
+  const points = {};
+
+  if (isPlainObject(source.points)) {
+    Object.entries(source.points).forEach(([id, value]) => {
+      const pointId = asString(id);
+      const point = normalizePoint(pointId, value);
+
+      if (pointId && point) {
+        points[pointId] = point;
+      }
+    });
+  }
+
+  if (Array.isArray(source.objects)) {
+    source.objects.forEach((object) => {
+      if (!isPlainObject(object) || asString(object.kind || object.type) !== "point") {
+        return;
+      }
+
+      const pointId = asString(object.id || object.label);
+      const point = normalizePoint(pointId, object);
+
+      if (pointId && point) {
+        points[pointId] = point;
+      }
+    });
+  }
+
+  return points;
+}
+
+function pointExists(points, id) {
+  return Boolean(points[asString(id)]);
+}
+
+function getObjectEndpoints(object) {
+  if (object.from && object.to) {
+    return [asString(object.from), asString(object.to)];
+  }
+
+  if (Array.isArray(object.through) && object.through.length >= 2) {
+    return [asString(object.through[0]), asString(object.through[1])];
+  }
+
+  return [];
+}
+
+function normalizeRole(kind, value) {
+  if (GEOMETRY_ROLES.has(value)) {
+    return value;
+  }
+
+  return kind === "auxiliaryLine" ? "auxiliary" : "original";
+}
+
+function normalizeVisualizationObject(object, points, index) {
+  if (!isPlainObject(object)) {
+    return { error: "图形对象格式不正确。" };
   }
 
   const kind = asString(object.kind || object.type);
 
   if (!VISUALIZATION_OBJECT_KINDS.has(kind)) {
+    return { error: `不支持的图形对象类型：${kind || "未知"}。` };
+  }
+
+  if (kind === "point") {
     return null;
   }
 
-  return {
+  const id = asString(object.id || object.label || `${kind}-${index + 1}`);
+  const role = normalizeRole(kind, asString(object.role));
+  const base = {
     ...object,
     kind,
-    id: asString(object.id || object.label || `${kind}-${Math.random().toString(36).slice(2, 8)}`),
+    id,
     label: asString(object.label || object.id || ""),
+    role,
+    style: role === "auxiliary" || kind === "auxiliaryLine"
+      ? asString(object.style, "dashed")
+      : asString(object.style, "solid"),
+    usedIn: asStringArray(object.usedIn),
   };
+
+  if (kind === "segment" || kind === "auxiliaryLine") {
+    const [from, to] = getObjectEndpoints(base);
+    if (!from || !to || !pointExists(points, from) || !pointExists(points, to)) {
+      return { error: `线段 ${id} 引用了不存在的点。` };
+    }
+
+    return { ...base, from, to };
+  }
+
+  if (kind === "line" || kind === "ray") {
+    const [from, to] = getObjectEndpoints(base);
+    if (!from || !to || !pointExists(points, from) || !pointExists(points, to)) {
+      return { error: `${kind === "ray" ? "射线" : "直线"} ${id} 引用了不存在的点。` };
+    }
+
+    return { ...base, from, to, through: [from, to] };
+  }
+
+  if (kind === "circle") {
+    const center = asString(base.center);
+    const radius = toFiniteNumber(base.radius);
+
+    if (!center || !pointExists(points, center) || radius === null || radius <= 0) {
+      return { error: `圆 ${id} 的圆心或半径不可靠。` };
+    }
+
+    return { ...base, center, radius };
+  }
+
+  if (kind === "arc") {
+    const center = asString(base.center);
+    const radius = toFiniteNumber(base.radius);
+    const startAngle = toFiniteNumber(base.startAngle);
+    const endAngle = toFiniteNumber(base.endAngle);
+
+    if (!center || !pointExists(points, center) || radius === null || radius <= 0) {
+      return { error: `弧 ${id} 的圆心或半径不可靠。` };
+    }
+
+    if (startAngle === null || endAngle === null) {
+      return { error: `弧 ${id} 缺少可靠角度。` };
+    }
+
+    return { ...base, center, radius, startAngle, endAngle };
+  }
+
+  if (kind === "angle" || kind === "rightAngle") {
+    const anglePoints = Array.isArray(base.points)
+      ? base.points.map(asString).slice(0, 3)
+      : [asString(base.from), asString(base.vertex), asString(base.to)];
+
+    if (anglePoints.length < 3 || anglePoints.some((pointId) => !pointExists(points, pointId))) {
+      return { error: `${kind === "rightAngle" ? "直角" : "角"} ${id} 引用了不存在的点。` };
+    }
+
+    return { ...base, points: anglePoints, vertex: anglePoints[1] };
+  }
+
+  if (kind === "polygon") {
+    const polygonPoints = asStringArray(base.points);
+
+    if (polygonPoints.length < 3 || polygonPoints.some((pointId) => !pointExists(points, pointId))) {
+      return { error: `多边形 ${id} 引用了不存在的点。` };
+    }
+
+    return { ...base, points: polygonPoints };
+  }
+
+  if (kind === "label") {
+    const at = asString(base.at || base.point);
+
+    if (at && !pointExists(points, at)) {
+      return { error: `标签 ${id} 引用了不存在的点。` };
+    }
+
+    return { ...base, at };
+  }
+
+  if (kind === "highlight") {
+    return { ...base, targets: asStringArray(base.targets || base.highlightObjects) };
+  }
+
+  if (kind === "function") {
+    const expression = asString(base.expression);
+
+    if (!expression || !/^[+\-0-9.xX^*²=\s()]+$/.test(expression)) {
+      return { error: `函数 ${id} 的表达式不安全或过于复杂。` };
+    }
+
+    return {
+      ...base,
+      expression,
+      range: Array.isArray(base.range) ? base.range.map(Number).filter(Number.isFinite).slice(0, 2) : [-5, 5],
+    };
+  }
+
+  return base;
 }
 
-function normalizeVisualizationStep(step, index) {
-  if (!step || typeof step !== "object" || Array.isArray(step)) {
+function normalizeVisualizationStep(step, index, objectIds) {
+  if (!isPlainObject(step)) {
     return null;
   }
+
+  const highlightObjects = asStringArray(step.highlightObjects).filter((id) => objectIds.has(id));
 
   return {
     stepTitle: asString(step.stepTitle || step.title, `图示步骤 ${index + 1}`),
-    highlightObjects: asStringArray(step.highlightObjects),
+    highlightObjects,
     explanation: asString(step.explanation || step.content),
     action: asString(step.action, "highlight"),
   };
 }
 
-function normalizeVisualizationSpec(value) {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : null;
-
-  if (!source) {
+function normalizeVisualizationView(view, index, objectIds) {
+  if (!isPlainObject(view)) {
     return null;
   }
 
-  const type = VISUALIZATION_TYPES.has(source.type) ? source.type : "none";
+  const showObjects = asStringArray(view.showObjects).filter((id) => objectIds.has(id));
+  const highlightObjects = asStringArray(view.highlightObjects).filter((id) => objectIds.has(id));
 
-  if (type === "none") {
-    return {
-      type: "none",
-      title: asString(source.title, "暂无图示"),
-      description: asString(source.description, "当前题目暂无可靠图示数据。"),
-      objects: [],
-      steps: [],
-    };
+  return {
+    id: asString(view.id, `view-${index + 1}`),
+    title: asString(view.title, index === 0 ? "原题图" : `图示 ${index + 1}`),
+    showObjects,
+    highlightObjects,
+  };
+}
+
+function normalizeGeometrySpec(source, confidence, outputType = "geometry") {
+  const points = collectPoints(source);
+
+  if (confidence === "low") {
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
   }
 
-  const objects = Array.isArray(source.objects)
-    ? source.objects.map(normalizeVisualizationObject).filter(Boolean)
-    : [];
-  const steps = Array.isArray(source.steps)
-    ? source.steps.map(normalizeVisualizationStep).filter(Boolean)
-    : [];
+  if (!Object.keys(points).length) {
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+  }
+
+  const objects = [];
+  const sourceObjects = Array.isArray(source.objects) ? source.objects : [];
+
+  for (let index = 0; index < sourceObjects.length; index += 1) {
+    const normalized = normalizeVisualizationObject(sourceObjects[index], points, index);
+
+    if (normalized?.error) {
+      return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+    }
+
+    if (normalized) {
+      objects.push(normalized);
+    }
+  }
 
   if (!objects.length) {
-    return {
-      type: "none",
-      title: "暂无图示",
-      description: "当前题目暂无可靠图示数据。",
-      objects: [],
-      steps: [],
-    };
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+  }
+
+  const objectIds = new Set(objects.map((object) => object.id));
+  const views = Array.isArray(source.views)
+    ? source.views
+        .map((view, index) => normalizeVisualizationView(view, index, objectIds))
+        .filter(Boolean)
+    : [];
+  const safeViews = views.length
+    ? views
+    : [
+        {
+          id: "original",
+          title: "原题图",
+          showObjects: objects
+            .filter((object) => object.role !== "auxiliary")
+            .map((object) => object.id),
+          highlightObjects: [],
+        },
+      ];
+
+  if (safeViews.some((view) => !view.showObjects.length)) {
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+  }
+
+  const steps = Array.isArray(source.steps)
+    ? source.steps
+        .map((step, index) => normalizeVisualizationStep(step, index, objectIds))
+        .filter(Boolean)
+    : [];
+
+  return {
+    type: outputType,
+    title: asString(source.title, "图示讲解"),
+    description: asString(source.description, "根据题目条件绘制的几何示意图。"),
+    confidence,
+    orientation: normalizeOrientation(source.orientation),
+    points,
+    objects,
+    views: safeViews,
+    steps,
+  };
+}
+
+function normalizeNonGeometrySpec(source, type, confidence) {
+  const objects = Array.isArray(source.objects)
+    ? source.objects
+        .map((object, index) => normalizeVisualizationObject(object, {}, index))
+        .filter((object) => object && !object.error)
+    : [];
+  const steps = Array.isArray(source.steps)
+    ? source.steps
+        .map((step, index) => normalizeVisualizationStep(step, index, new Set(objects.map((object) => object.id))))
+        .filter(Boolean)
+    : [];
+
+  if (type !== "number_line" && !objects.length) {
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
   }
 
   return {
     type,
     title: asString(source.title, "图示讲解"),
     description: asString(source.description),
+    confidence,
+    orientation: normalizeOrientation(source.orientation),
+    points: {},
     objects,
+    views: [],
     steps,
   };
 }
 
+function createEquationBalanceFallback(text) {
+  const normalized = asString(text)
+    .replaceAll("−", "-")
+    .replace(/\s+/g, "");
+  const match = normalized.match(/([+-]?\d*)x([+-]\d+(?:\.\d+)?)?=([+-]?\d+(?:\.\d+)?)/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const coefficient = match[1] && !["+", "-"].includes(match[1]) ? match[1] : `${match[1] || ""}1`;
+  const constant = match[2] || "";
+  const rightValue = match[3];
+
+  return {
+    type: "equation_balance",
+    title: "方程平衡示意",
+    description: "根据题目中的一元一次方程生成的基础图示，用来说明等式两边保持平衡。",
+    confidence: "medium",
+    orientation: normalizeOrientation(null),
+    points: {},
+    objects: [
+      { kind: "term", id: "left-x", label: `${coefficient}x`, side: "left", role: "original" },
+      ...(constant ? [{ kind: "term", id: "left-constant", label: constant, side: "left", role: "original" }] : []),
+      { kind: "term", id: "right-value", label: rightValue, side: "right", role: "original" },
+    ],
+    views: [],
+    steps: [
+      {
+        stepTitle: "等式两边",
+        highlightObjects: [],
+        explanation: "解方程时，对等式两边做同样的运算，才能保持结果不变。",
+        action: "highlight",
+      },
+    ],
+  };
+}
+
+function createFunctionGraphFallback(text) {
+  const match = asString(text)
+    .replaceAll("−", "-")
+    .replaceAll("²", "^2")
+    .match(/(?:y|f\(x\))\s*=\s*([+\-0-9.xX^*²\s]+)/i);
+
+  if (!match || !/[xX]/.test(match[1])) {
+    return null;
+  }
+
+  const expression = match[1].replace(/\s+/g, "");
+
+  if (!/^[+\-0-9.xX^*²]+$/.test(expression)) {
+    return null;
+  }
+
+  return {
+    type: "function_graph",
+    title: "函数图像基础示意",
+    description: "根据题目中可识别的函数表达式生成的安全基础图像；复杂表达式会自动跳过。",
+    confidence: "medium",
+    orientation: normalizeOrientation(null),
+    points: {},
+    objects: [
+      {
+        kind: "function",
+        id: "f",
+        expression,
+        range: [-5, 5],
+        role: "original",
+      },
+    ],
+    views: [],
+    steps: [],
+  };
+}
+
+function createSafeFallbackVisualization(fallback) {
+  const questionText = fallback.questionText || "";
+
+  if (GEOMETRY_KEYWORDS.test(questionText) || /几何/.test(fallback.questionType || "")) {
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+  }
+
+  return createFunctionGraphFallback(questionText)
+    || createEquationBalanceFallback(questionText)
+    || createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+}
+
+function normalizeVisualizationSpec(value, fallback = {}) {
+  const source = isPlainObject(value) ? value : null;
+
+  if (!source) {
+    return createSafeFallbackVisualization(fallback);
+  }
+
+  if (hasDangerousVisualizationCode(source)) {
+    return createNoneVisualizationSpec("图示数据包含不安全内容，已安全降级。");
+  }
+
+  const rawType = asString(source.type);
+  const type = VISUALIZATION_TYPES.has(rawType) ? rawType : "none";
+  const confidence = REQUIRED_CONFIDENCE_VALUES.has(source.confidence)
+    ? source.confidence
+    : "medium";
+
+  if (type === "none") {
+    return createNoneVisualizationSpec(asString(source.description, "暂无可靠图示，可查看文字解析。"));
+  }
+
+  if (type === "geometry" || type === "dynamic_point") {
+    return normalizeGeometrySpec({ ...source, type }, confidence, type);
+  }
+
+  return normalizeNonGeometrySpec(source, type, confidence);
+}
+
 function normalizeSolution(raw, fallback = {}) {
-  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const source = isPlainObject(raw) ? raw : {};
   const problemText = asString(source.problemText, fallback.questionText || "");
   const steps = normalizeSteps(source.steps);
   const knowledgePoints = asStringArray(source.knowledgePoints);
   const commonMistakes = asStringArray(source.commonMistakes);
+  const visualizationSource = source.visualizationSpec || source.diagramSpec;
 
   return {
     title: asString(source.title, problemText.slice(0, 32) || "数学解析"),
@@ -184,7 +631,10 @@ function normalizeSolution(raw, fallback = {}) {
     finalAnswer: asString(source.finalAnswer, "条件不足，暂不能确定唯一答案。"),
     commonMistakes: commonMistakes.length ? commonMistakes : ["不要只抄最终答案，要核对每一步依据。"],
     verification: asString(source.verification, "请将答案代回原题条件进行检查。"),
-    visualizationSpec: normalizeVisualizationSpec(source.visualizationSpec),
+    visualizationSpec: normalizeVisualizationSpec(visualizationSource, {
+      questionText: problemText || fallback.questionText,
+      questionType: fallback.questionType || source.topic,
+    }),
     qualityCheck: normalizeQualityCheck(source.qualityCheck),
   };
 }
@@ -223,4 +673,6 @@ module.exports = {
   normalizeSolution,
   validateQuestionInput,
   normalizeVisualizationSpec,
+  createEquationBalanceFallback,
+  createFunctionGraphFallback,
 };

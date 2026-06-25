@@ -887,6 +887,25 @@ select.form-control {
   border-radius: 14px;
 }
 
+.geometry-view-list {
+  display: grid;
+  gap: 12px;
+}
+
+.geometry-view-card {
+  min-width: 0;
+  padding: 10px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+}
+
+.geometry-view-card h4 {
+  margin: 0 0 8px;
+  color: var(--gray-600);
+  font-size: 13px;
+}
+
 .math-visualization-svg {
   display: block;
   width: 100%;
@@ -897,6 +916,10 @@ select.form-control {
 .mv-line {
   stroke: var(--gray-400);
   stroke-width: 1.5;
+}
+
+.mv-axis-arrow {
+  fill: var(--gray-400);
 }
 
 .mv-axis-label,
@@ -913,10 +936,24 @@ select.form-control {
   stroke-width: 2.5;
 }
 
+.mv-arc,
+.mv-angle,
+.mv-right-angle {
+  fill: none;
+  stroke: #0f766e;
+  stroke-width: 2;
+}
+
 .mv-auxiliary {
   stroke: #f59e0b;
   stroke-dasharray: 6 5;
   stroke-width: 2;
+}
+
+.mv-highlight {
+  fill: none;
+  stroke: #f59e0b;
+  stroke-width: 3;
 }
 
 .mv-circle {

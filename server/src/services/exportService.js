@@ -143,7 +143,9 @@ function renderSegment(object) {
 
 function renderLine(object) {
   const label = object.label || object.id;
-  const through = Array.isArray(object.through) ? object.through : [];
+  const through = Array.isArray(object.through)
+    ? object.through
+    : [object.from, object.to].filter(Boolean);
 
   if (!isSafeLabel(label) || through.length < 2 || !through.every(isSafeLabel)) {
     return "";
@@ -207,8 +209,17 @@ function renderGeoGebraObject(object) {
 
 function buildGeoGebraXml(record) {
   const spec = record.visualization_spec;
+  const pointObjects = spec?.points && typeof spec.points === "object" && !Array.isArray(spec.points)
+    ? Object.entries(spec.points).map(([id, point]) => ({
+        kind: "point",
+        id,
+        label: point.label || id,
+        x: point.x,
+        y: point.y,
+      }))
+    : [];
   const objects = Array.isArray(spec?.objects)
-    ? spec.objects.filter((object) => GGB_SUPPORTED_KINDS.has(object.kind))
+    ? [...pointObjects, ...spec.objects].filter((object) => GGB_SUPPORTED_KINDS.has(object.kind))
     : [];
   const renderedObjects = objects.map(renderGeoGebraObject).filter(Boolean);
 
