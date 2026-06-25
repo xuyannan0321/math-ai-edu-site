@@ -9,6 +9,8 @@
     "function_graph",
     "geometry",
     "dynamic_point",
+    "trajectory",
+    "max_value",
     "number_line",
     "none",
   ]);
@@ -718,7 +720,7 @@
     });
   }
 
-  function renderGeometry(container, spec) {
+  function renderGeometry(container, spec, options = {}) {
     const validation = validateGeometrySpec(spec);
 
     if (!validation.valid) {
@@ -727,12 +729,21 @@
     }
 
     const views = spec.views.length ? spec.views : [{ id: "original", title: "原题图" }];
+    const selectedViews = options.viewId
+      ? views.filter((view) => view.id === options.viewId)
+      : views;
+
+    if (!selectedViews.length) {
+      renderEmpty(container, "暂无可靠图示，可查看文字解析。");
+      return;
+    }
+
     const wrapper = createHtmlElement("div", "geometry-view-list");
     const allPoints = Object.values(spec.points);
     const bounds = getBounds(allPoints, 0.22);
     const mapper = createMapper(bounds);
 
-    views.forEach((view) => {
+    selectedViews.forEach((view) => {
       const viewCard = createHtmlElement("article", "geometry-view-card");
       const viewTitle = createHtmlElement("h4", "", view.title || "图示");
       const svg = createBaseSvg("math-visualization-svg geometry-svg");
@@ -877,7 +888,7 @@
     container.append(svg);
   }
 
-  function renderEquationBalance(container, spec) {
+  function renderEquationBalanceLegacy(container, spec) {
     const wrapper = createHtmlElement("div", "equation-balance-board");
     const left = createHtmlElement("div", "equation-side", "左边");
     const beam = createHtmlElement("div", "equation-balance-beam", "=");
@@ -900,6 +911,85 @@
 
     wrapper.append(left, beam, right);
     container.append(wrapper);
+  }
+
+  function renderEquationBalance(container, spec) {
+    const objects = Array.isArray(spec.objects) ? spec.objects.slice(0, 10) : [];
+    const svg = createBaseSvg("math-visualization-svg equation-balance-svg");
+    const leftObjects = objects.filter((object) => object.side !== "right");
+    const rightObjects = objects.filter((object) => object.side === "right");
+
+    function drawSide(items, startX, label) {
+      const labelText = createSvgElement("text", {
+        x: startX,
+        y: 70,
+        class: "mv-equation-label",
+      });
+      labelText.textContent = label;
+      svg.append(labelText);
+
+      if (!items.length) {
+        const emptyText = createSvgElement("text", {
+          x: startX,
+          y: 170,
+          class: "mv-equation-term",
+        });
+        emptyText.textContent = "—";
+        svg.append(emptyText);
+        return;
+      }
+
+      items.forEach((object, index) => {
+        const x = startX + (index % 3) * 78;
+        const y = 120 + Math.floor(index / 3) * 66;
+        svg.append(
+          createSvgElement("rect", {
+            x,
+            y,
+            width: 64,
+            height: 38,
+            rx: 10,
+            class: "mv-equation-block",
+          }),
+        );
+        const text = createSvgElement("text", {
+          x: x + 32,
+          y: y + 24,
+          class: "mv-equation-term",
+          "text-anchor": "middle",
+        });
+        text.textContent = object.label || object.value || object.id || `项${index + 1}`;
+        svg.append(text);
+      });
+    }
+
+    svg.append(
+      createSvgElement("line", {
+        x1: 80,
+        y1: 265,
+        x2: 480,
+        y2: 265,
+        class: "mv-segment",
+      }),
+      createSvgElement("circle", {
+        cx: 280,
+        cy: 265,
+        r: 8,
+        class: "mv-point",
+      }),
+    );
+
+    const equal = createSvgElement("text", {
+      x: 280,
+      y: 178,
+      class: "mv-equation-equal",
+      "text-anchor": "middle",
+    });
+    equal.textContent = "=";
+    svg.append(equal);
+    drawSide(leftObjects, 86, "左边");
+    drawSide(rightObjects, 330, "右边");
+    container.append(svg);
   }
 
   function renderNumberLine(container, spec) {
@@ -925,8 +1015,185 @@
     container.append(svg);
   }
 
+  function getDynamicSliderConfig(spec) {
+    const slider =
+      spec.objects.find((object) => object.kind === "slider") ||
+      spec.slider ||
+      {};
+    const min = toNumber(slider.min) ?? 0;
+    const max = toNumber(slider.max) ?? 1;
+    const value = toNumber(slider.value) ?? min;
+
+    return {
+      min,
+      max: max > min ? max : min + 1,
+      step: 0.001,
+      value: Math.min(Math.max(value, min), max > min ? max : min + 1),
+      label: slider.label || slider.id || "t",
+    };
+  }
+
+  function getDynamicPathPoints(spec) {
+    const dynamicObject = spec.objects.find((object) =>
+      ["dynamicPoint", "trajectory", "path"].includes(object.kind) || object.role === "dynamic",
+    );
+    const explicitIds = dynamicObject ? getObjectPointIds(dynamicObject) : [];
+
+    if (explicitIds.length >= 2) {
+      const first = getPoint(spec, explicitIds[0]);
+      const second = getPoint(spec, explicitIds[1]);
+
+      if (first && second) {
+        return [first, second];
+      }
+    }
+
+    const segment = spec.objects.find((object) =>
+      ["segment", "auxiliaryLine"].includes(object.kind) &&
+      getObjectPointIds(object).every((id) => getPoint(spec, id)),
+    );
+
+    if (!segment) {
+      return [];
+    }
+
+    return getObjectPointIds(segment).map((id) => getPoint(spec, id));
+  }
+
+  function drawCanvasLine(context, mapper, p1, p2, options = {}) {
+    const start = mapper.project(p1);
+    const end = mapper.project(p2);
+    context.save();
+    context.strokeStyle = options.color || "#2563eb";
+    context.lineWidth = options.width || 2;
+    context.setLineDash(options.dashed ? [8, 7] : []);
+    context.beginPath();
+    context.moveTo(start.x, start.y);
+    context.lineTo(end.x, end.y);
+    context.stroke();
+    context.restore();
+  }
+
+  function drawCanvasPoint(context, mapper, point, options = {}) {
+    const projected = mapper.project(point);
+    context.save();
+    context.fillStyle = options.color || "#1d4ed8";
+    context.beginPath();
+    context.arc(projected.x, projected.y, options.radius || 4, 0, Math.PI * 2);
+    context.fill();
+    context.font = "13px sans-serif";
+    context.fillStyle = "#1e293b";
+    context.fillText(point.label || point.id || "", projected.x + 9, projected.y - 9);
+    context.restore();
+  }
+
   function renderDynamicPoint(container, spec) {
-    renderGeometry(container, spec);
+    const validation = validateGeometrySpec({
+      ...spec,
+      type: "geometry",
+      confidence: spec.confidence || "medium",
+    });
+
+    if (!validation.valid) {
+      renderEmpty(container, "暂无可靠动态图示，可查看文字解析。");
+      return;
+    }
+
+    const pathPoints = getDynamicPathPoints(spec);
+
+    if (pathPoints.length < 2) {
+      renderEmpty(container, "暂无可靠动态图示，可查看文字解析。");
+      return;
+    }
+
+    const wrapper = createHtmlElement("div", "dynamic-point-board");
+    const canvas = document.createElement("canvas");
+    canvas.className = "dynamic-point-canvas";
+    canvas.width = 720;
+    canvas.height = 420;
+    const controls = createHtmlElement("div", "dynamic-point-controls");
+    const slider = document.createElement("input");
+    const status = createHtmlElement("p", "dynamic-point-status");
+    const config = getDynamicSliderConfig(spec);
+    const allPoints = Object.values(spec.points);
+    const bounds = getBounds(allPoints, 0.25);
+    const mapper = createMapper(bounds, canvas.width, canvas.height);
+    let pendingFrame = 0;
+
+    slider.type = "range";
+    slider.min = String(config.min);
+    slider.max = String(config.max);
+    slider.step = String(config.step);
+    slider.value = String(config.value);
+    slider.setAttribute("aria-label", `${config.label} 参数滑块`);
+
+    controls.append(slider, status);
+    wrapper.append(canvas, controls);
+    container.append(wrapper);
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      renderEmpty(container, "暂无可靠动态图示，可查看文字解析。");
+      return;
+    }
+
+    function draw() {
+      pendingFrame = 0;
+      const rawValue = Number(slider.value);
+      const t = (rawValue - config.min) / (config.max - config.min);
+      const clampedT = Math.min(Math.max(t, 0), 1);
+      const movingPoint = {
+        id: "M",
+        label: "M",
+        x: pathPoints[0].x + (pathPoints[1].x - pathPoints[0].x) * clampedT,
+        y: pathPoints[0].y + (pathPoints[1].y - pathPoints[0].y) * clampedT,
+      };
+      const snapTarget = (Array.isArray(spec.snapTargets) ? spec.snapTargets : []).find((target) => {
+        const targetValue = toNumber(target.value);
+        return targetValue !== null && Math.abs(targetValue - rawValue) <= config.step * 4;
+      });
+
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#f8fafc";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      getVisibleObjects(spec, spec.views[0]).forEach((object) => {
+        if (!["segment", "auxiliaryLine"].includes(object.kind)) {
+          return;
+        }
+
+        const [fromId, toId] = getObjectPointIds(object);
+        const from = getPoint(spec, fromId);
+        const to = getPoint(spec, toId);
+
+        if (from && to) {
+          drawCanvasLine(context, mapper, from, to, {
+            dashed: object.kind === "auxiliaryLine" || object.role === "auxiliary",
+            color: object.role === "highlight" ? "#f59e0b" : "#2563eb",
+          });
+        }
+      });
+
+      Object.values(spec.points).forEach((point) => drawCanvasPoint(context, mapper, point));
+      drawCanvasPoint(context, mapper, movingPoint, {
+        color: snapTarget ? "#f59e0b" : "#16a34a",
+        radius: snapTarget ? 6 : 5,
+      });
+
+      status.textContent = snapTarget
+        ? `${config.label} = ${rawValue.toFixed(3)}，已靠近关键位置：${snapTarget.label || snapTarget.id || "目标"}`
+        : `${config.label} = ${rawValue.toFixed(3)}，拖动滑块观察动点变化。`;
+    }
+
+    function scheduleDraw() {
+      if (!pendingFrame) {
+        pendingFrame = requestAnimationFrame(draw);
+      }
+    }
+
+    slider.addEventListener("input", scheduleDraw);
+    scheduleDraw();
   }
 
   function renderStepControls(container, spec) {
@@ -951,7 +1218,7 @@
     container.append(createHtmlElement("p", "visualization-empty", message));
   }
 
-  function renderVisualization(container, rawSpec) {
+  function renderVisualization(container, rawSpec, options = {}) {
     container.replaceChildren();
 
     try {
@@ -970,8 +1237,8 @@
       if (spec.type === "function_graph") {
         renderFunctionGraph(board, spec);
       } else if (spec.type === "geometry") {
-        renderGeometry(board, spec);
-      } else if (spec.type === "dynamic_point") {
+        renderGeometry(board, spec, options);
+      } else if (["dynamic_point", "trajectory", "max_value"].includes(spec.type)) {
         renderDynamicPoint(board, spec);
       } else if (spec.type === "equation_balance") {
         renderEquationBalance(board, spec);
@@ -986,9 +1253,14 @@
     }
   }
 
+  function renderView(container, rawSpec, viewId) {
+    renderVisualization(container, rawSpec, { viewId });
+  }
+
   global.MathVisualization = {
     render: renderVisualization,
     renderVisualization,
+    renderView,
     normalizeVisualizationSpec,
     validateGeometrySpec,
     renderGeometry,

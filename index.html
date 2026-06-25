@@ -204,7 +204,11 @@
                 </div>
               </section>
 
-              <section class="model-picker" aria-labelledby="model-picker-title">
+              <details class="model-picker" id="model-picker-details">
+                <summary class="model-picker-summary">
+                  <span class="model-picker-label">AI 模型</span>
+                  <strong id="model-picker-current">当前：自动推荐 · 检测中</strong>
+                </summary>
                 <h2 id="model-picker-title">选择 AI 模型</h2>
                 <input id="model-select" type="hidden" value="auto" />
                 <input id="vision-provider-select" type="hidden" value="auto" />
@@ -227,10 +231,10 @@
                   </button>
                   <button class="model-card" type="button" data-model-provider="gemini">
                     <strong>Gemini</strong>
-                    <span>适合多模态理解</span>
+                    <span>适合图文理解</span>
                   </button>
                 </div>
-              </section>
+              </details>
             </div>
 
             <div class="generate-area" id="text-generate-area">
@@ -316,7 +320,7 @@
               </article>
             </section>
 
-            <details class="advanced-result-preview">
+            <details class="advanced-result-preview" hidden aria-hidden="true">
               <summary>高级预览 / 源码</summary>
 
               <div class="result-toolbar">

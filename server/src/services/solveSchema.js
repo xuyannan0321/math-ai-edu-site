@@ -123,6 +123,8 @@ function normalizeSteps(value) {
       return {
         title: asString(step.title, `步骤 ${index + 1}`),
         content: asString(step.content || step.explanation || step.text),
+        thought: asString(step.thought || step.idea || step.method),
+        diagramViewId: asString(step.diagramViewId || step.viewId || step.view),
       };
     })
     .filter((step) => step && step.content);

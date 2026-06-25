@@ -141,6 +141,14 @@ const MODEL_PROVIDER_CONFIG = Object.freeze({
   gemini: { solveProvider: "gemini", visionProvider: "gemini-vision" },
 });
 
+const MODEL_PROVIDER_LABELS = Object.freeze({
+  auto: "自动推荐",
+  dashscope: "阿里通义 Qwen",
+  deepseek: "DeepSeek",
+  openai: "GPT",
+  gemini: "Gemini",
+});
+
 const VISUALIZATION_KIND_LABELS = Object.freeze({
   point: "点",
   segment: "线段",
@@ -198,6 +206,22 @@ const state = {
   currentHtmlResult: "",
   currentLibraryType: null,
   modelStatuses: {},
+  cloudLibraries: {
+    original: {
+      items: [],
+      total: 0,
+      loading: false,
+      loaded: false,
+      error: "",
+    },
+    strategy: {
+      items: [],
+      total: 0,
+      loading: false,
+      loaded: false,
+      error: "",
+    },
+  },
   filePreviewUrl: null,
   previewReturnFocus: null,
   pendingFullBackup: null,
@@ -226,6 +250,7 @@ function cacheElements() {
   elements.generateButtonText = document.querySelector("#generate-button-text");
   elements.modelSelect = document.querySelector("#model-select");
   elements.visionProviderSelect = document.querySelector("#vision-provider-select");
+  elements.modelPickerCurrent = document.querySelector("#model-picker-current");
   elements.solveLibraryType = document.querySelector("#solve-library-type");
   elements.aiStatusBadge = document.querySelector("#ai-status-badge");
   elements.instructionInput = document.querySelector("#instruction-input");
@@ -249,6 +274,7 @@ function cacheElements() {
   elements.exportResultWordButton = document.querySelector("#export-result-word");
   elements.exportResultGgbButton = document.querySelector("#export-result-ggb");
   elements.structuredResult = document.querySelector("#structured-result");
+  elements.solutionReadingFlow = document.querySelector("#solution-reading-flow");
   elements.structuredProblemText = document.querySelector("#structured-problem-text");
   elements.visualizationPanel = document.querySelector("#visualization-panel");
   elements.structuredKnowledgePoints = document.querySelector("#structured-knowledge-points");
@@ -406,8 +432,10 @@ function switchPage(pageId) {
 
   if (pageId === "original-library") {
     renderLibraryList("original");
+    refreshCloudLibrary("original", { force: true });
   } else if (pageId === "strategy") {
     renderLibraryList("strategy");
+    refreshCloudLibrary("strategy", { force: true });
   } else if (pageId === "profile") {
     renderProfileRecentItems();
   }
@@ -543,6 +571,11 @@ function switchResultView(viewName) {
   const isPreview = viewName === "preview";
 
   state.activeView = isPreview ? "preview" : "code";
+
+  if (!elements.previewView || !elements.codeView) {
+    return;
+  }
+
   elements.previewView.hidden = !isPreview;
   elements.codeView.hidden = isPreview;
 
@@ -700,6 +733,13 @@ async function submitAuth(mode) {
     storeAuthToken(data.token);
     state.currentUser = data.user;
     renderAuthState();
+    invalidateCloudLibrary("original");
+    invalidateCloudLibrary("strategy");
+    if (state.activePage === "original-library") {
+      refreshCloudLibrary("original", { force: true });
+    } else if (state.activePage === "strategy") {
+      refreshCloudLibrary("strategy", { force: true });
+    }
     elements.authPassword.value = "";
     showToast(mode === "register" ? "注册成功，已自动登录。" : "登录成功。");
   } catch (error) {
@@ -736,11 +776,20 @@ async function loadCurrentUser(silent = false) {
 function logoutCurrentUser() {
   clearAuthToken();
   state.currentUser = null;
+  state.cloudLibraries.original = { items: [], total: 0, loading: false, loaded: false, error: "" };
+  state.cloudLibraries.strategy = { items: [], total: 0, loading: false, loaded: false, error: "" };
   renderAuthState();
+  if (state.activePage === "original-library") {
+    renderLibraryList("original");
+  } else if (state.activePage === "strategy") {
+    renderLibraryList("strategy");
+  }
   showToast("已退出登录。");
 }
 
 function renderMockReport() {
+  state.currentHtmlResult = MOCK_REPORT_HTML;
+  return;
   elements.resultCode.value = MOCK_REPORT_HTML;
   elements.resultIframe.srcdoc = MOCK_REPORT_HTML;
   elements.previewPlaceholder.hidden = true;
@@ -751,6 +800,7 @@ function renderMockReport() {
 function renderAiHtmlResult(htmlResult) {
   const safeHtmlResult = htmlResult || "";
   state.currentHtmlResult = safeHtmlResult;
+  return;
   elements.resultCode.value = safeHtmlResult || "// 暂无解析页面源码。";
   elements.resultIframe.srcdoc = safeHtmlResult;
   elements.previewPlaceholder.hidden = true;
@@ -890,7 +940,7 @@ function createVisualizationFallback(result) {
     };
 }
 
-function renderStructuredResult(result) {
+function renderStructuredResultLegacy(result) {
   state.currentSolveResult = result || null;
 
   if (!result) {
@@ -917,6 +967,210 @@ function renderStructuredResult(result) {
   }
 
   elements.structuredResult.hidden = false;
+}
+
+function createReadingCard(className, titleText, bodyText = "") {
+  const card = document.createElement("article");
+  card.className = `solution-reading-card ${className || ""}`.trim();
+
+  const title = document.createElement("h2");
+  title.textContent = titleText;
+  card.append(title);
+
+  if (bodyText) {
+    const body = document.createElement("p");
+    body.textContent = bodyText;
+    card.append(body);
+  }
+
+  return card;
+}
+
+function createReadingList(items, emptyText) {
+  const list = document.createElement("ul");
+  const values = Array.isArray(items) ? items : [];
+
+  if (!values.length) {
+    const item = document.createElement("li");
+    item.textContent = emptyText;
+    list.append(item);
+    return list;
+  }
+
+  values.forEach((value) => {
+    const item = document.createElement("li");
+    item.textContent = String(value || "");
+    list.append(item);
+  });
+
+  return list;
+}
+
+function getVisualizationViews(spec) {
+  return Array.isArray(spec?.views) ? spec.views.filter((view) => view && view.id) : [];
+}
+
+function findVisualizationView(spec, viewId) {
+  if (!viewId) {
+    return null;
+  }
+
+  return getVisualizationViews(spec).find((view) => view.id === viewId) || null;
+}
+
+function isDynamicVisualizationSpec(spec) {
+  return spec?.type === "dynamic_point" || spec?.type === "trajectory" || spec?.type === "max_value";
+}
+
+function appendVisualizationForView(container, spec, viewId, fallbackTitle = "图示") {
+  const panel = document.createElement("div");
+  panel.className = "solution-card-diagram";
+  const view = findVisualizationView(spec, viewId);
+  const title = document.createElement("h3");
+  title.textContent = view?.title || fallbackTitle;
+  panel.append(title);
+
+  const board = document.createElement("div");
+  board.className = "solution-card-diagram-board";
+  panel.append(board);
+  container.append(panel);
+
+  if (window.MathVisualization?.renderView && viewId) {
+    window.MathVisualization.renderView(board, spec, viewId);
+  } else if (window.MathVisualization?.render) {
+    window.MathVisualization.render(board, spec);
+  } else {
+    board.textContent = "暂无可靠图示，可查看文字解析。";
+  }
+}
+
+function appendStepContent(card, step) {
+  const thought = step?.thought || step?.idea || step?.method;
+
+  if (thought) {
+    const thoughtBox = document.createElement("p");
+    thoughtBox.className = "solution-step-thought";
+    thoughtBox.textContent = `思路：${thought}`;
+    card.append(thoughtBox);
+  }
+
+  const content = document.createElement("p");
+  content.textContent = step?.content || step?.explanation || "暂无完整步骤。";
+  card.append(content);
+}
+
+function getStepDiagramViewId(step, views, index) {
+  const explicitId = step?.diagramViewId || step?.viewId || step?.view;
+
+  if (explicitId && findVisualizationView({ views }, explicitId)) {
+    return explicitId;
+  }
+
+  const nonOriginalViews = views.filter((view) => view.id !== "original");
+  return nonOriginalViews[index]?.id || null;
+}
+
+function appendQualityCheck(flow, qualityCheck) {
+  const card = createReadingCard("is-quality", "质量检查");
+  const confidence = qualityCheck?.confidence || "medium";
+  const status = document.createElement("p");
+  status.textContent =
+    confidence === "high"
+      ? "已通过结构化校验。"
+      : "已完成结构化校验，复杂压轴题建议教师复核。";
+  card.append(status, createReadingList(qualityCheck?.issues, "暂无明显问题。"));
+  flow.append(card);
+}
+
+function renderStructuredResult(result) {
+  state.currentSolveResult = result || null;
+
+  if (!result) {
+    elements.structuredResult.hidden = true;
+    return;
+  }
+
+  const flow = document.createElement("div");
+  flow.className = "solution-reading-flow";
+  flow.id = "solution-reading-flow";
+  const visualizationSpec = hasRenderableVisualizationSpec(result.visualizationSpec)
+    ? result.visualizationSpec
+    : createVisualizationFallback(result);
+  const views = getVisualizationViews(visualizationSpec);
+  const originalView = findVisualizationView(visualizationSpec, "original");
+
+  const originalCard = createReadingCard(
+    "is-original",
+    "原题复现",
+    result.problemText || "暂无题目文本。",
+  );
+  if (originalView) {
+    appendVisualizationForView(originalCard, visualizationSpec, "original", "原题图");
+  }
+  flow.append(originalCard);
+
+  const knowledgeCard = createReadingCard("is-knowledge", "考点");
+  knowledgeCard.append(createReadingList(result.knowledgePoints, "暂无明确考点。"));
+  flow.append(knowledgeCard);
+
+  if (result.analysis) {
+    flow.append(createReadingCard("is-analysis", "题意分析", result.analysis));
+  }
+
+  const steps = Array.isArray(result.steps) ? result.steps : [];
+  if (steps.length) {
+    steps.forEach((step, index) => {
+      const card = createReadingCard("is-question-step", `第 ${index + 1} 问解析`);
+      const stepTitle = document.createElement("h3");
+      stepTitle.textContent = step.title || `第 ${index + 1} 问`;
+      card.append(stepTitle);
+      appendStepContent(card, step);
+
+      const viewId = getStepDiagramViewId(step, views, index);
+      if (viewId) {
+        appendVisualizationForView(card, visualizationSpec, viewId, "本问图示");
+      }
+
+      flow.append(card);
+    });
+  } else {
+    flow.append(createReadingCard("is-question-step", "分步解析", "暂无完整步骤。"));
+  }
+
+  if (isDynamicVisualizationSpec(visualizationSpec)) {
+    const dynamicCard = createReadingCard("is-dynamic", "动态探索白板");
+    appendVisualizationForView(dynamicCard, visualizationSpec, "", "动态图示");
+    flow.append(dynamicCard);
+  } else if (!originalView && !steps.some((step, index) => getStepDiagramViewId(step, views, index))) {
+    const fallbackCard = createReadingCard("is-diagram", "本题图示");
+    appendVisualizationForView(fallbackCard, visualizationSpec, "", "图示讲解");
+    flow.append(fallbackCard);
+  }
+
+  const deepCard = createReadingCard(
+    "is-depth",
+    "考法深度破译",
+    result.topic
+      ? `本题核心模型：${result.topic}。重点不是背答案，而是抓住条件、关系和检验。`
+      : "本题建议按“读条件—建关系—分步算—回代验”的节奏完成。",
+  );
+  flow.append(deepCard);
+
+  flow.append(createReadingCard("is-answer", "最终答案", result.finalAnswer || "暂无最终答案。"));
+
+  const mistakeCard = createReadingCard("is-warning", "易错提醒");
+  mistakeCard.append(createReadingList(result.commonMistakes, "暂无易错提醒。"));
+  flow.append(mistakeCard);
+
+  flow.append(createReadingCard("is-verification", "验算检查", result.verification || "暂无验算检查。"));
+  appendQualityCheck(flow, result.qualityCheck);
+
+  elements.structuredResult.replaceChildren(flow);
+  elements.structuredResult.hidden = false;
+
+  if (window.MathJax?.typesetPromise) {
+    window.MathJax.typesetPromise([elements.structuredResult]).catch(() => {});
+  }
 }
 
 function showResultActions(recordId) {
@@ -990,24 +1244,73 @@ function getModelStatus(provider) {
   return state.modelStatuses[provider] || null;
 }
 
-function isProviderAvailableForCurrentMode(provider) {
+function getProviderCapability(provider) {
   if (provider === "auto") {
-    return true;
+    return {
+      label: "可用",
+      available: true,
+      badgeClass: "is-available",
+      message: "系统会优先选择当前可用模型",
+    };
   }
 
   const status = getModelStatus(provider);
 
   if (!status) {
-    return true;
+    return {
+      label: "检测中",
+      available: true,
+      badgeClass: "is-checking",
+      message: "正在检测模型配置状态",
+    };
   }
 
-  if (state.activeSolveMode === "image") {
-    const providerConfig = MODEL_PROVIDER_CONFIG[provider];
-    const usesAutoVision = providerConfig?.visionProvider === "auto";
-    return Boolean(status.textConfigured && (usesAutoVision || status.visionConfigured));
+  const textConfigured = Boolean(status.textConfigured);
+  const visionConfigured = Boolean(status.visionConfigured);
+
+  if (textConfigured && visionConfigured) {
+    return {
+      label: "支持图文",
+      available: true,
+      badgeClass: "is-available",
+      message: "当前模型支持文字解析和图片识题",
+    };
   }
 
-  return Boolean(status.textConfigured);
+  if (textConfigured) {
+    return {
+      label: "仅文字",
+      available: state.activeSolveMode !== "image",
+      badgeClass: "is-text-only",
+      message: state.activeSolveMode === "image"
+        ? "当前模型暂不支持图片识别，请使用自动推荐或切换其他模型。"
+        : status.message || "当前模型可用于文字解题",
+    };
+  }
+
+  if (visionConfigured) {
+    return {
+      label: "未配置",
+      available: false,
+      badgeClass: "is-unavailable",
+      message: state.activeSolveMode === "image"
+        ? "当前模型文字解析未配置，请使用自动推荐或切换其他模型。"
+        : status.message || "当前模型文字解析未配置",
+    };
+  }
+
+  return {
+    label: "未配置",
+    available: false,
+    badgeClass: "is-unavailable",
+    message: state.activeSolveMode === "image"
+      ? status.visionMessage || "当前模型暂不支持图片识别，请使用自动推荐或切换其他模型。"
+      : status.message || "当前模型未配置",
+  };
+}
+
+function isProviderAvailableForCurrentMode(provider) {
+  return getProviderCapability(provider).available;
 }
 
 function ensureModelStatusBadge(button) {
@@ -1023,42 +1326,34 @@ function ensureModelStatusBadge(button) {
   return statusBadge;
 }
 
+function updateModelPickerSummary() {
+  if (!elements.modelPickerCurrent) {
+    return;
+  }
+
+  const provider = state.selectedModelProvider || "auto";
+  const label = MODEL_PROVIDER_LABELS[provider] || MODEL_PROVIDER_LABELS.auto;
+  const capability = getProviderCapability(provider);
+
+  elements.modelPickerCurrent.textContent = `当前：${label} · ${capability.label}`;
+}
+
 function renderModelStatuses() {
   elements.modelButtons.forEach((button) => {
     const provider = button.dataset.modelProvider;
     const statusBadge = ensureModelStatusBadge(button);
+    const capability = getProviderCapability(provider);
+    const available = capability.available;
 
-    if (provider === "auto") {
-      button.classList.add("is-available");
-      button.classList.remove("is-unavailable");
-      statusBadge.textContent = "自动推荐";
-      button.title = "自动选择当前可用模型";
-      return;
-    }
-
-    const status = getModelStatus(provider);
-
-    if (!status) {
-      button.classList.remove("is-available", "is-unavailable");
-      statusBadge.textContent = "检测中";
-      button.title = "正在检测模型配置状态";
-      return;
-    }
-
-    const available = isProviderAvailableForCurrentMode(provider);
     button.classList.toggle("is-available", available);
     button.classList.toggle("is-unavailable", !available);
-    statusBadge.textContent = available ? "可用" : "未配置";
-    button.title = available
-      ? "当前模型可用于本模式"
-      : "当前模型暂不可用，请使用自动推荐或切换其他模型";
-
-    if (!available) {
-      button.title = state.activeSolveMode === "image"
-        ? status.visionMessage || status.message || button.title
-        : status.message || button.title;
-    }
+    button.classList.toggle("is-text-only", capability.badgeClass === "is-text-only");
+    button.classList.toggle("is-checking", capability.badgeClass === "is-checking");
+    statusBadge.className = `model-card-status ${capability.badgeClass}`;
+    statusBadge.textContent = capability.label;
+    button.title = capability.message;
   });
+  updateModelPickerSummary();
 }
 
 async function refreshModelStatuses() {
@@ -1078,9 +1373,10 @@ async function refreshModelStatuses() {
 
 function selectModelProvider(provider) {
   const nextProvider = MODEL_PROVIDER_CONFIG[provider] ? provider : "auto";
+  const capability = getProviderCapability(nextProvider);
 
-  if (!isProviderAvailableForCurrentMode(nextProvider)) {
-    showToast("当前模型暂不可用，请使用自动推荐或切换其他模型。");
+  if (!capability.available) {
+    showToast(capability.message || "当前模型暂不可用，请使用自动推荐或切换其他模型。");
     renderModelStatuses();
     return;
   }
@@ -1094,6 +1390,12 @@ function selectModelProvider(provider) {
     button.classList.toggle("is-active", button.dataset.modelProvider === nextProvider);
   });
   renderModelStatuses();
+
+  const picker = document.querySelector("#model-picker-details");
+
+  if (picker) {
+    picker.open = false;
+  }
 }
 
 function getFriendlyAiError(error) {
@@ -1116,6 +1418,7 @@ async function saveCurrentRecordToLibrary(libraryType) {
       body: JSON.stringify({ libraryType }),
     });
     state.currentLibraryType = libraryType;
+    invalidateCloudLibrary(libraryType);
     showResultActions(state.currentSolveRecordId);
     showToast(libraryType === "strategy" ? "已保存到策略库。" : "已保存到原创题库。");
   } catch (error) {
@@ -1177,6 +1480,90 @@ function exportCurrentRecordGgb() {
     `/api/solve-records/${state.currentSolveRecordId}/export/ggb`,
     `math-solution-record-${state.currentSolveRecordId}-geogebra.xml`,
   );
+}
+
+function invalidateCloudLibrary(targetLibrary) {
+  if (!state.cloudLibraries[targetLibrary]) {
+    return;
+  }
+
+  state.cloudLibraries[targetLibrary].loaded = false;
+}
+
+async function refreshCloudLibrary(targetLibrary, { force = false } = {}) {
+  const cloudState = state.cloudLibraries[targetLibrary];
+
+  if (!cloudState || !state.currentUser || !state.authToken) {
+    return;
+  }
+
+  if (cloudState.loading || (cloudState.loaded && !force)) {
+    return;
+  }
+
+  cloudState.loading = true;
+  cloudState.error = "";
+  renderLibraryList(targetLibrary);
+
+  try {
+    const query = new URLSearchParams({
+      libraryType: targetLibrary,
+      page: "1",
+      pageSize: "50",
+    });
+    const data = await requestApi(`/api/solve-records?${query.toString()}`);
+    cloudState.items = Array.isArray(data.items) ? data.items : [];
+    cloudState.total = Number(data.total || cloudState.items.length);
+    cloudState.loaded = true;
+  } catch (error) {
+    cloudState.items = [];
+    cloudState.total = 0;
+    cloudState.error = error.message || "云端题库读取失败，请稍后重试。";
+    cloudState.loaded = true;
+    showToast(cloudState.error);
+  } finally {
+    cloudState.loading = false;
+    renderLibraryList(targetLibrary);
+  }
+}
+
+async function openCloudRecordDetail(recordId, triggerButton) {
+  if (!recordId) {
+    showToast("云端记录 ID 不正确，请刷新后重试。");
+    return;
+  }
+
+  if (triggerButton) {
+    triggerButton.disabled = true;
+  }
+
+  try {
+    const data = await requestApi(`/api/solve-records/${recordId}`);
+    state.currentSolveRecordId = data.recordId || data.id || recordId;
+    state.currentLibraryType = data.libraryType || null;
+    state.currentHtmlResult = data.htmlResult || data.sourceCode || "";
+    renderStructuredResult(data.result);
+    showResultActions(state.currentSolveRecordId);
+    switchPage("workspace");
+    showToast("已打开云端解析详情。");
+  } catch (error) {
+    showToast(error.message || "云端记录详情读取失败，请稍后重试。");
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+    }
+  }
+}
+
+function downloadCloudRecordExport(recordId, exportType) {
+  state.currentSolveRecordId = recordId;
+  showResultActions(recordId);
+
+  if (exportType === "word") {
+    exportCurrentRecordWord();
+  } else {
+    exportCurrentRecordGgb();
+  }
 }
 
 async function submitTextSolution(questionText, {
@@ -2388,6 +2775,61 @@ function createRecordMeta(item) {
   return meta;
 }
 
+function createCloudActionButton(action, label, record, extraClass = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `library-action-button ${extraClass}`.trim();
+  button.dataset.cloudAction = action;
+  button.dataset.recordId = record.id;
+  button.textContent = label;
+  button.setAttribute("aria-label", `${label}：${record.title || "云端解析记录"}`);
+  return button;
+}
+
+function createCloudRecordMeta(record) {
+  const meta = document.createElement("div");
+  meta.className = "library-card-meta";
+  meta.append(
+    createTextElement("span", "library-meta-pill is-blue", record.subject || "数学"),
+    createTextElement("span", "library-meta-pill", record.gradeLevel || "年级未填写"),
+    createTextElement("span", "library-meta-pill", record.questionType || "题型未填写"),
+    createTextElement("span", "library-meta-pill", record.topic || "考点待识别"),
+  );
+
+  if (record.hasVisualization) {
+    meta.append(createTextElement("span", "library-meta-pill has-visualization", "含图示"));
+  }
+
+  return meta;
+}
+
+function createCloudLibraryCard(record, targetLibrary) {
+  const card = document.createElement("article");
+  card.className = "library-card cloud-record-card";
+
+  const main = document.createElement("div");
+  main.className = "cloud-record-main";
+  main.append(
+    createTextElement("span", "cloud-record-kicker", targetLibrary === "strategy" ? "云端策略" : "云端原创"),
+    createTextElement("h2", "library-card-title", record.title || "未命名 AI 解析"),
+    createCloudRecordMeta(record),
+    createTextElement("p", "cloud-record-problem", record.problemText || "暂无原题文本。"),
+    createTextElement("p", "cloud-record-answer", record.finalAnswer ? `答案：${record.finalAnswer}` : "答案待查看详情"),
+    createTextElement("time", "library-card-time", `创建于 ${formatCreatedAt(record.createdAt)}`),
+  );
+
+  const actions = document.createElement("div");
+  actions.className = "library-card-actions cloud-record-actions";
+  actions.append(
+    createCloudActionButton("view", "查看", record, "is-primary"),
+    createCloudActionButton("word", "导出 Word", record),
+    createCloudActionButton("ggb", "导出 GGB", record),
+  );
+
+  card.append(main, actions);
+  return card;
+}
+
 function createOriginalLibraryCard(item) {
   const card = document.createElement("article");
   card.className = "library-card original-record-card";
@@ -2512,6 +2954,10 @@ function createLibrarySearchText(item) {
     item.city,
     item.questionType,
     item.school,
+    item.problemText,
+    item.topic,
+    item.gradeLevel,
+    item.finalAnswer,
   ]
     .filter((value) => typeof value === "string")
     .join(" ")
@@ -2680,6 +3126,71 @@ function updateLibraryEmptyActions(targetLibrary, isFiltered) {
   resetButton.hidden = !isFiltered;
 }
 
+function filterCloudItems(targetLibrary, items) {
+  return targetLibrary === "strategy" ? filterStrategyItems(items) : filterOriginalItems(items);
+}
+
+function createLibrarySectionTitle(title, description = "") {
+  const section = document.createElement("div");
+  section.className = "library-section-title";
+  section.append(createTextElement("h3", "", title));
+
+  if (description) {
+    section.append(createTextElement("p", "", description));
+  }
+
+  return section;
+}
+
+function appendCloudLibrarySection(list, targetLibrary) {
+  const cloudState = state.cloudLibraries[targetLibrary];
+
+  if (!state.currentUser || !state.authToken) {
+    list.append(
+      createLibrarySectionTitle(
+        "云端题库",
+        targetLibrary === "strategy"
+          ? "未登录时显示本地策略库；登录后可查看数据库中的云端策略记录。"
+          : "未登录时显示本地原创题；登录后可查看数据库中的云端原创记录。",
+      ),
+    );
+    return 0;
+  }
+
+  list.append(createLibrarySectionTitle("云端题库", "来自云端账号题库，仅显示当前登录用户自己的记录。"));
+
+  if (cloudState.loading) {
+    list.append(createTextElement("p", "library-cloud-message", "正在读取云端题库..."));
+    return 0;
+  }
+
+  if (cloudState.error) {
+    list.append(createTextElement("p", "library-cloud-message is-error", cloudState.error));
+    return 0;
+  }
+
+  const cloudItems = filterCloudItems(targetLibrary, cloudState.items);
+
+  if (!cloudItems.length) {
+    list.append(
+      createTextElement(
+        "p",
+        "library-cloud-message",
+        targetLibrary === "strategy"
+          ? "还没有云端策略。去工作台生成解析后点击“保存到策略库”。"
+          : "还没有云端原创题。去工作台生成解析后点击“保存到原创题库”。",
+      ),
+    );
+    return 0;
+  }
+
+  cloudItems.forEach((record) => {
+    list.append(createCloudLibraryCard(record, targetLibrary));
+  });
+
+  return cloudItems.length;
+}
+
 function renderLibraryList(targetLibrary) {
   const storedItems = readLibraryItems(targetLibrary, true) || [];
   const items =
@@ -2689,8 +3200,15 @@ function renderLibraryList(targetLibrary) {
   const { list, empty } = getLibraryElements(targetLibrary);
 
   list.replaceChildren();
-  list.hidden = items.length === 0;
-  empty.hidden = items.length > 0;
+  const cloudDisplayedCount = appendCloudLibrarySection(list, targetLibrary);
+  list.append(
+    createLibrarySectionTitle(
+      "本地 / 离线数据",
+      "这些记录仍保存在当前浏览器 localStorage，可继续导入、导出和备份。",
+    ),
+  );
+  list.hidden = false;
+  empty.hidden = true;
 
   if (targetLibrary === "original") {
     elements.originalLocalCount.textContent = `${storedItems.length} 道`;
@@ -2709,6 +3227,12 @@ function renderLibraryList(targetLibrary) {
       ? "当前筛选条件没有匹配记录，可以重置筛选后查看全部策略页。"
       : "前往源码建站创建第一份策略页，或导入已有 JSON 备份。";
     updateLibraryEmptyActions("strategy", isFiltered);
+  }
+
+  if (targetLibrary === "original") {
+    elements.originalResultCount.textContent = `共 ${cloudDisplayedCount + items.length} 条`;
+  } else {
+    elements.strategyResultCount.textContent = `${cloudDisplayedCount + items.length}套`;
   }
 
   items.forEach((item) => {
@@ -2849,6 +3373,28 @@ function deleteLibraryItem(targetLibrary, item) {
 }
 
 function handleLibraryAction(event) {
+  const cloudButton = event.target.closest("[data-cloud-action]");
+
+  if (cloudButton) {
+    const recordId = Number.parseInt(cloudButton.dataset.recordId, 10);
+    const action = cloudButton.dataset.cloudAction;
+
+    if (!Number.isFinite(recordId) || recordId <= 0) {
+      showToast("云端记录 ID 不正确，请刷新后重试。");
+      return;
+    }
+
+    if (action === "view") {
+      openCloudRecordDetail(recordId, cloudButton);
+    } else if (action === "word") {
+      downloadCloudRecordExport(recordId, "word");
+    } else if (action === "ggb") {
+      downloadCloudRecordExport(recordId, "ggb");
+    }
+
+    return;
+  }
+
   const button = event.target.closest("[data-library-action]");
 
   if (!button) {

@@ -47,40 +47,47 @@ function getVisionMessage(config, displayName, supportsVision = true) {
   return `${displayName} 视觉模型暂不可用`;
 }
 
+function buildProviderStatus({
+  id,
+  name,
+  config,
+  supportsVision = true,
+}) {
+  return {
+    id,
+    name,
+    textConfigured: isTextConfigured(config),
+    visionConfigured: supportsVision ? isVisionConfigured(config) : false,
+    textModel: config.model || "",
+    visionModel: supportsVision ? config.visionModel || "" : "",
+    message: getTextMessage(config, name),
+    visionMessage: getVisionMessage(config, name, supportsVision),
+  };
+}
+
 router.get("/models/status", (req, res) => {
   const providers = [
-    {
+    buildProviderStatus({
       id: "dashscope",
       name: "阿里通义 Qwen",
-      textConfigured: isTextConfigured(env.ai.dashscope),
-      visionConfigured: isVisionConfigured(env.ai.dashscope),
-      message: getTextMessage(env.ai.dashscope, "阿里通义 Qwen"),
-      visionMessage: getVisionMessage(env.ai.dashscope, "阿里通义 Qwen"),
-    },
-    {
+      config: env.ai.dashscope,
+    }),
+    buildProviderStatus({
       id: "deepseek",
       name: "DeepSeek",
-      textConfigured: isTextConfigured(env.ai.deepseek),
-      visionConfigured: false,
-      message: getTextMessage(env.ai.deepseek, "DeepSeek"),
-      visionMessage: getVisionMessage(env.ai.deepseek, "DeepSeek", false),
-    },
-    {
+      config: env.ai.deepseek,
+      supportsVision: false,
+    }),
+    buildProviderStatus({
       id: "openai",
       name: "GPT",
-      textConfigured: isTextConfigured(env.ai.openai),
-      visionConfigured: isVisionConfigured(env.ai.openai),
-      message: getTextMessage(env.ai.openai, "GPT"),
-      visionMessage: getVisionMessage(env.ai.openai, "GPT"),
-    },
-    {
+      config: env.ai.openai,
+    }),
+    buildProviderStatus({
       id: "gemini",
       name: "Gemini",
-      textConfigured: isTextConfigured(env.ai.gemini),
-      visionConfigured: isVisionConfigured(env.ai.gemini),
-      message: getTextMessage(env.ai.gemini, "Gemini"),
-      visionMessage: getVisionMessage(env.ai.gemini, "Gemini"),
-    },
+      config: env.ai.gemini,
+    }),
   ];
 
   res.json({

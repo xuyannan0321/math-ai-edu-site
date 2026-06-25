@@ -99,6 +99,136 @@ function normalizeRecord(row) {
   };
 }
 
+function clampPageNumber(value, fallback = 1) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : fallback;
+}
+
+function clampPageSize(value, fallback = 20) {
+  const number = Number(value);
+
+  if (!Number.isSafeInteger(number) || number <= 0) {
+    return fallback;
+  }
+
+  return Math.min(number, 50);
+}
+
+function createBadRequest(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
+
+function normalizeUserId(value) {
+  const number = Number(value);
+
+  if (!Number.isSafeInteger(number) || number <= 0) {
+    throw createBadRequest("用户身份信息不正确，请重新登录。");
+  }
+
+  return number;
+}
+
+function normalizeLibraryType(value) {
+  const libraryType = String(value || "").trim();
+
+  if (!["original", "strategy"].includes(libraryType)) {
+    throw createBadRequest("题库类型只能是 original 或 strategy。");
+  }
+
+  return libraryType;
+}
+
+function assertSafeLimitOffset(limit, offset) {
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit <= 0 ||
+    limit > 50 ||
+    !Number.isSafeInteger(offset) ||
+    offset < 0
+  ) {
+    throw createBadRequest("分页参数不正确，请刷新后重试。");
+  }
+}
+
+async function listSolveRecordsForUser({
+  userId,
+  libraryType,
+  keyword = "",
+  questionType = "",
+  subject = "",
+  page = 1,
+  pageSize = 20,
+}) {
+  const safeUserId = normalizeUserId(userId);
+  const safeLibraryType = normalizeLibraryType(libraryType);
+  const safePage = clampPageNumber(page);
+  const safePageSize = clampPageSize(pageSize);
+  const offset = (safePage - 1) * safePageSize;
+  assertSafeLimitOffset(safePageSize, offset);
+  const where = [
+    "user_id = :userId",
+    "library_type = :libraryType",
+    "deleted_at IS NULL",
+  ];
+  const params = {
+    userId: safeUserId,
+    libraryType: safeLibraryType,
+  };
+
+  const trimmedKeyword = String(keyword || "").trim();
+  const trimmedQuestionType = String(questionType || "").trim();
+  const trimmedSubject = String(subject || "").trim();
+
+  if (trimmedKeyword) {
+    where.push(
+      `(title LIKE :keywordLike
+        OR problem_text LIKE :keywordLike
+        OR subject LIKE :keywordLike
+        OR topic LIKE :keywordLike
+        OR question_type LIKE :keywordLike
+        OR final_answer LIKE :keywordLike)`,
+    );
+    params.keywordLike = `%${trimmedKeyword}%`;
+  }
+
+  if (trimmedQuestionType) {
+    where.push("question_type = :questionType");
+    params.questionType = trimmedQuestionType;
+  }
+
+  if (trimmedSubject) {
+    where.push("subject = :subject");
+    params.subject = trimmedSubject;
+  }
+
+  const whereSql = where.join(" AND ");
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(*) AS total
+       FROM solve_records
+      WHERE ${whereSql}`,
+    params,
+  );
+  const [rows] = await pool.execute(
+    `SELECT id, title, problem_text, grade_level, subject, topic, knowledge_points,
+            final_answer, library_type, publish_status, is_favorite, visualization_spec,
+            question_type, created_at
+       FROM solve_records
+      WHERE ${whereSql}
+      ORDER BY created_at DESC
+      LIMIT ${safePageSize} OFFSET ${offset}`,
+    params,
+  );
+
+  return {
+    items: rows.map(normalizeRecord),
+    total: Number(countRows[0]?.total || 0),
+    page: safePage,
+    pageSize: safePageSize,
+  };
+}
+
 async function getSolveRecordForUser({ userId, recordId }) {
   const [rows] = await pool.execute(
     `SELECT *
@@ -129,6 +259,7 @@ async function updateSolveRecordLibrary({ userId, recordId, libraryType }) {
 module.exports = {
   createSolveRecord,
   createAttachmentMetadata,
+  listSolveRecordsForUser,
   getSolveRecordForUser,
   updateSolveRecordLibrary,
 };

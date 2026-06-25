@@ -2,7 +2,7 @@
 
 原题真解 Pro 是一个面向学生和教师的数学教育网站项目。项目目标不是只给最终答案，而是帮助使用者理解题意、掌握知识点、查看分步解析、发现易错点，并完成验算检查。
 
-当前项目正在从静态前端升级为真实 AI 大模型解题网站。目前已完成前端基础、后端 API 骨架、阿里云 RDS MySQL、注册登录、JWT 鉴权、真实 AI 文字解题基础版、图片识题 + 解题基础版、明确模型选择、题库保存按钮、Word 可打开文档导出基础版、GeoGebra 图形数据导出基础版，以及 `visualizationSpec` 图示渲染基础能力。真实 AI 调用需要在 `server/.env` 中配置模型 API Key，API Key 不得写入前端。
+当前项目正在从静态前端升级为真实 AI 大模型解题网站。目前已完成前端基础、后端 API 骨架、阿里云 RDS MySQL、注册登录、JWT 鉴权、真实 AI 文字解题基础版、图片识题 + 解题基础版、折叠式模型选择、题库保存按钮、数据库题库读取闭环、Word 可打开文档导出基础版、GeoGebra 图形数据导出基础版，以及 `visualizationSpec` 图示渲染基础能力。真实 AI 调用需要在 `server/.env` 中配置模型 API Key，API Key 不得写入前端。
 
 ## 在线访问
 
@@ -46,12 +46,16 @@ https://xuyannan0321.github.io/math-ai-edu-site/
 26. AI 结果生成后可明确保存到原创题库或策略库；
 27. Word 可打开文档导出基础版；
 28. GeoGebra 图形数据导出基础版；
-29. `visualizationSpec` 前端图示渲染基础能力。
+29. `visualizationSpec` 前端图示渲染基础能力；
+30. 工作台默认结构化阅读，已移除高级预览 / 源码作为普通阅读区；
+31. 解析与图示按“一问一图”贴近对应步骤展示；
+32. 静态图示使用 SVG，动态探索使用 Canvas + 滑块；
+33. 原创题库 / 策略库已支持云端记录和本地记录并存。
 
 仍在后续阶段推进：
 
 - PDF 识题；
-- 数据库题库读取与云端题库管理；
+- 云端题库筛选、收藏、发布状态等高级管理；
 - 真正完整 `.docx` 导出；
 - 复杂 `.ggb` zip 包导出；
 - 真实积分、支付、公开发布和分享系统；
@@ -182,6 +186,11 @@ GEMINI_VISION_MODEL=
 - API Key 只能由后端读取，不能写入前端代码。
 - DashScope / Qwen-VL 使用后端配置接入。
 - GPT 和 Gemini 可以通过后端配置的 Base URL 接入。
+- GPT / Gemini 的 Base URL 通常填写 OpenAI-compatible 中转站地址到 `/v1`，例如 `https://example.com/v1`。
+- 如果误填完整 `/v1/chat/completions`，后端会自动兼容，不会重复拼接 `/chat/completions`。
+- `OPENAI_MODEL` 和 `OPENAI_VISION_MODEL` 分开判断；只配置文字模型不会被误判为支持图片识题。
+- `GEMINI_MODEL` 和 `GEMINI_VISION_MODEL` 分开判断；只配置视觉模型也不会被误判为文字模型可用。
+- 视觉模型必须是支持图片输入的聊天模型；`gpt-image-1`、`gpt-image-2` 等图片生成模型不能用于图片识题。
 - DeepSeek 使用官方接口，当前主要用于文字解题。
 
 ## 数据库说明
@@ -298,7 +307,7 @@ Content-Type: multipart/form-data
 GET /api/models/status
 ```
 
-返回各模型是否已配置文字能力和视觉能力，例如 `textConfigured`、`visionConfigured`。接口不会返回 API Key、Base URL、数据库信息或其他敏感配置。前端只据此显示“可用 / 未配置”，并在用户点击未配置模型时提示切换其他模型或使用自动推荐。
+返回各模型是否已配置文字能力和视觉能力，例如 `textConfigured`、`visionConfigured`、`textModel`、`visionModel`。接口不会返回 API Key、Base URL、数据库信息或其他敏感配置。前端只据此显示“可用 / 未配置 / 检测中 / 仅文字 / 支持图文”，并在用户点击未配置模型时提示切换其他模型或使用自动推荐。
 
 ### 保存记录到题库
 
@@ -417,7 +426,7 @@ Authorization: Bearer <token>
 - Word 可打开文档导出按钮；
 - GeoGebra 图形数据导出按钮；
 - 图示讲解基础渲染；
-- 高级预览 / 源码折叠区；
+- 工作台结构化阅读流（普通用户不再显示高级预览 / 源码切换）；
 - 源码建站；
 - 大尺寸 iframe 本地预览；
 - 原创题库；
@@ -465,7 +474,18 @@ mathAiEduHasSeenWelcomeGuide
 mathAiEduAuthToken
 ```
 
-后续数据库题库读取完成后，会逐步把核心题库数据迁移到后端数据库。目前原创题库和策略库页面仍保留本地数据管理能力。
+当前原创题库和策略库页面已支持登录后读取云端数据库记录，同时继续保留本地 `localStorage` 数据管理能力。云端记录来自后端 `solve_records`，本地记录仍可通过 JSON 导入、导出和完整备份迁移。
+
+## 最新专项整改状态
+
+- 工作台已移除普通用户阅读区中的高级预览 / 源码切换，默认展示结构化解析阅读流。
+- AI 模型选择改为默认折叠卡片，摘要显示当前模型和可用状态。
+- 解析结果按“原题复现、一问一解析一图、动态探索、考法深度破译、答案、易错、验算、质量检查”组织。
+- 静态图示统一由前端 SVG 渲染；动态点、轨迹和最值探索使用 Canvas + 滑块。
+- 保存到原创题库 / 策略库后，登录用户进入对应页面可以读取云端数据库记录。
+- 原创题库 / 策略库支持云端记录和本地记录并存；未登录时仍可查看本地记录。
+- 云端列表接口不会返回 `source_code`；查看详情时才读取完整结构化解析和可选源码字段。
+- 新增云端题库接口：`GET /api/solve-records` 和 `GET /api/solve-records/:id`，均需要 JWT 鉴权且只返回当前用户自己的记录。
 
 ## GitHub Pages 部署
 
@@ -478,7 +498,7 @@ mathAiEduAuthToken
 1. 真实 AI 调用需要在 `server/.env` 中配置对应模型 Key；
 2. Qwen-VL / GPT Vision / Gemini Vision 的实际可用性取决于后端配置；
 3. PDF 识题暂未完成；
-4. 数据库题库读取页面暂未完成；
+4. 云端题库基础读取已完成，高级筛选、收藏、发布状态管理仍需后续增强；
 5. 当前 Word 导出是 Word 可打开文档基础版，不是完整复杂 `.docx`；
 6. 当前 GeoGebra 导出是图形数据基础版，复杂 `.ggb` zip 包暂未完成；
 7. 支付、积分、公开发布、分享仍为后续功能；
