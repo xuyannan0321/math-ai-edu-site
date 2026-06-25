@@ -2811,6 +2811,148 @@ body.is-preview-open {
   background: var(--blue-100);
 }
 
+.profile-quick-actions button.is-danger {
+  color: #b91c1c;
+  background: #fff7f7;
+  border-color: #fecaca;
+}
+
+.profile-quick-actions button.is-danger:hover {
+  color: #ffffff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.profile-auth-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 22px;
+  align-items: start;
+  padding: 22px;
+  margin-bottom: 18px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-auth-card > div:first-child {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.profile-auth-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 14px;
+}
+
+.profile-auth-card h2,
+.profile-auth-card p {
+  margin: 0;
+}
+
+.profile-auth-card h2 {
+  color: var(--gray-800);
+  font-size: 17px;
+}
+
+.profile-auth-card p {
+  margin-top: 6px;
+  color: var(--gray-600);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.profile-auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-auth-form label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--gray-700);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.profile-auth-form input {
+  min-width: 0;
+  width: 100%;
+  padding: 12px 13px;
+  color: var(--gray-900);
+  font: inherit;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-300);
+  border-radius: 12px;
+  outline: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.profile-auth-form input:focus {
+  background: var(--white);
+  border-color: var(--blue-600);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.profile-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.profile-auth-actions button {
+  flex: 1 1 120px;
+  min-height: 40px;
+  color: var(--blue-700);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 999px;
+}
+
+.profile-auth-actions button.is-primary {
+  color: var(--white);
+  background: linear-gradient(135deg, var(--blue-600), var(--blue-700));
+  border-color: transparent;
+}
+
+.profile-auth-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.profile-auth-endpoint {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 13px;
+  background: var(--gray-50);
+  border: 1px dashed var(--gray-300);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+
+.profile-auth-endpoint code {
+  color: var(--blue-700);
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
 .profile-asset-card {
   padding: 22px;
   margin-bottom: 18px;
@@ -4242,6 +4384,15 @@ body.is-preview-open {
 
   .profile-quick-actions button {
     flex: 1 1 130px;
+  }
+
+  .profile-auth-card {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .profile-auth-actions button {
+    flex-basis: 130px;
   }
 
   .profile-points-panel {

@@ -124,6 +124,11 @@ const STORAGE_KEYS = Object.freeze({
 
 const LAST_FULL_BACKUP_KEY = "mathAiEduLastFullBackupAt";
 const WELCOME_GUIDE_KEY = "mathAiEduHasSeenWelcomeGuide";
+const AUTH_TOKEN_KEY = "mathAiEduAuthToken";
+const API_BASE_URL = String(window.MATH_AI_API_BASE_URL || "http://localhost:3001").replace(
+  /\/+$/,
+  "",
+);
 const FULL_BACKUP_VERSION = 1;
 const VISUALIZATION_DATA_VERSION = 1;
 
@@ -178,6 +183,9 @@ const state = {
   filePreviewUrl: null,
   previewReturnFocus: null,
   pendingFullBackup: null,
+  authToken: null,
+  currentUser: null,
+  authLoading: false,
 };
 
 const elements = {};
@@ -248,6 +256,20 @@ function cacheElements() {
   elements.importStrategyLibraryButton = document.querySelector("#import-strategy-library");
   elements.importStrategyFile = document.querySelector("#import-strategy-file");
   elements.profileRecentGrid = document.querySelector("#profile-recent-grid");
+  elements.profileAvatar = document.querySelector("#profile-avatar");
+  elements.profileRoleBadge = document.querySelector("#profile-role-badge");
+  elements.profileUserName = document.querySelector("#profile-user-name");
+  elements.profileUserStatusTag = document.querySelector("#profile-user-status-tag");
+  elements.profileLoginStatus = document.querySelector("#profile-login-status");
+  elements.profileAccountType = document.querySelector("#profile-account-type");
+  elements.profileDataScope = document.querySelector("#profile-data-scope");
+  elements.profileLogoutButton = document.querySelector("#profile-logout-button");
+  elements.profileAuthCard = document.querySelector("#profile-auth-card");
+  elements.authUsername = document.querySelector("#auth-username");
+  elements.authPassword = document.querySelector("#auth-password");
+  elements.authLoginButton = document.querySelector("#auth-login-button");
+  elements.authRegisterButton = document.querySelector("#auth-register-button");
+  elements.apiBaseUrlDisplay = document.querySelector("#api-base-url-display");
   elements.profileOriginalList = document.querySelector("#profile-original-list");
   elements.profileOriginalEmpty = document.querySelector("#profile-original-empty");
   elements.profileStrategyList = document.querySelector("#profile-strategy-list");
@@ -497,6 +519,175 @@ function showToast(message) {
   state.toastTimer = window.setTimeout(() => {
     elements.toast.classList.remove("is-visible");
   }, 3000);
+}
+
+function getStoredAuthToken() {
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function storeAuthToken(token) {
+  state.authToken = token;
+
+  try {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } catch {
+    showToast("登录成功，但当前浏览器无法持久保存登录状态。");
+  }
+}
+
+function clearAuthToken() {
+  state.authToken = "";
+
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    // 清理失败不影响当前页面退出状态。
+  }
+}
+
+async function requestApi(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+
+  if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (state.authToken) {
+    headers.set("Authorization", `Bearer ${state.authToken}`);
+  }
+
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new Error(`无法连接后端服务，请确认 ${API_BASE_URL} 已启动。`);
+  }
+
+  let payload = null;
+
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("后端返回格式异常，请稍后再试。");
+  }
+
+  if (!response.ok || !payload.success) {
+    if (response.status === 401) {
+      clearAuthToken();
+      state.currentUser = null;
+      renderAuthState();
+    }
+
+    throw new Error(payload.message || "请求失败，请稍后再试。");
+  }
+
+  return payload.data || {};
+}
+
+function getAuthInitial(username) {
+  const trimmed = String(username || "").trim();
+  return trimmed ? trimmed.slice(0, 1).toUpperCase() : "—";
+}
+
+function renderAuthState() {
+  const user = state.currentUser;
+  const isLoggedIn = Boolean(user);
+
+  if (elements.apiBaseUrlDisplay) {
+    elements.apiBaseUrlDisplay.textContent = API_BASE_URL;
+  }
+
+  elements.profileAvatar.textContent = isLoggedIn ? getAuthInitial(user.username) : "—";
+  elements.profileRoleBadge.textContent = isLoggedIn ? "身份：教师" : "未登录";
+  elements.profileUserName.textContent = isLoggedIn ? user.username : "未登录";
+  elements.profileUserStatusTag.textContent = isLoggedIn ? "已连接后端账号" : "请先登录";
+  elements.profileLoginStatus.textContent = isLoggedIn
+    ? `当前登录状态：已登录（${user.username}）`
+    : "当前登录状态：未登录";
+  elements.profileAccountType.textContent = isLoggedIn ? user.role || "teacher" : "未登录";
+  elements.profileDataScope.textContent = isLoggedIn
+    ? "已登录；第 1 天仍保留本地题库，云端题库将在后续阶段接入"
+    : "本地数据仍保存在当前浏览器";
+  elements.profileLogoutButton.hidden = !isLoggedIn;
+  elements.profileAuthCard.hidden = isLoggedIn;
+}
+
+function setAuthButtonsDisabled(disabled) {
+  elements.authLoginButton.disabled = disabled;
+  elements.authRegisterButton.disabled = disabled;
+}
+
+async function submitAuth(mode) {
+  if (state.authLoading) {
+    return;
+  }
+
+  const username = elements.authUsername.value.trim();
+  const password = elements.authPassword.value;
+
+  if (!username || !password) {
+    showToast("请输入用户名和密码。");
+    return;
+  }
+
+  state.authLoading = true;
+  setAuthButtonsDisabled(true);
+
+  try {
+    const data = await requestApi(`/api/auth/${mode}`, {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+
+    storeAuthToken(data.token);
+    state.currentUser = data.user;
+    renderAuthState();
+    elements.authPassword.value = "";
+    showToast(mode === "register" ? "注册成功，已自动登录。" : "登录成功。");
+  } catch (error) {
+    showToast(error.message || "登录服务暂时不可用。");
+  } finally {
+    state.authLoading = false;
+    setAuthButtonsDisabled(false);
+  }
+}
+
+async function loadCurrentUser(silent = false) {
+  state.authToken = getStoredAuthToken();
+
+  if (!state.authToken) {
+    state.currentUser = null;
+    renderAuthState();
+    return;
+  }
+
+  try {
+    const data = await requestApi("/api/auth/me");
+    state.currentUser = data.user;
+    renderAuthState();
+  } catch (error) {
+    state.currentUser = null;
+    renderAuthState();
+
+    if (!silent) {
+      showToast(error.message || "无法获取登录状态，请重新登录。");
+    }
+  }
+}
+
+function logoutCurrentUser() {
+  clearAuthToken();
+  state.currentUser = null;
+  renderAuthState();
+  showToast("已退出登录。");
 }
 
 function renderMockReport() {
@@ -1578,8 +1769,6 @@ function createOriginalLibraryCard(item) {
   moreMenu.className = "original-more-menu";
   moreMenu.append(
     createLibraryActionButton("view", "查看", item, "original"),
-    createLibraryActionButton("download", "下载 HTML", item, "original"),
-    createLibraryActionButton("copy", "复制源码", item, "original"),
     createLibraryActionButton("delete", "删除", item, "original", "is-danger"),
   );
   moreActions.append(summary, moreMenu);
@@ -1619,8 +1808,6 @@ function createStrategyLibraryCard(item) {
     createLibraryActionButton("view", "查看", item, "strategy", "is-primary"),
     createLibraryActionButton("edit", "编辑", item, "strategy", "is-edit"),
     createLibraryActionButton("share", "分享", item, "strategy", "is-share"),
-    createLibraryActionButton("download", "下载 HTML", item, "strategy"),
-    createLibraryActionButton("copy", "复制源码", item, "strategy"),
     createLibraryActionButton("delete", "删除", item, "strategy", "is-danger"),
   );
 
@@ -2230,6 +2417,14 @@ function bindEvents() {
 
   elements.dismissWelcomeGuideButton.addEventListener("click", dismissWelcomeGuide);
   elements.reopenWelcomeGuideButton.addEventListener("click", reopenWelcomeGuide);
+  elements.authLoginButton.addEventListener("click", () => submitAuth("login"));
+  elements.authRegisterButton.addEventListener("click", () => submitAuth("register"));
+  elements.profileLogoutButton.addEventListener("click", logoutCurrentUser);
+  elements.authPassword.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      submitAuth("login");
+    }
+  });
 
   elements.helpFaqButtons.forEach((button) => {
     button.addEventListener("click", () => toggleHelpFaq(button));
@@ -2332,6 +2527,8 @@ function bindEvents() {
       renderFullBackupStats();
     } else if (event.key === WELCOME_GUIDE_KEY) {
       initializeWelcomeGuide();
+    } else if (event.key === AUTH_TOKEN_KEY) {
+      loadCurrentUser(true);
     }
   });
   window.addEventListener("beforeunload", revokeFilePreviewUrl);
@@ -2339,6 +2536,8 @@ function bindEvents() {
 
 function initializeApp() {
   cacheElements();
+  renderAuthState();
+  loadCurrentUser(true);
   initializeWelcomeGuide();
   initializeBuildSelectors();
   initializeStrategyFilters();

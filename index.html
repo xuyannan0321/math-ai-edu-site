@@ -849,24 +849,26 @@
                   <h1><span aria-hidden="true">◎</span> 我的中心</h1>
                   <p>管理本地演示账号信息，并快速查看最近保存的教学页面。</p>
                 </div>
-                <span class="profile-local-badge">仅当前浏览器</span>
+                <span class="profile-local-badge">前端静态页 + 后端 API</span>
               </header>
 
               <section class="profile-user-card" aria-labelledby="profile-user-name">
                 <div class="profile-avatar-column">
-                  <div class="profile-avatar-placeholder" aria-label="头像占位">1</div>
-                  <span class="profile-role-badge">身份：教师</span>
+                  <div class="profile-avatar-placeholder" id="profile-avatar" aria-label="头像占位">
+                    —
+                  </div>
+                  <span class="profile-role-badge" id="profile-role-badge">未登录</span>
                 </div>
 
                 <div class="profile-user-details">
                   <div class="profile-name-row">
-                    <h2 id="profile-user-name">学霸01号</h2>
-                    <span>本地演示账号</span>
+                    <h2 id="profile-user-name">未登录</h2>
+                    <span id="profile-user-status-tag">请先登录</span>
                   </div>
-                  <p>当前登录状态：本地演示账号</p>
+                  <p id="profile-login-status">当前登录状态：未登录</p>
                   <dl class="profile-facts">
-                    <div><dt>账号类型</dt><dd>普通教师用户</dd></div>
-                    <div><dt>数据范围</dt><dd>仅保存在当前浏览器</dd></div>
+                    <div><dt>账号类型</dt><dd id="profile-account-type">未登录</dd></div>
+                    <div><dt>数据范围</dt><dd id="profile-data-scope">本地数据仍保存在当前浏览器</dd></div>
                   </dl>
                 </div>
 
@@ -877,7 +879,49 @@
                   <button type="button" data-toast-message="勋章系统将在后续阶段开放。">
                     我的勋章
                   </button>
+                  <button class="is-danger" id="profile-logout-button" type="button" hidden>
+                    退出登录
+                  </button>
                 </div>
+              </section>
+
+              <section class="profile-auth-card" id="profile-auth-card" aria-labelledby="profile-auth-title">
+                <div>
+                  <span class="profile-auth-icon" aria-hidden="true">🔐</span>
+                  <div>
+                    <h2 id="profile-auth-title">账号登录</h2>
+                    <p>第 1 天先接入账号密码注册登录，AI 解题和云端题库会在后续阶段逐步接入。</p>
+                  </div>
+                </div>
+
+                <form class="profile-auth-form" id="profile-auth-form">
+                  <label>
+                    <span>用户名</span>
+                    <input
+                      id="auth-username"
+                      type="text"
+                      autocomplete="username"
+                      placeholder="3-32 位中文、英文、数字或下划线"
+                    />
+                  </label>
+                  <label>
+                    <span>密码</span>
+                    <input
+                      id="auth-password"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="至少 6 位"
+                    />
+                  </label>
+                  <div class="profile-auth-actions">
+                    <button class="is-primary" id="auth-login-button" type="button">登录</button>
+                    <button id="auth-register-button" type="button">注册</button>
+                  </div>
+                </form>
+
+                <p class="profile-auth-endpoint">
+                  后端地址：<code id="api-base-url-display">http://localhost:3001</code>
+                </p>
               </section>
 
               <section class="profile-asset-card" aria-labelledby="profile-assets-title">
@@ -1136,7 +1180,7 @@
                   <ul class="help-check-list">
                     <li>通过关键词、类型和年份筛选本地原创题，并按时间或标题排序。</li>
                     <li>使用“查看”打开大尺寸页面预览，使用“编辑”回填源码建站表单。</li>
-                    <li>支持删除记录、下载 HTML 和复制源码。</li>
+                    <li>支持设置积分、发布、查看、编辑和删除；普通用户界面不再显示源码下载与复制入口。</li>
                     <li>支持导出 JSON 备份，也可以追加导入已有 JSON 数据。</li>
                   </ul>
                 </section>
@@ -1149,7 +1193,7 @@
                   <ul class="help-check-list">
                     <li>可按科目、省市、类型、年份、日期、学校和关键词组合筛选。</li>
                     <li>支持按入库时间或标题排序，也可一键重置全部筛选条件。</li>
-                    <li>支持查看、编辑、删除、下载 HTML 和复制源码。</li>
+                    <li>支持查看、编辑、分享和删除；下载 Word、导出 GGB 等能力将在后续阶段接入。</li>
                     <li>通过 JSON 导入、导出完成策略页备份和迁移。</li>
                   </ul>
                 </section>
