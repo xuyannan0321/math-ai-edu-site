@@ -1,491 +1,343 @@
-- # 原题真解 Pro
+# 原题真解 Pro
 
-  原题真解 Pro 是一个面向学生和教师的数学教育静态网站原型。
+原题真解 Pro 是一个面向学生和教师的数学教育网站项目，目标不是只给最终答案，而是帮助使用者理解题意、掌握知识点、查看分步解析、发现易错点，并完成验算检查。
 
-  项目目标不是只给最终答案，而是帮助使用者更清楚地理解题意、掌握知识点、查看分步解析、发现易错点，并完成验算检查。网站当前主要用于演示数学解析工作流、源码页面管理、本地题库管理和后续图形数据能力的基础建设。
+当前项目正在从静态前端升级为真实 AI 大模型解题网站。目前已完成前端基础、后端 API 骨架、阿里云 RDS MySQL、注册登录和 JWT 鉴权。真实 AI 文字解题接口 `/api/solve-text` 正在下一阶段开发中，暂未完成。
 
-  当前项目采用原生 HTML、CSS 和 JavaScript 开发，不需要安装依赖，也不需要执行构建命令。
+## 在线访问
 
-  ## 在线访问
+GitHub Pages 前端部署地址：
 
-  GitHub Pages 部署地址：
+```text
+https://xuyannan0321.github.io/math-ai-edu-site/
+```
 
-  ```text
-  https://xuyannan0321.github.io/math-ai-edu-site/
-  ```
+如果仓库名称、GitHub 用户名或自定义域名发生变化，请以 GitHub Pages 页面显示的实际地址为准。
 
-  如果仓库名称、GitHub 用户名或自定义域名发生变化，请以 GitHub Pages 页面显示的实际地址为准。
+## 当前阶段状态
 
-  ## 当前阶段状态
+当前已完成：
 
-  当前版本是纯前端静态原型，已经完成：
+1. 工作台；
+2. 图片 / PDF 本地预览；
+3. 源码建站；
+4. 原创题库；
+5. 策略库；
+6. 我的中心；
+7. 帮助中心；
+8. 完整备份与恢复；
+9. 后端 API 骨架；
+10. 注册登录；
+11. JWT 鉴权；
+12. 阿里云 RDS MySQL 建表。
 
-  - 工作台
-  - 源码建站
-  - 原创题库
-  - 策略库
-  - 我的中心
-  - 帮助中心
-  - 新手引导
-  - 本地数据备份与恢复
-  - 数学图形数据 visualizationData 基础版
+当前正在推进：
 
-  当前尚未接入：
+- 真实 AI 文字解题 `/api/solve-text`；
+- 多模型 `modelRouter`；
+- AI 解题结果保存到数据库；
+- 前端从模拟解析切换为真实后端接口调用。
 
-  - 真实 AI
-  - 后端服务
-  - 数据库
-  - 真实账号登录
-  - 真实积分、支付、提现
-  - 真正 Word `.docx` 导出
-  - 真正 GeoGebra `.ggb` 导出
+## 项目结构
 
-  ## 当前功能
+```text
+math-ai-edu-site/
+├─ index.html                  # 前端入口
+├─ css/
+│  └─ style.css                # 前端样式
+├─ js/
+│  └─ app.js                   # 前端交互、本地数据、登录状态
+├─ design/
+│  └─ 网站样式.html            # UI 参考文件，不参与网站运行
+├─ server/
+│  ├─ package.json             # 后端依赖与启动脚本
+│  ├─ package-lock.json
+│  ├─ .env.example             # 后端环境变量示例
+│  ├─ .gitignore               # 忽略 .env 和 node_modules
+│  ├─ sql/
+│  │  └─ schema.sql            # MySQL 建表文件
+│  └─ src/                     # Express 后端源码
+├─ AGENTS.md                   # 项目规则和开发约束
+└─ README.md
+```
 
-  ### 1. 工作台
+重要说明：
 
-  工作台用于模拟数学解析生成流程。
+- `server/.env` 不提交。
+- `server/node_modules/` 不提交。
+- 真实 API Key、数据库密码、JWT_SECRET 只能放在 `server/.env` 中。
+- 前端 `index.html`、`css/style.css`、`js/app.js` 中不得出现 API Key、数据库密码或 JWT_SECRET。
 
-  当前支持：
+## 本地运行
 
-  - 选择 AI 模型界面展示。
-  - 上传试题图片或 PDF。
-  - 图片可在浏览器本地显示缩略图。
-  - PDF 显示文件信息。
-  - 文件不会上传服务器，只在当前浏览器本地预览。
-  - 输入解题指令。
-  - 生成模拟数学解析报告。
-  - 支持“代码 / 预览”切换。
-  - 首次使用时显示五步新手引导。
-  - 可在帮助中心重新打开新手引导。
+### 前端运行
 
-  当前说明：
+不要直接双击 HTML 作为主要测试方式，建议通过本地静态服务器打开项目。
 
-  - 工作台尚未连接真实 AI。
-  - 生成内容为固定模拟教学示例。
-  - 后续接入真实 AI 时，API key 必须放在服务端，不能写进前端代码。
+使用 VS Code Live Server：
 
-  ### 2. 源码建站
+1. 使用 VS Code 打开项目目录。
+2. 安装并启用 Live Server 扩展。
+3. 右键 `index.html`，选择 **Open with Live Server**。
+4. 在浏览器中测试页面导航、上传预览、源码预览、题库、备份和帮助中心功能。
 
-  源码建站用于粘贴完整 HTML 或 JSON 页面，并保存到本地题库。
+或使用 Python 静态服务器：
 
-  当前支持：
+```bash
+python -m http.server 8000
+```
 
-  - 填写页面归属信息：
-    - 科目
-    - 省份
-    - 城市
-    - 试题类型
-    - 年份
-    - 学校
-    - 页面标题
-  - 粘贴 HTML 或 JSON 源码。
-  - 渲染本地大尺寸预览。
-  - 预览 iframe 使用隔离环境。
-  - 源码预览 iframe 支持脚本运行。
-  - 可发布至原创题库。
-  - 可存入策略库。
-  - 提供四步流程提示。
-  - 提供源码预览安全提醒。
+然后访问：
 
-  预览安全说明：
+```text
+http://localhost:8000/
+```
 
-  - 只建议预览自己编写或确认可信的 HTML。
-  - 预览 iframe 使用 `sandbox="allow-scripts"` 和 `referrerpolicy="no-referrer"`。
-  - 依赖 CDN、MathJax、Canvas、滑块等功能的 HTML，需要网络环境支持。
+### 后端运行
 
-  ### 3. 数学图形数据 visualizationData
+进入后端目录：
 
-  源码建站中新增了“数学图形数据（可选）”模块。
+```bash
+cd server
+npm install
+copy .env.example .env
+npm.cmd start
+```
 
-  它用于为后续功能打基础，例如：
+如果你使用 PowerShell，也可以用：
 
-  - GeoGebra `.ggb` 导出
-  - Word 文档图形复用
-  - 几何图复用
-  - 函数图复用
-  - 动态演示复用
+```powershell
+cd server
+npm install
+Copy-Item .env.example .env
+npm.cmd start
+```
 
-  当前支持的图形 JSON 基础结构：
+启动后访问健康检查：
 
-  ```json
-  {
-    "version": 1,
-    "type": "geometry",
-    "objects": []
+[http://localhost:3001/api/health](http://localhost:3001/api/health)
+
+正常返回示例：
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "service": "math-ai-edu-server"
   }
-  ```
-
-  当前支持的对象类型：
-
-  - `point`：点
-  - `segment`：线段
-  - `line`：直线
-  - `circle`：圆
-  - `function`：函数
-  - `slider`：滑块
-
-  当前支持：
-
-  - 插入示例模板。
-  - 检查图形 JSON。
-  - 检查 version、type、objects。
-  - 检查对象 kind、id 和基础字段。
-  - 检查线段、直线、圆等对象引用的点是否存在。
-  - 检查错误 JSON，并阻止保存。
-  - 保存到原创题库或策略库。
-  - 编辑记录时自动回填。
-  - 题库卡片显示“包含图形数据”标签。
-  - 完整备份导出、导入时保留 visualizationData。
-
-  安全说明：
-
-  - `expression` 只作为字符串保存。
-  - 当前不会执行图形 JSON 中的表达式。
-  - 当前不会真正生成 `.ggb` 文件。
-  - 当前不会真正生成 Word 文档。
-
-  ### 4. 原创题库
-
-  原创题库用于保存本地原创题、解析页面或后续可分享的教学页面。
-
-  当前支持：
-
-  - 本地原创题列表。
-  - “我的原创题 / 已分享原创 / 原创题大厅”三个 Tab。
-  - 静态积分和分享演示。
-  - 按关键词搜索。
-  - 按类型筛选。
-  - 按年份筛选。
-  - 按创建时间或标题排序。
-  - 查看记录。
-  - 编辑记录并回填到源码建站。
-  - 删除记录。
-  - 下载 HTML。
-  - 复制源码。
-  - 导出 JSON。
-  - 导入 JSON。
-  - 空状态引导去源码建站或导入 JSON。
-  - 筛选无结果时引导重置筛选。
-  - 含图形数据的记录显示“包含图形数据”标签。
-
-  说明：
-
-  - 原创题库数据保存在当前浏览器本地。
-  - 分享、积分、提现、兑换等功能当前为静态演示。
-
-  ### 5. 策略库
-
-  策略库用于保存教研资料、试卷讲评、解题策略和课堂展示页面。
-
-  当前支持：
-
-  - 按科目筛选。
-  - 按省份和城市筛选。
-  - 按类型筛选。
-  - 按年份筛选。
-  - 按日期范围筛选。
-  - 按学校筛选。
-  - 按关键词搜索。
-  - 按入库时间或标题排序。
-  - 查看记录。
-  - 编辑记录并回填到源码建站。
-  - 分享按钮静态演示。
-  - 下载 HTML。
-  - 复制源码。
-  - 删除记录。
-  - 导出策略库 JSON。
-  - 导入策略库 JSON。
-  - 空状态引导去源码建站或导入 JSON。
-  - 筛选无结果时引导重置筛选。
-  - 含图形数据的记录显示“包含图形数据”标签。
-
-  说明：
-
-  - 当前策略库仍是本地浏览器数据。
-  - 分享功能当前为静态演示。
-  - 后续计划将策略库按钮优化为：查看、编辑、收藏、发布、下载 Word、导出 GGB、分享、删除。
-  - 真正 Word `.docx` 和 GeoGebra `.ggb` 导出将在后续阶段实现。
-
-  ### 6. 我的中心
-
-  我的中心用于展示本地演示账号、本地资产、最近保存记录和完整备份功能。
-
-  当前支持：
-
-  - 本地演示账号信息。
-  - 静态积分展示。
-  - 最近保存的原创题。
-  - 最近保存的策略页。
-  - 查看全部入口。
-  - 数据安全提示。
-  - 完整数据备份与恢复中心。
-
-  ### 7. 数据备份与恢复
-
-  数据备份与恢复中心位于“我的中心”。
-
-  当前支持：
-
-  - 显示原创题数量。
-  - 显示策略页数量。
-  - 显示上次完整备份时间。
-  - 显示当前数据位置。
-  - 显示备份健康状态：
-    - 从未备份：建议立即导出完整备份。
-    - 超过 7 天：建议更新备份。
-    - 7 天内已备份：备份状态良好。
-  - 一键导出全部数据。
-  - 导入完整备份。
-  - 导入前预览。
-  - 追加合并。
-  - 覆盖恢复。
-  - 覆盖恢复前二次确认。
-  - 错误 JSON 友好提示。
-  - 备份和恢复时保留 visualizationData。
-
-  完整备份结构示例：
-
-  ```json
-  {
-    "appName": "原题真解 Pro",
-    "backupVersion": 1,
-    "exportedAt": "2026-06-24T10:00:00.000Z",
-    "source": "localStorage",
-    "data": {
-      "originalItems": [],
-      "strategyItems": []
-    }
-  }
-  ```
-
-  ### 8. 帮助中心
-
-  帮助中心用于帮助新用户快速理解网站。
-
-  当前包含：
-
-  - 快速开始
-  - 工作台说明
-  - 源码建站说明
-  - 原创题库说明
-  - 策略库说明
-  - 数据备份与迁移
-  - 当前限制
-  - FAQ 常见问题
-  - 什么是数学图形数据
-  - 重新查看新手引导入口
-
-  ## 项目结构
-
-  ```text
-  math-ai-edu-site/
-  ├── index.html              # 网站入口
-  ├── css/
-  │   └── style.css           # 页面样式
-  ├── js/
-  │   └── app.js              # 页面交互和本地数据逻辑
-  ├── design/
-  │   └── 网站样式.html       # UI 参考文件，不参与网站运行
-  ├── AGENTS.md               # 项目规则和开发约束
-  └── README.md
-  ```
-
-  ## 本地运行
-
-  不要直接双击 HTML 作为主要测试方式，建议通过本地静态服务器打开项目。
-
-  ### 使用 VS Code Live Server
-
-  1. 使用 VS Code 打开项目目录。
-  2. 安装并启用 Live Server 扩展。
-  3. 右键 `index.html`，选择 **Open with Live Server**。
-  4. 在浏览器中测试页面导航、上传预览、源码预览、题库、备份和帮助中心功能。
-
-  ### 使用 Python 静态服务器
-
-  在项目根目录运行：
-
-  ```bash
-  python -m http.server 8000
-  ```
-
-  然后访问：
-
-  ```text
-  http://localhost:8000/
-  ```
-
-  ## 部署到 GitHub Pages
-
-  当前入口和资源均使用相对路径，可以直接部署到 GitHub Pages 的项目子路径，不需要修改代码或执行构建。
-
-  1. 将项目提交并推送到 GitHub 仓库的 `main` 分支。
-  2. 打开 GitHub 仓库页面。
-  3. 进入 **Settings → Pages**。
-  4. 在 **Build and deployment** 中，将 **Source** 选择为 **Deploy from a branch**。
-  5. 分支选择 `main`，目录选择 `/(root)`，然后点击 **Save**。
-  6. 等待 GitHub Pages 完成部署。
-
-  当前 GitHub Pages 地址：
-
-  ```text
-  https://xuyannan0321.github.io/math-ai-edu-site/
-  ```
-
-  ## 本地数据说明
-
-  本项目当前是纯前端静态网站，数据不会写入项目文件，也不会自动上传服务器。
-
-  数据保存在当前浏览器来源的 `localStorage` 中。
-
-  当前使用的主要 key：
-
-  ```text
-  mathAiEduOriginalItems
-  mathAiEduStrategyItems
-  mathAiEduLastFullBackupAt
-  mathAiEduHasSeenWelcomeGuide
-  ```
-
-  含义：
-
-  | key                            | 用途                       |
-  | ------------------------------ | -------------------------- |
-  | `mathAiEduOriginalItems`       | 保存原创题库记录           |
-  | `mathAiEduStrategyItems`       | 保存策略库记录             |
-  | `mathAiEduLastFullBackupAt`    | 保存上次完整备份时间       |
-  | `mathAiEduHasSeenWelcomeGuide` | 记录是否已经关闭过新手引导 |
-
-  注意：
-
-  - Live Server、其他本地端口、GitHub Pages 属于不同浏览器来源。
-  - 不同浏览器之间不会自动共享 localStorage。
-  - 电脑和手机之间不会自动同步数据。
-  - 清理浏览器站点数据可能会删除本地题库。
-
-  ## 数据迁移方式
-
-  推荐方式：
-
-  1. 在原环境进入“我的中心”。
-  2. 点击“导出全部数据”。
-  3. 保存完整备份 JSON。
-  4. 在新环境打开网站。
-  5. 进入“我的中心”。
-  6. 点击“导入完整备份”。
-  7. 查看导入预览。
-  8. 根据需要选择“追加合并”或“覆盖恢复”。
-
-  也可以在原创题库或策略库中分别导出、导入单独 JSON。
-
-  ## 开发原则
-
-  本项目开发时需要遵守：
-
-  - 不要重写整个项目。
-  - 优先在现有 HTML、CSS、JavaScript 基础上小步修改。
-  - 不要引入 React、Vue、Vite、Tailwind 或构建工具，除非后续阶段明确决定重构。
-  - 不要把 API key 写进前端代码。
-  - 真实 AI 接入必须通过服务端完成。
-  - 用户输入、导入 JSON 和源码展示要注意安全。
-  - 不要把用户输入直接当 HTML 插入普通页面。
-  - 预览 HTML 时使用隔离 iframe。
-  - 每次修改后都要回归测试已有功能。
-
-  ## 测试方式
-
-  项目没有 `package.json`，因此不需要运行：
-
-  ```bash
-  npm install
-  npm run build
-  npm run lint
-  ```
-
-  当前推荐检查：
-
-  ```bash
-  node --check js/app.js
-  git diff --check
-  ```
-
-  浏览器手动测试：
-
-  - 六个导航入口是否正常切换。
-  - 工作台上传图片是否显示缩略图。
-  - PDF 是否显示文件信息。
-  - 清除文件是否正常。
-  - 模拟生成是否正常。
-  - 代码/预览切换是否正常。
-  - 源码建站预览是否正常。
-  - 源码建站保存到原创题库是否正常。
-  - 源码建站保存到策略库是否正常。
-  - 数学图形 JSON 示例插入是否正常。
-  - 数学图形 JSON 校验是否正常。
-  - 错误图形 JSON 是否会阻止保存。
-  - 原创题库查看、编辑、删除、导入、导出是否正常。
-  - 策略库查看、编辑、删除、导入、导出是否正常。
-  - 完整备份导出是否正常。
-  - 完整备份导入预览是否正常。
-  - 追加合并是否正常。
-  - 覆盖恢复是否二次确认。
-  - 帮助中心 FAQ 是否可以展开关闭。
-  - 390px 手机视口是否无横向滚动。
-  - 浏览器控制台红色错误是否为 0。
-
-  ## 当前限制
-
-  - 当前是纯静态前端项目。
-  - 未连接真实 AI。
-  - 工作台生成内容为模拟教学示例。
-  - 未接入后端、数据库和真实登录系统。
-  - 积分、提现、分享、发布、支付均为静态演示或本地状态。
-  - 题库数据仅保存在当前浏览器 localStorage，不会跨设备自动同步。
-  - 清理浏览器站点数据可能会删除本地题库。
-  - 本地 Live Server 和 GitHub Pages 是不同来源，题库数据需要通过 JSON 导出/导入迁移。
-  - 源码预览允许脚本在隔离 iframe 中运行，只应预览自己编写或确认可信的源码。
-  - 用户源码依赖的 CDN 或其他网络资源需要联网才能正常加载。
-  - 当前下载格式主要为 HTML 和 JSON。
-  - 真正 Word `.docx` 导出留到后端阶段实现。
-  - 真正 GeoGebra `.ggb` 导出需要基于 visualizationData，后续实验版实现。
-  - 当前 visualizationData 只负责保存和校验，不负责绘图，也不生成 GGB 文件。
-
-  ## 后续计划
-
-  建议后续阶段按顺序推进：
-
-  1. 策略库操作按钮重构：
-     - 查看
-     - 编辑
-     - 收藏
-     - 发布
-     - 下载 Word 预留
-     - 导出 GGB 预留
-     - 分享
-     - 删除
-  2. GGB 导出实验版：
-     - 先支持点、线段、函数、滑块。
-     - 基于 visualizationData 生成基础 GeoGebra 数据。
-     - 初期不支持复杂几何关系。
-  3. 真正 Word `.docx` 导出：
-     - 建议放到后端阶段。
-     - 后端负责文档生成和文件下载。
-  4. 后端与数据库：
-     - 账号系统
-     - 云端题库
-     - 真实发布分享
-     - 数据跨设备同步
-  5. 真实 AI 接入：
-     - 通过服务端调用模型 API。
-     - API key 只放服务端环境变量。
-     - 前端只调用自己的安全接口。
-
-  ## 部署注意事项
-
-  - `index.html` 必须保留在部署分支根目录。
-  - 文件和目录名称区分大小写。
-  - 请保持 `css/style.css`、`js/app.js` 与 HTML 引用一致。
-  - `design/网站样式.html` 是 UI 参考文件，不参与网站运行。
-  - 从仓库根目录部署时，`design/` 等普通静态目录也可能拥有公开访问地址，但不会被网站入口主动加载。
-  - 项目没有 `package.json`，不要运行 npm 命令。
+}
+```
+
+## 环境变量
+
+后端环境变量写在 `server/.env`。请以 `server/.env.example` 为模板创建，不要提交真实 `.env`。
+
+需要配置：
+
+```env
+PORT=3001
+JWT_SECRET=replace-with-a-long-random-secret
+
+DB_HOST=your-rds-mysql-host
+DB_PORT=3306
+DB_USER=your-db-user
+DB_PASSWORD=your-db-password
+DB_NAME=math_ai_edu
+
+DASHSCOPE_API_KEY=
+OPENAI_API_KEY=
+GEMINI_API_KEY=
+DEEPSEEK_API_KEY=
+```
+
+注意：
+
+- README 中不要写任何真实密码、真实 API Key 或真实 JWT_SECRET。
+- 第 1 天已完成登录鉴权；真实 AI Key 将在后续 `/api/solve-text` 和 `modelRouter` 阶段使用。
+- API Key 只能由后端读取，不能写入前端代码。
+
+## 数据库说明
+
+数据库使用阿里云 RDS MySQL。
+
+当前数据库名：
+
+```text
+math_ai_edu
+```
+
+建表文件：
+
+```text
+server/sql/schema.sql
+```
+
+当前包含四张表：
+
+1. `users`：用户账号、密码哈希、角色、登录时间；
+2. `solve_records`：后续保存 AI 解题结果、题库记录和源码内容；
+3. `attachments`：后续保存图片/PDF 附件与 OSS 信息；
+4. `model_calls`：后续记录模型调用日志、耗时、失败原因和 token 信息。
+
+## 当前功能
+
+### 前端功能
+
+- 工作台；
+- 图片 / PDF 本地预览；
+- 模拟解析生成；
+- 代码 / 预览切换；
+- 源码建站；
+- 大尺寸 iframe 本地预览；
+- 原创题库；
+- 策略库；
+- 搜索、筛选、排序、重置；
+- 我的中心；
+- 帮助中心；
+- 新手引导；
+- 本地完整备份与恢复；
+- 数学图形数据 `visualizationData` 保存与校验基础版。
+
+### 后端功能
+
+- Node.js + Express 后端骨架；
+- 统一 JSON 返回格式；
+- 阿里云 RDS MySQL 连接池；
+- `GET /api/health`；
+- `POST /api/auth/register`；
+- `POST /api/auth/login`；
+- `GET /api/auth/me`；
+- JWT 鉴权中间件；
+- 用户注册和登录；
+- 密码哈希保存，不保存明文密码。
+
+### 前端与登录状态
+
+- 我的中心可显示“未登录 / 已登录用户名”；
+- 登录 token 暂时保存在浏览器 `localStorage`；
+- 支持退出登录；
+- 原创题库和策略库前台已去掉“下载 HTML”和“复制源码”按钮；
+- `sourceCode` 字段仍保留，不影响源码建站和 iframe 预览。
+
+## 本地数据说明
+
+前端仍保留本地数据功能，数据保存在当前浏览器来源的 `localStorage` 中。
+
+当前使用的主要 key：
+
+```text
+mathAiEduOriginalItems
+mathAiEduStrategyItems
+mathAiEduLastFullBackupAt
+mathAiEduHasSeenWelcomeGuide
+mathAiEduAuthToken
+```
+
+说明：
+
+- Live Server、其他本地端口、GitHub Pages 属于不同浏览器来源；
+- 不同浏览器之间不会自动共享 localStorage；
+- 电脑和手机之间不会自动同步 localStorage；
+- 清理浏览器站点数据可能会删除本地题库和登录 token；
+- 后续数据库题库读取完成后，会逐步把核心题库数据迁移到后端数据库。
+
+## GitHub Pages 部署
+
+当前前端入口和资源均使用相对路径，可以继续部署到 GitHub Pages。
+
+1. 将项目提交并推送到 GitHub 仓库的 `main` 分支。
+2. 打开 GitHub 仓库页面。
+3. 进入 **Settings → Pages**。
+4. 在 **Build and deployment** 中，将 **Source** 选择为 **Deploy from a branch**。
+5. 分支选择 `main`，目录选择 `/(root)`，然后点击 **Save**。
+6. 等待 GitHub Pages 完成部署。
+
+注意：GitHub Pages 只托管前端静态页面；后端 API 需要单独部署到服务器，例如阿里云 ECS 或其他 Node.js 运行环境。
+
+## 当前限制
+
+1. 真实 AI 文字解题正在开发中；
+2. 图片识题暂未完成；
+3. Word `.docx` 暂未完成；
+4. GGB 导出暂未完成；
+5. 支付、积分、公开发布、分享仍为后续功能；
+6. API Key 不得写入前端；
+7. `server/.env` 不得提交；
+8. 当前题库页面仍保留本地数据管理能力，数据库题库读取会在后续阶段接入；
+9. 源码预览 iframe 允许脚本在隔离环境中运行，只应预览自己编写或确认可信的源码；
+10. 当前 `visualizationData` 只负责保存和校验，不负责真正绘图，也不生成 GGB 文件。
+
+## 后续计划
+
+后续建议按以下顺序推进：
+
+1. `/api/solve-text`；
+2. `modelRouter`；
+3. 阿里通义 / DashScope；
+4. GPT；
+5. DeepSeek；
+6. Gemini；
+7. 图片识题；
+8. 数据库题库读取；
+9. 高质量数学图形 SVG / Canvas；
+10. 正式部署到阿里云服务器。
+
+## 开发原则
+
+- 不要重写整个项目；
+- 优先在现有 HTML、CSS、JavaScript 和 `server/` 后端基础上小步修改；
+- 不要把 API Key、数据库密码、JWT_SECRET 写进前端；
+- 真实 AI 接入必须通过服务端完成；
+- 用户输入、导入 JSON 和源码展示要注意安全；
+- 不要把用户输入直接当 HTML 插入普通页面；
+- 预览 HTML 时使用隔离 iframe；
+- 每次修改后都要回归测试已有功能。
+
+## 测试方式
+
+根目录没有 `package.json`，因此不要在项目根目录运行：
+
+```bash
+npm install
+npm run build
+npm run lint
+```
+
+前端推荐检查：
+
+```bash
+node --check js/app.js
+git diff --check
+```
+
+后端推荐检查：
+
+```bash
+cd server
+npm.cmd start
+```
+
+浏览器手动测试：
+
+- 六个导航入口是否正常切换；
+- 工作台上传图片是否显示缩略图；
+- PDF 是否显示文件信息；
+- 清除文件是否正常；
+- 源码建站预览是否正常；
+- 原创题库和策略库页面是否正常打开；
+- 我的中心登录状态是否正常显示；
+- 完整备份导出和导入预览是否正常；
+- 帮助中心 FAQ 是否可以展开关闭；
+- 390px 手机视口是否无横向滚动；
+- 浏览器控制台红色错误是否为 0。
+
+## 部署注意事项
+
+- `index.html` 必须保留在前端部署分支根目录；
+- 文件和目录名称区分大小写；
+- 请保持 `css/style.css`、`js/app.js` 与 HTML 引用一致；
+- `design/网站样式.html` 是 UI 参考文件，不参与网站运行；
+- `server/.env`、`server/node_modules/` 不提交；
+- 后端部署时必须在服务器环境变量或 `server/.env` 中配置数据库和模型 Key；
+- 前端部署地址和后端 API 地址不同时，需要配置后端 CORS。
