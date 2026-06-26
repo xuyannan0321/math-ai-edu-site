@@ -1214,7 +1214,8 @@
     container.append(list);
   }
 
-  function renderEmpty(container, message = "暂无可靠图示，可查看文字解析。") {
+  function renderEmpty(container, message = "暂无可靠图示，可查看文字解析。", imageUrl) {
+    if (imageUrl) { var img = document.createElement("img"); img.src = imageUrl; img.alt = "上传的题目原图"; img.className = "visualization-fallback-image"; container.append(img); return; }
     container.append(createHtmlElement("p", "visualization-empty", message));
   }
 
@@ -1225,7 +1226,7 @@
       const spec = normalizeVisualizationSpec(rawSpec);
 
       if (!spec || spec.type === "none" || !SAFE_TYPES.has(spec.type)) {
-        renderEmpty(container, spec?.description || "暂无可靠图示，可查看文字解析。");
+        renderEmpty(container, spec?.description || "暂无可靠图示，可查看文字解析。", options && options.uploadedImageUrl ? options.uploadedImageUrl : null);
         return;
       }
 
@@ -1253,8 +1254,8 @@
     }
   }
 
-  function renderView(container, rawSpec, viewId) {
-    renderVisualization(container, rawSpec, { viewId });
+  function renderView(container, rawSpec, viewId, extraOptions) {
+    renderVisualization(container, rawSpec, Object.assign({ viewId: viewId }, extraOptions || {}));
   }
 
   global.MathVisualization = {

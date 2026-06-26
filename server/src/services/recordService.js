@@ -1,6 +1,68 @@
 const crypto = require("node:crypto");
 const pool = require("../db/pool");
 
+
+function generateShortTitle(title, problemText, questionType, topic) {
+  var t = (title || "").trim();
+  // If title is valid (not empty, not too generic, not too long)
+  if (t && t.length >= 4 && t.length <= 24 && t !== "数学解析" && t !== "综合") {
+    return t;
+  }
+
+  var text = problemText || "";
+  var lines = text.split(/\n/).filter(Boolean);
+  var firstLine = lines[0] || "";
+  var cleanText = firstLine.replace(/^[\s\d.)、（）①②③④⑤]+/, "").trim();
+
+  // Try to extract based on type
+  var typeInfo = questionType || topic || "";
+
+  // Function problems
+  if (/函数/.test(typeInfo || cleanText)) {
+    var funcMatch = cleanText.match(/(一次函数|二次函数|反比例函数|正比例函数|三角函数)[^，。]*/);
+    if (funcMatch) {
+      return truncateTitle(funcMatch[0], 20);
+    }
+    var funcGoal = cleanText.match(/(求[^，。]{1,12})/);
+    if (funcGoal) return truncateTitle("函数" + funcGoal[1], 20);
+  }
+
+  // Equation problems
+  if (/方程/.test(typeInfo || cleanText)) {
+    var eqMatch = cleanText.match(/([一|二]元[一|二]次方程|分式方程|无理方程)[^，。]*/);
+    if (eqMatch) {
+      return truncateTitle(eqMatch[0], 20);
+    }
+    var eqSolve = cleanText.match(/(解[^，。]{1,10})/);
+    if (eqSolve) return truncateTitle("方程" + eqSolve[1], 20);
+    return "方程求解";
+  }
+
+  // Geometry problems
+  if (/三角形|圆|几何|相似|全等|平行四边形|梯形/.test(typeInfo || cleanText)) {
+    var geoMatch = cleanText.match(/(三角形|四边形|圆)[^，。]{0,14}/);
+    if (geoMatch) {
+      return truncateTitle(geoMatch[0], 20);
+    }
+    var geoObj = cleanText.match(/[△ABC][^，。]{0,14}/);
+    if (geoObj) return truncateTitle(geoObj[0], 20);
+    return "几何综合";
+  }
+
+  // Use first meaningful line
+  if (cleanText) {
+    return truncateTitle(cleanText.replace(/[=xXyY\d.\-+^]+/g, "").trim(), 18) || "数学解析";
+  }
+
+  return "数学解析";
+}
+
+function truncateTitle(text, maxLen) {
+  var result = String(text || "").trim();
+  if (result.length <= maxLen) return result;
+  return result.substring(0, maxLen) + "…";
+}
+
 async function createSolveRecord({
   userId,
   libraryType,
@@ -21,7 +83,7 @@ async function createSolveRecord({
     {
       userId,
       libraryType,
-      title: solution.title,
+      title: generateShortTitle(solution.title, solution.problemText, questionType, solution.topic),
       problemText: solution.problemText,
       recognizedText,
       gradeLevel: solution.gradeLevel,

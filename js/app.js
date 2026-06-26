@@ -1,4 +1,15 @@
 "use strict";
+/* 安全调试：仅在 localStorage.mathAiEduDebug === "1" 时输出，不泄露敏感信息 */
+function debugLog(...args) {
+  try {
+    if (window.localStorage && window.localStorage.getItem("mathAiEduDebug") === "1") {
+      console.log("[MathAI Debug]", ...args);
+    }
+  } catch (e) {
+    // localStorage may be disabled
+  }
+}
+
 
 const MOCK_REPORT_HTML = `<!doctype html>
 <html lang="zh-CN">
@@ -194,6 +205,7 @@ const LIBRARY_CONFIG = Object.freeze({
 const state = {
   activePage: "workspace",
   activeView: "preview",
+  uploadedImageUrl: null,
   activeSolveMode: "text",
   activeOriginalTab: "my",
   toastTimer: null,
@@ -275,14 +287,7 @@ function cacheElements() {
   elements.exportResultGgbButton = document.querySelector("#export-result-ggb");
   elements.structuredResult = document.querySelector("#structured-result");
   elements.solutionReadingFlow = document.querySelector("#solution-reading-flow");
-  elements.structuredProblemText = document.querySelector("#structured-problem-text");
-  elements.visualizationPanel = document.querySelector("#visualization-panel");
-  elements.structuredKnowledgePoints = document.querySelector("#structured-knowledge-points");
-  elements.structuredAnalysis = document.querySelector("#structured-analysis");
-  elements.structuredSteps = document.querySelector("#structured-steps");
-  elements.structuredFinalAnswer = document.querySelector("#structured-final-answer");
-  elements.structuredCommonMistakes = document.querySelector("#structured-common-mistakes");
-  elements.structuredVerification = document.querySelector("#structured-verification");
+  // Old static card DOM refs removed — now uses #solution-reading-flow
   elements.welcomeGuide = document.querySelector("#welcome-guide");
   elements.dismissWelcomeGuideButton = document.querySelector("#dismiss-welcome-guide");
   elements.reopenWelcomeGuideButton = document.querySelector("#reopen-welcome-guide");
@@ -790,22 +795,14 @@ function logoutCurrentUser() {
 function renderMockReport() {
   state.currentHtmlResult = MOCK_REPORT_HTML;
   return;
-  elements.resultCode.value = MOCK_REPORT_HTML;
-  elements.resultIframe.srcdoc = MOCK_REPORT_HTML;
-  elements.previewPlaceholder.hidden = true;
-  elements.resultIframe.hidden = false;
-  switchResultView("preview");
+  // Mock init no longer sets iframe srcdoc (advanced preview hidden)
+  state.currentHtmlResult = MOCK_REPORT_HTML;
 }
 
 function renderAiHtmlResult(htmlResult) {
-  const safeHtmlResult = htmlResult || "";
-  state.currentHtmlResult = safeHtmlResult;
-  return;
-  elements.resultCode.value = safeHtmlResult || "// 暂无解析页面源码。";
-  elements.resultIframe.srcdoc = safeHtmlResult;
-  elements.previewPlaceholder.hidden = true;
-  elements.resultIframe.hidden = !safeHtmlResult;
-  switchResultView("preview");
+  // Workspace now uses solution-reading-flow, advanced preview is hidden.
+  // This function is kept for call compatibility but no longer sets iframe srcdoc.
+  state.currentHtmlResult = htmlResult || "";
 }
 
 function appendTextList(container, items) {
@@ -940,35 +937,6 @@ function createVisualizationFallback(result) {
     };
 }
 
-function renderStructuredResultLegacy(result) {
-  state.currentSolveResult = result || null;
-
-  if (!result) {
-    elements.structuredResult.hidden = true;
-    return;
-  }
-
-  elements.structuredProblemText.textContent = result.problemText || "暂无题目文本。";
-  appendTextList(elements.structuredKnowledgePoints, result.knowledgePoints);
-  elements.structuredAnalysis.textContent = result.analysis || "暂无题意分析。";
-  renderStructuredSteps(result.steps);
-  elements.structuredFinalAnswer.textContent = result.finalAnswer || "暂无最终答案。";
-  appendTextList(elements.structuredCommonMistakes, result.commonMistakes);
-  elements.structuredVerification.textContent = result.verification || "暂无验算检查。";
-
-  const visualizationSpec = hasRenderableVisualizationSpec(result.visualizationSpec)
-    ? result.visualizationSpec
-    : createVisualizationFallback(result);
-
-  if (window.MathVisualization?.render) {
-    window.MathVisualization.render(elements.visualizationPanel, visualizationSpec);
-  } else {
-    elements.visualizationPanel.textContent = "暂无图示";
-  }
-
-  elements.structuredResult.hidden = false;
-}
-
 function createReadingCard(className, titleText, bodyText = "") {
   const card = document.createElement("article");
   card.className = `solution-reading-card ${className || ""}`.trim();
@@ -1035,10 +1003,14 @@ function appendVisualizationForView(container, spec, viewId, fallbackTitle = "�
   panel.append(board);
   container.append(panel);
 
+  const vizOptions = {
+    uploadedImageUrl: state.uploadedImageUrl || null,
+  };
+
   if (window.MathVisualization?.renderView && viewId) {
-    window.MathVisualization.renderView(board, spec, viewId);
+    window.MathVisualization.renderView(board, spec, viewId, vizOptions);
   } else if (window.MathVisualization?.render) {
-    window.MathVisualization.render(board, spec);
+    window.MathVisualization.render(board, spec, vizOptions);
   } else {
     board.textContent = "暂无可靠图示，可查看文字解析。";
   }
@@ -1090,45 +1062,160 @@ function renderStructuredResult(result) {
     return;
   }
 
-  const flow = document.createElement("div");
-  flow.className = "solution-reading-flow";
-  flow.id = "solution-reading-flow";
-  const visualizationSpec = hasRenderableVisualizationSpec(result.visualizationSpec)
+  var flow = elements.solutionReadingFlow || document.querySelector("#solution-reading-flow");
+  if (!flow) {
+    elements.structuredResult.hidden = true;
+    return;
+  }
+  flow.replaceChildren();
+
+
+  debugLog("visualizationSpec.type:", visualizationSpec ? visualizationSpec.type : "none");
+  debugLog("hasReliableVisualization:", hasRenderableVisualizationSpec(result.visualizationSpec));
+  debugLog("views count:", Array.isArray(visualizationSpec.views) ? visualizationSpec.views.length : 0);
+  debugLog("objects count:", Array.isArray(visualizationSpec.objects) ? visualizationSpec.objects.length : 0);
+  var visualizationSpec = hasRenderableVisualizationSpec(result.visualizationSpec)
     ? result.visualizationSpec
     : createVisualizationFallback(result);
-  const views = getVisualizationViews(visualizationSpec);
-  const originalView = findVisualizationView(visualizationSpec, "original");
+  var views = getVisualizationViews(visualizationSpec);
+  var isGeometric = isGeometryProblemByResult(result);
 
-  const originalCard = createReadingCard(
-    "is-original",
-    "原题复现",
-    result.problemText || "暂无题目文本。",
-  );
-  if (originalView) {
-    appendVisualizationForView(originalCard, visualizationSpec, "original", "原题图");
+  /* 1. 原题复现 */
+  var originalCard = createReadingCard("is-original", "原题复现");
+  var problemP = document.createElement("p");
+  problemP.textContent = result.problemText || "暂无题目文本。";
+  originalCard.append(problemP);
+
+  /* 上传原图兜底（仅当前工作台会话） */
+  if (isGeometric && state.uploadedImageUrl) {
+    var imgWrap = document.createElement("div");
+    imgWrap.className = "uploaded-image-fallback";
+    var img = document.createElement("img");
+    img.src = state.uploadedImageUrl;
+    img.alt = "上传的题目图片";
+    img.className = "problem-original-image";
+    imgWrap.append(img);
+    originalCard.append(imgWrap);
   }
+
+  /* 标签行 */
+  var tags = document.createElement("div");
+  tags.className = "solution-tags";
+  if (result.gradeLevel) {
+    var g = document.createElement("span");
+    g.className = "solution-tag";
+    g.textContent = result.gradeLevel;
+    tags.append(g);
+  }
+  if (result.subject) {
+    var s = document.createElement("span");
+    s.className = "solution-tag";
+    s.textContent = result.subject;
+    tags.append(s);
+  }
+  if (result.topic) {
+    var t = document.createElement("span");
+    t.className = "solution-tag";
+    t.textContent = result.topic;
+    tags.append(t);
+  }
+  originalCard.append(tags);
   flow.append(originalCard);
 
-  const knowledgeCard = createReadingCard("is-knowledge", "考点");
+  /* 2. 本题考点 */
+  var knowledgeCard = createReadingCard("is-knowledge", "本题考点");
   knowledgeCard.append(createReadingList(result.knowledgePoints, "暂无明确考点。"));
   flow.append(knowledgeCard);
 
+  /* 3. 题意分析 */
   if (result.analysis) {
     flow.append(createReadingCard("is-analysis", "题意分析", result.analysis));
   }
 
-  const steps = Array.isArray(result.steps) ? result.steps : [];
-  if (steps.length) {
-    steps.forEach((step, index) => {
-      const card = createReadingCard("is-question-step", `第 ${index + 1} 问解析`);
-      const stepTitle = document.createElement("h3");
-      stepTitle.textContent = step.title || `第 ${index + 1} 问`;
-      card.append(stepTitle);
-      appendStepContent(card, step);
+  /* 4. 分问解析 */
+  var sections = Array.isArray(result.questionSections) ? result.questionSections : [];
+  var steps = Array.isArray(result.steps) ? result.steps : [];
 
-      const viewId = getStepDiagramViewId(step, views, index);
+  if (sections.length) {
+    sections.forEach(function(section, idx) {
+      var card = createReadingCard("is-question-step", section.title || ("第 " + (idx + 1) + " 问解析"));
+      var st = document.createElement("h3");
+      st.textContent = section.title || ("第 " + (idx + 1) + " 问");
+      card.append(st);
+
+      /* 解题思路 */
+      if (section.idea) {
+        var ideaP = document.createElement("p");
+        ideaP.className = "solution-step-thought";
+        ideaP.textContent = "解题思路：" + section.idea;
+        card.append(ideaP);
+      }
+
+      /* 关键依据 */
+      if (section.keyBasis) {
+        var kbP = document.createElement("p");
+        kbP.className = "solution-key-basis";
+        kbP.textContent = "关键依据：" + section.keyBasis;
+        card.append(kbP);
+      }
+
+      /* 分步推导 */
+      var subSteps = Array.isArray(section.steps) ? section.steps : [];
+      if (subSteps.length) {
+        var stepList = document.createElement("ol");
+        stepList.className = "solution-sub-steps";
+        subSteps.forEach(function(sub) {
+          var li = document.createElement("li");
+          var stTitle = document.createElement("strong");
+          stTitle.textContent = sub.title || "步骤";
+          li.append(stTitle);
+          if (sub.content) {
+            var stP = document.createElement("p");
+            stP.textContent = sub.content;
+            li.append(stP);
+          }
+          stepList.append(li);
+        });
+        card.append(stepList);
+      }
+
+      /* 本问结论 */
+      if (section.conclusion) {
+        var conclP = document.createElement("p");
+        conclP.className = "solution-conclusion";
+        if (isGeometric) {
+          conclP.textContent = "本问结论：" + section.conclusion;
+        } else {
+          conclP.textContent = "结论：" + section.conclusion;
+        }
+        card.append(conclP);
+      }
+
+      /* 对应图示 */
+      var viewId = section.diagramViewId || (views.length > 0 ? (views[idx] ? views[idx].id : null) : null);
+      if (!viewId && views.length > 0) {
+        var nonOrigViews = views.filter(function(v) { return v.id !== "original"; });
+        viewId = nonOrigViews[idx] ? nonOrigViews[idx].id : null;
+      }
       if (viewId) {
         appendVisualizationForView(card, visualizationSpec, viewId, "本问图示");
+      } else if (window.MathVisualization && visualizationSpec.type !== "none") {
+        appendVisualizationForView(card, visualizationSpec, null, "本问图示");
+      }
+
+      flow.append(card);
+    });
+  } else if (steps.length) {
+    steps.forEach(function(step, index) {
+      var card = createReadingCard("is-question-step", "分步解析");
+      var stTitle = document.createElement("h3");
+      stTitle.textContent = step.title || ("步骤 " + (index + 1));
+      card.append(stTitle);
+      appendStepContent(card, step);
+
+      var viewId = getStepDiagramViewId(step, views, index);
+      if (viewId) {
+        appendVisualizationForView(card, visualizationSpec, viewId, "本步图示");
       }
 
       flow.append(card);
@@ -1137,42 +1224,57 @@ function renderStructuredResult(result) {
     flow.append(createReadingCard("is-question-step", "分步解析", "暂无完整步骤。"));
   }
 
-  if (isDynamicVisualizationSpec(visualizationSpec)) {
-    const dynamicCard = createReadingCard("is-dynamic", "动态探索白板");
-    appendVisualizationForView(dynamicCard, visualizationSpec, "", "动态图示");
-    flow.append(dynamicCard);
-  } else if (!originalView && !steps.some((step, index) => getStepDiagramViewId(step, views, index))) {
-    const fallbackCard = createReadingCard("is-diagram", "本题图示");
-    appendVisualizationForView(fallbackCard, visualizationSpec, "", "图示讲解");
-    flow.append(fallbackCard);
+  /* 5. 方法总结（替代单独的"最终答案"+"验算检查"） */
+  var summaryCard = createReadingCard("is-depth", "方法总结");
+  var summaryParts = [];
+
+  if (result.topic) {
+    summaryParts.push("本题核心模型：" + result.topic);
   }
 
-  const deepCard = createReadingCard(
-    "is-depth",
-    "考法深度破译",
-    result.topic
-      ? `本题核心模型：${result.topic}。重点不是背答案，而是抓住条件、关系和检验。`
-      : "本题建议按“读条件—建关系—分步算—回代验”的节奏完成。",
-  );
-  flow.append(deepCard);
+  /* 对几何/图片题：结果融入方法总结，不单独显示 */
+  if (isGeometric) {
+    if (result.finalAnswer) {
+      summaryParts.push("结果：" + result.finalAnswer);
+    }
+    if (result.verification && !result.verification.startsWith("请将答案代回")) {
+      summaryParts.push("结果检查：" + result.verification);
+    }
+  }
 
-  flow.append(createReadingCard("is-answer", "最终答案", result.finalAnswer || "暂无最终答案。"));
+  summaryCard.append(createReadingList(summaryParts, "暂无总结。"));
+  flow.append(summaryCard);
 
-  const mistakeCard = createReadingCard("is-warning", "易错提醒");
+  /* 6. 最终答案（仅非几何/图片题显示独立卡片） */
+  if (!isGeometric) {
+    flow.append(createReadingCard("is-answer", "最终答案", result.finalAnswer || "暂无最终答案。"));
+  }
+
+  /* 7. 易错提醒 */
+  var mistakeCard = createReadingCard("is-warning", "易错提醒");
   mistakeCard.append(createReadingList(result.commonMistakes, "暂无易错提醒。"));
   flow.append(mistakeCard);
 
-  flow.append(createReadingCard("is-verification", "验算检查", result.verification || "暂无验算检查。"));
+  /* 8. 验算检查（仅非几何/图片题显示独立卡片） */
+  if (!isGeometric) {
+    flow.append(createReadingCard("is-verification", "验算检查", result.verification || "暂无验算检查。"));
+  }
+
   appendQualityCheck(flow, result.qualityCheck);
 
-  elements.structuredResult.replaceChildren(flow);
   elements.structuredResult.hidden = false;
 
-  if (window.MathJax?.typesetPromise) {
-    window.MathJax.typesetPromise([elements.structuredResult]).catch(() => {});
+  if (window.MathJax && window.MathJax.typesetPromise) {
+    window.MathJax.typesetPromise([flow]).catch(function() {});
   }
 }
 
+function isGeometryProblemByResult(result) {
+  if (!result) { return false; }
+  var combined = (result.topic || "") + "\n" + (result.problemText || "") + "\n" + (result.subject || "");
+  return /几何/.test(combined)
+    || /三角形|圆|四点共圆|相似|全等|角平分线|垂直|平行|中点|动点|最值|轨迹|辅助线|切线|弦|垂足/.test(combined);
+}
 function showResultActions(recordId) {
   state.currentSolveRecordId = recordId || null;
   const hasRecord = Boolean(state.currentSolveRecordId);
@@ -1192,6 +1294,57 @@ function showResultActions(recordId) {
     "is-saved",
     hasRecord && state.currentLibraryType === "strategy",
   );
+}
+
+function clearGenerationStatusTimers() {
+  state.generationStatusTimers.forEach(function(timerId) { window.clearTimeout(timerId); });
+  state.generationStatusTimers = [];
+  state._progressStartTime = 0;
+  state._progressTimedOut30 = false;
+  state._progressTimedOut60 = false;
+}
+
+function startGenerationStatusUpdates({
+  target = elements.generateButtonText,
+  statuses = [
+    "正在识别题目...",
+    "正在整理题干...",
+    "正在生成解析...",
+    "正在生成图示...",
+    "正在保存记录...",
+  ],
+} = {}) {
+  clearGenerationStatusTimers();
+
+  target.textContent = statuses[0] || "正在处理...";
+  state._progressStartTime = Date.now();
+  state._progressTimedOut30 = false;
+  state._progressTimedOut60 = false;
+
+  statuses.slice(1).forEach(function(status, index) {
+    var timerId = window.setTimeout(function() {
+      target.textContent = status;
+    }, (index + 1) * 2500);
+    state.generationStatusTimers.push(timerId);
+  });
+
+  /* 30 秒提示：题目较复杂 */
+  var timer30 = window.setTimeout(function() {
+    if (state.generationTimer) {
+      state._progressTimedOut30 = true;
+      target.textContent = "题目较复杂，正在继续解析，请稍候。";
+    }
+  }, 30000);
+  state.generationStatusTimers.push(timer30);
+
+  /* 60 秒提示：当前模型响应较慢 */
+  var timer60 = window.setTimeout(function() {
+    if (state.generationTimer) {
+      state._progressTimedOut60 = true;
+      target.textContent = "当前模型响应较慢，可稍后重试或切换模型。";
+    }
+  }, 60000);
+  state.generationStatusTimers.push(timer60);
 }
 
 function clearGenerationStatusTimers() {
@@ -1731,6 +1884,8 @@ async function solveImageFromUpload() {
     });
 
     showRecognizedText(data.recognizedText);
+    state.uploadedImageUrl = state.filePreviewUrl || null;
+
     renderAiHtmlResult(data.htmlResult);
     renderStructuredResult(data.result);
     state.currentSolveRecordId = data.recordId || null;
@@ -1762,6 +1917,14 @@ async function reanalyzeRecognizedText() {
     idleText: "用修改后的文本重新解析",
     loadingStatuses: ["正在整理修改后的题目...", "正在生成解析...", "正在保存记录..."],
   });
+}
+
+
+function revokeUploadImageUrl() {
+  if (state.uploadedImageUrl) {
+    URL.revokeObjectURL(state.uploadedImageUrl);
+    state.uploadedImageUrl = null;
+  }
 }
 
 function formatFileSize(bytes) {
@@ -1807,6 +1970,7 @@ function resetPreviewMedia() {
 }
 
 function clearFileSelection(showConfirmation = true) {
+  revokeUploadImageUrl();
   resetPreviewMedia();
   state.selectedProblemFile = null;
   elements.fileInput.value = "";
@@ -2701,6 +2865,28 @@ function saveBuildRecord(targetLibrary) {
   showToast(LIBRARY_CONFIG[targetLibrary].savedMessage);
 }
 
+
+function truncateTextToLines(text, maxLines) {
+  if (!text) return "";
+  var lines = text.split(/\n/);
+  if (lines.length <= maxLines) return text;
+  return lines.slice(0, maxLines).join("\n") + "…";
+}
+
+function extractShortTitle(text, fallback) {
+  if (!text || text.length < 3) return fallback || "数学题";
+  var clean = text.replace(/^[\s\d.)、（）①②③④⑤……]+/, "").trim();
+  if (clean.length > 18) clean = clean.substring(0, 18) + "…";
+  return clean || fallback || "数学题";
+}
+
+function formatAnswerSnippet(answer) {
+  if (!answer || answer.length < 2) return "";
+  var clean = answer.replace(/[\n\r]+/g, " ").trim();
+  if (clean.length > 30) clean = clean.substring(0, 30) + "…";
+  return "答案：" + clean;
+}
+
 function createTextElement(tagName, className, text) {
   const element = document.createElement(tagName);
   element.className = className;
@@ -2811,10 +2997,17 @@ function createCloudLibraryCard(record, targetLibrary) {
   main.className = "cloud-record-main";
   main.append(
     createTextElement("span", "cloud-record-kicker", targetLibrary === "strategy" ? "云端策略" : "云端原创"),
-    createTextElement("h2", "library-card-title", record.title || "未命名 AI 解析"),
+    /* 题目摘要 */
+    (function() {
+      const pEl = document.createElement("p");
+      pEl.className = "library-card-problem-snippet";
+      pEl.textContent = truncateTextToLines(record.problemText || "暂无原题文本。", 3);
+      return pEl;
+    })(),
+    createTextElement("h2", "library-card-title", extractShortTitle(record.title || record.problemText, "未命名 AI 解析")),
     createCloudRecordMeta(record),
-    createTextElement("p", "cloud-record-problem", record.problemText || "暂无原题文本。"),
-    createTextElement("p", "cloud-record-answer", record.finalAnswer ? `答案：${record.finalAnswer}` : "答案待查看详情"),
+    // Problem text shown above via library-card-problem-snippet
+    createTextElement("p", "cloud-record-answer", formatAnswerSnippet(record.finalAnswer) || "答案待查看详情"),
     createTextElement("time", "library-card-time", `创建于 ${formatCreatedAt(record.createdAt)}`),
   );
 
@@ -2847,12 +3040,32 @@ function createOriginalLibraryCard(item) {
     createTextElement(
       "h2",
       "library-card-title",
-      item.title || LIBRARY_CONFIG.original.defaultTitle,
+      extractShortTitle(item.title || item.problem_text, LIBRARY_CONFIG.original.defaultTitle),
     ),
     createTextElement("span", "original-record-status", "未发布"),
   );
 
   main.append(top, createRecordMeta(item));
+  /* 题目摘要 */
+  if (item.problem_text || item.sourceCode) {
+    let snippetText = item.problem_text || "";
+    if (!snippetText && item.sourceCode) {
+      snippetText = item.sourceCode.replace(/<[^>]+>/g, "").trim().substring(0, 200);
+    }
+    const snipP = document.createElement("p");
+    snipP.className = "library-card-problem-snippet";
+    snipP.textContent = truncateTextToLines(snippetText, 3);
+    main.append(snipP);
+  }
+
+  /* 答案摘要 */
+  if (item.finalAnswer) {
+    const ansPEl = document.createElement("p");
+    ansPEl.className = "library-card-answer-snippet";
+    ansPEl.textContent = formatAnswerSnippet(item.finalAnswer);
+    main.append(ansPEl);
+  }
+
 
   if (item.school) {
     main.append(createTextElement("p", "library-card-school", `学校：${item.school}`));
@@ -2905,6 +3118,22 @@ function createStrategyLibraryCard(item) {
     createTextElement("time", "strategy-record-time", `入库时间：${formatCreatedAt(item.createdAt)}`),
     createRecordMeta(item),
   );
+
+  /* 题目摘要 */
+  if (item.problem_text) {
+    const snippetEl = document.createElement("p");
+    snippetEl.className = "library-card-problem-snippet";
+    snippetEl.textContent = truncateTextToLines(item.problem_text, 3);
+    main.append(snippetEl);
+  }
+
+  /* 答案摘要 */
+  if (item.finalAnswer) {
+    var ansP = document.createElement("p");
+    ansP.className = "library-card-answer-snippet";
+    ansP.textContent = formatAnswerSnippet(item.finalAnswer);
+    main.append(ansP);
+  }
 
   if (item.school) {
     main.append(createTextElement("p", "library-card-school", `学校：${item.school}`));

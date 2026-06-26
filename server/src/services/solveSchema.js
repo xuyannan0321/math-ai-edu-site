@@ -606,6 +606,106 @@ function normalizeVisualizationSpec(value, fallback = {}) {
   return normalizeNonGeometrySpec(source, type, confidence);
 }
 
+
+/* 题干中的小问分割标记 */
+var SECTION_MARKERS = [
+  /[（(](\d+)[)）]/g,   // (1)（1）
+  /[①②③④⑤⑥⑦⑧⑨⑩]/g,   // ① ② ③
+  /问题探究|问题拓展|问题[一二三四五六七八九十]/g,
+  /拓展|延伸|探究|变式/g,
+];
+
+function splitProblemIntoSections(problemText) {
+  if (!problemText) return [];
+  var sections = [];
+  var segments = [];
+  var pos = 0;
+
+  // 1. Try structured markers like (1),（1）,①,②
+  var markerRegex = /[（(](\d+)[)）]|[①②③④⑤⑥⑦⑧⑨⑩]|问题探究|问题拓展|问题[一二三四五六七八九十]/g;
+  var lastEnd = 0;
+  var match;
+  var markers = [];
+
+  while ((match = markerRegex.exec(problemText)) !== null) {
+    markers.push({
+      index: match.index,
+      text: match[0],
+    });
+  }
+
+  if (markers.length >= 2) {
+    // There are at least 2 markers, split by them
+    for (var i = 0; i < markers.length; i++) {
+      var start = markers[i].index;
+      var end = (i + 1 < markers.length) ? markers[i + 1].index : problemText.length;
+      var sectionText = problemText.substring(start, end).trim();
+      if (sectionText) {
+        sections.push({
+          id: "q" + (i + 1),
+          title: "第 " + (i + 1) + " 问",
+          problem: sectionText,
+        });
+      }
+    }
+  }
+
+  return sections;
+}
+
+function normalizeQuestionSections(rawSections, problemText, steps) {
+  // If AI returned valid sections, normalize them
+  if (Array.isArray(rawSections) && rawSections.length > 0) {
+    return rawSections.map(function(s, idx) {
+      return {
+        id: s.id || ("q" + (idx + 1)),
+        title: s.title || ("第 " + (idx + 1) + " 问"),
+        problem: asString(s.problem || s.question || s.text || ""),
+        idea: asString(s.idea || s.thought || s.method || ""),
+        keyBasis: asString(s.keyBasis || s.keyPoint || s.basis || ""),
+        steps: normalizeSteps(s.steps || s.subSteps || []),
+        conclusion: asString(s.conclusion || s.result || s.answer || ""),
+        diagramViewId: asString(s.diagramViewId || s.viewId || s.view || ""),
+      };
+    }).filter(function(s) { return s.problem || s.steps.length > 0 || s.conclusion; });
+  }
+
+  // Try to split problem text by markers
+  var sections = splitProblemIntoSections(problemText);
+  if (sections.length >= 2) {
+    // Map steps to sections if we have enough steps
+    var stepArray = normalizeSteps(steps);
+    sections.forEach(function(s, idx) {
+      if (stepArray[idx]) {
+        var step = stepArray[idx];
+        s.idea = s.idea || step.thought || step.idea || "";
+        s.steps = [step];
+        s.conclusion = s.conclusion || step.content || "";
+      }
+    });
+    return sections;
+  }
+
+  // Fallback: use steps as sections
+  var stepArray = normalizeSteps(steps);
+  if (stepArray.length > 0) {
+    return stepArray.map(function(step, idx) {
+      return {
+        id: "q" + (idx + 1),
+        title: step.title || ("第 " + (idx + 1) + " 步"),
+        problem: "",
+        idea: step.thought || step.idea || step.method || "",
+        keyBasis: "",
+        steps: [step],
+        conclusion: step.content || "",
+        diagramViewId: step.diagramViewId || step.viewId || step.view || "",
+      };
+    });
+  }
+
+  return [];
+}
+
 function normalizeSolution(raw, fallback = {}) {
   const source = isPlainObject(raw) ? raw : {};
   const problemText = asString(source.problemText, fallback.questionText || "");
@@ -613,6 +713,12 @@ function normalizeSolution(raw, fallback = {}) {
   const knowledgePoints = asStringArray(source.knowledgePoints);
   const commonMistakes = asStringArray(source.commonMistakes);
   const visualizationSource = source.visualizationSpec || source.diagramSpec;
+
+  var questionSections = normalizeQuestionSections(
+    source.questionSections,
+    problemText,
+    steps,
+  );
 
   return {
     title: asString(source.title, problemText.slice(0, 32) || "数学解析"),
@@ -630,6 +736,7 @@ function normalizeSolution(raw, fallback = {}) {
             content: "题目条件暂未形成完整步骤，请检查题干是否完整后重新生成。",
           },
         ],
+    questionSections: questionSections,
     finalAnswer: asString(source.finalAnswer, "条件不足，暂不能确定唯一答案。"),
     commonMistakes: commonMistakes.length ? commonMistakes : ["不要只抄最终答案，要核对每一步依据。"],
     verification: asString(source.verification, "请将答案代回原题条件进行检查。"),
