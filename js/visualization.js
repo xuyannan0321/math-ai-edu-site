@@ -264,6 +264,11 @@
     };
   }
 
+
+  function getViews(spec) {
+    return Array.isArray(spec && spec.views) ? spec.views : [];
+  }
+
   function validateGeometrySpec(spec) {
     if (spec.type === "none" || spec.confidence === "low") {
       return {
@@ -728,7 +733,7 @@
       return;
     }
 
-    const views = spec.views.length ? spec.views : [{ id: "original", title: "原题图" }];
+    const views = getViews(spec).length ? getViews(spec) : [{ id: "original", title: "原题图" }];
     const selectedViews = options.viewId
       ? views.filter((view) => view.id === options.viewId)
       : views;
@@ -1158,7 +1163,8 @@
       context.fillStyle = "#f8fafc";
       context.fillRect(0, 0, canvas.width, canvas.height);
 
-      getVisibleObjects(spec, spec.views[0]).forEach((object) => {
+      var views = getViews(spec);
+      getVisibleObjects(spec, views[0]).forEach((object) => {
         if (!["segment", "auxiliaryLine"].includes(object.kind)) {
           return;
         }

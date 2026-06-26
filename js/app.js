@@ -1070,15 +1070,17 @@ function renderStructuredResult(result) {
   flow.replaceChildren();
 
 
-  debugLog("visualizationSpec.type:", visualizationSpec ? visualizationSpec.type : "none");
-  debugLog("hasReliableVisualization:", hasRenderableVisualizationSpec(result.visualizationSpec));
-  debugLog("views count:", Array.isArray(visualizationSpec.views) ? visualizationSpec.views.length : 0);
-  debugLog("objects count:", Array.isArray(visualizationSpec.objects) ? visualizationSpec.objects.length : 0);
+  try {
   var visualizationSpec = hasRenderableVisualizationSpec(result.visualizationSpec)
     ? result.visualizationSpec
     : createVisualizationFallback(result);
   var views = getVisualizationViews(visualizationSpec);
   var isGeometric = isGeometryProblemByResult(result);
+
+  debugLog("visualizationSpec.type:", visualizationSpec ? visualizationSpec.type : "none");
+  debugLog("hasReliableVisualization:", hasRenderableVisualizationSpec(result.visualizationSpec));
+  debugLog("views count:", getVisualizationViews(visualizationSpec).length);
+  debugLog("objects count:", visualizationSpec && Array.isArray(visualizationSpec.objects) ? visualizationSpec.objects.length : 0);
 
   /* 1. 原题复现 */
   var originalCard = createReadingCard("is-original", "原题复现");
@@ -1266,6 +1268,28 @@ function renderStructuredResult(result) {
 
   if (window.MathJax && window.MathJax.typesetPromise) {
     window.MathJax.typesetPromise([flow]).catch(function() {});
+  }
+
+} catch (renderError) {
+    debugLog("renderStructuredResult error:", renderError);
+    if (flow) {
+      var errorCard = createReadingCard("is-original", "解析显示异常");
+      errorCard.append(document.createTextNode(result && result.problemText ? result.problemText : "图示暂不可用，已保留文字解析。"));
+      if (state.uploadedImageUrl) {
+        var errorImg = document.createElement("img");
+        errorImg.src = state.uploadedImageUrl;
+        errorImg.alt = "上传的题目原图";
+        errorImg.className = "problem-original-image";
+        errorCard.append(errorImg);
+      }
+      flow.replaceChildren();
+      flow.append(errorCard);
+      elements.structuredResult.hidden = false;
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([flow]).catch(function() {});
+      }
+    }
+    showToast("图示暂不可用，已保留文字解析。");
   }
 }
 
@@ -1555,8 +1579,11 @@ function getFriendlyAiError(error) {
   if (error.status === 503) {
     return "当前模型暂不可用，请切换其他模型或使用自动推荐。";
   }
-
-  return error.message || "AI 解题失败，请稍后再试。";
+  var message = error.message || "";
+  if (/Cannot read properties of undefined|TypeError|ReferenceError/.test(message)) {
+    return "图示暂不可用，已保留文字解析。";
+  }
+  return message || "AI 解题失败，请稍后再试。";
 }
 
 async function saveCurrentRecordToLibrary(libraryType) {
@@ -3814,6 +3841,7 @@ function renderBuildPreview() {
 }
 
 function bindEvents() {
+  try {
   elements.pageButtons.forEach((button) => {
     button.addEventListener("click", () => {
       if (button.dataset.resetLibraryFilters) {
@@ -3989,24 +4017,36 @@ function bindEvents() {
     }
   });
   window.addEventListener("beforeunload", revokeFilePreviewUrl);
+  } catch (bindError) {
+    debugLog("bindEvents error:", bindError);
+  }
 }
 
 function initializeApp() {
-  cacheElements();
-  renderAuthState();
-  loadCurrentUser(true);
-  initializeWelcomeGuide();
-  initializeBuildSelectors();
-  initializeStrategyFilters();
-  bindEvents();
-  selectModelProvider(state.selectedModelProvider);
-  showResultActions(null);
-  refreshModelStatuses();
-  switchSolveMode(state.activeSolveMode);
-  switchOriginalTab(state.activeOriginalTab);
-  renderLibraryList("strategy");
-  switchPage(state.activePage);
-  switchResultView(state.activeView);
+  var initSteps = [
+    cacheElements,
+    renderAuthState,
+    function() { loadCurrentUser(true); },
+    initializeWelcomeGuide,
+    initializeBuildSelectors,
+    initializeStrategyFilters,
+    bindEvents,
+    function() { selectModelProvider(state.selectedModelProvider); },
+    function() { showResultActions(null); },
+    refreshModelStatuses,
+    function() { switchSolveMode(state.activeSolveMode); },
+    function() { switchOriginalTab(state.activeOriginalTab); },
+    function() { renderLibraryList("strategy"); },
+    function() { switchPage(state.activePage); },
+    function() { switchResultView(state.activeView); },
+  ];
+  for (var i = 0; i < initSteps.length; i++) {
+    try {
+      initSteps[i]();
+    } catch (stepError) {
+      debugLog("init: step " + i + " failed:", stepError);
+    }
+  }
 }
 
 document.addEventListener("DOMContentLoaded", initializeApp);
