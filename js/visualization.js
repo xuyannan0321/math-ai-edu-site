@@ -897,52 +897,236 @@
     return (x) => coefficients.a * x * x + coefficients.b * x + coefficients.c;
   }
 
-  function renderFunctionGraph(container, spec) {
-    const functionObjects = spec.objects.filter((object) => object.kind === "function");
 
-    if (!functionObjects.length) {
-      renderEmpty(container, "暂无可靠图示，可查看文字解析。");
+  // --- LaTeX math parsing helpers (no eval) ---
+  function parseLatexNumber(str) {
+    if (!str) return NaN;
+    str = String(str).replace(/\s+/g, "");
+    // \frac{a}{b}
+    var fracM = str.match(/^\\frac\{([^}]+)\}\{([^}]+)\}$/);
+    if (fracM) {
+      var num = parseLatexNumber(fracM[1]);
+      var den = parseLatexNumber(fracM[2]);
+      return (Number.isFinite(num) && Number.isFinite(den) && den !== 0) ? num / den : NaN;
+    }
+    // \sqrt{a}
+    var sqrtM = str.match(/^\\sqrt\{([^}]+)\}$/);
+    if (sqrtM) {
+      var val = parseLatexNumber(sqrtM[1]);
+      return Number.isFinite(val) ? Math.sqrt(Math.abs(val)) : NaN;
+    }
+    // Plain number
+    var n = Number(str);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  function normalizeMathExpressionForGraph(expr) {
+    if (!expr) return null;
+    var s = String(expr)
+      .replace(/^y\s*=\s*/i, "")
+      .replace(/^f\s*\(\s*x\s*\)\s*=\s*/i, "")
+      .replace(/\s+/g, "")
+      .replace(/²/g, "^2");
+
+    // Replace \frac{a}{b} with numeric value if pure numbers
+    s = s.replace(/\\frac\{([\d.]+)\}\{([\d.]+)\}/g, function(m, a, b) {
+      var na = Number(a), nb = Number(b);
+      return (Number.isFinite(na) && Number.isFinite(nb) && nb !== 0) ? String(na / nb) : m;
+    });
+    // Replace \sqrt{n} with numeric
+    s = s.replace(/\\sqrt\{([\d.]+)\}/g, function(m, n) {
+      var v = Number(n);
+      return Number.isFinite(v) ? String(Math.sqrt(Math.abs(v))) : m;
+    });
+    // Replace (\sqrt{3}/3) style
+    s = s.replace(/\(\\sqrt\{([\d.]+)\}\/([\d.]+)\)/g, function(m, a, b) {
+      var v = Math.sqrt(Math.abs(Number(a)));
+      var nb = Number(b);
+      return (Number.isFinite(v) && Number.isFinite(nb) && nb !== 0) ? String(v / nb) : m;
+    });
+
+    // If still has LaTeX commands we cant parse, return null
+    if (/\\[a-zA-Z]/.test(s)) return null;
+
+    return s;
+  }
+
+  function parseQuadraticCoefficients(expr) {
+    var s = normalizeMathExpressionForGraph(expr);
+    if (!s) return null;
+
+    // Replace x^2, x, constants
+    var a = 0, b = 0, c = 0;
+    // Split by + or - (but not at start)
+    var terms = s.match(/[+\-]?[^+\-]+/g) || [];
+    terms.forEach(function(term) {
+      if (/x\^2/.test(term)) {
+        var coeff = term.replace(/x\^2.*$/, "").replace(/\*/g, "");
+        if (coeff === "" || coeff === "+") a += 1;
+        else if (coeff === "-") a -= 1;
+        else { var n = Number(coeff); if (Number.isFinite(n)) a += n; else return null; }
+      } else if (/x/.test(term)) {
+        var coeff = term.replace(/x.*$/, "").replace(/\*/g, "");
+        if (coeff === "" || coeff === "+") b += 1;
+        else if (coeff === "-") b -= 1;
+        else { var n = Number(coeff); if (Number.isFinite(n)) b += n; else return null; }
+      } else {
+        var n = Number(term); if (Number.isFinite(n)) c += n; else return null;
+      }
+    });
+
+    return function(x) { return a * x * x + b * x + c; };
+  }
+
+  function evaluateMathExpression(expr) {
+    // Try quadratic first
+    var quad = parseQuadraticCoefficients(expr);
+    if (quad) return quad;
+
+    // Try linear: ax + b
+    var s = normalizeMathExpressionForGraph(expr);
+    if (!s) return null;
+
+    var b = 0, a = 0;
+    var terms = s.match(/[+\-]?[^+\-]+/g) || [];
+    terms.forEach(function(term) {
+      if (/x/.test(term)) {
+        var coeff = term.replace(/x.*$/, "").replace(/\*/g, "");
+        if (coeff === "" || coeff === "+") a += 1;
+        else if (coeff === "-") a -= 1;
+        else { var n = Number(coeff); if (Number.isFinite(n)) a += n; else return null; }
+      } else {
+        var n = Number(term); if (Number.isFinite(n)) b += n; else return null;
+      }
+    });
+
+    return function(x) { return a * x + b; };
+  }
+
+  function renderFunctionGraph(container, spec) {
+    // Collect functions from spec.functions and spec.objects
+    var funcDefs = [];
+
+    (Array.isArray(spec.functions) ? spec.functions : []).forEach(function(f) {
+      if (f && f.expression) funcDefs.push({ expression: f.expression, range: f.range || [-5, 5], label: f.label || "" });
+    });
+
+    (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
+      if (o && o.kind === "function" && o.expression) funcDefs.push({ expression: o.expression, range: o.range || [-5, 5], label: o.label || "" });
+    });
+
+    if (!funcDefs.length) {
+      renderEmpty(container, "暂无可靠函数图示，可查看文字解析。");
       return;
     }
 
-    const bounds = { minX: -5, maxX: 5, minY: -5, maxY: 5 };
-    const mapper = createMapper(bounds);
-    const svg = createBaseSvg("math-visualization-svg function-svg");
-    renderAxes(svg, mapper, bounds);
+    // Collect all evaluators
+    var evaluators = [];
+    funcDefs.forEach(function(fd) {
+      var fn = evaluateMathExpression(fd.expression);
+      if (fn) evaluators.push({ fn: fn, range: fd.range, label: fd.label });
+    });
 
-    functionObjects.forEach((object) => {
-      const evaluate = parsePolynomialExpression(object.expression);
-      if (!evaluate) return;
+    if (!evaluators.length) {
+      renderEmpty(container, "暂无可靠函数图示，可查看文字解析。");
+      return;
+    }
 
-      const range = Array.isArray(object.range) && object.range.length >= 2 ? object.range : [bounds.minX, bounds.maxX];
-      const min = Math.max(bounds.minX, Number(range[0]));
-      const max = Math.min(bounds.maxX, Number(range[1]));
-      const samples = [];
-
-      for (let index = 0; index <= 100; index += 1) {
-        const x = min + ((max - min) * index) / 100;
-        const y = evaluate(x);
-
-        if (Number.isFinite(y) && y >= bounds.minY - 8 && y <= bounds.maxY + 8) {
-          const projected = mapper.project({ x, y });
-          samples.push(`${projected.x.toFixed(2)},${projected.y.toFixed(2)}`);
+    // Collect all points
+    var allPoints = [];
+    // From spec.points
+    var ptMap = spec.points || {};
+    if (typeof ptMap === "object") {
+      Object.keys(ptMap).forEach(function(id) {
+        var p = ptMap[id];
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+          allPoints.push({ x: p.x, y: p.y, label: p.label || id });
+        }
+      });
+    }
+    // From spec.objects with kind:point or kind:label
+    (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
+      if (o && (o.kind === "point") && Number.isFinite(o.x) && Number.isFinite(o.y)) {
+        if (!allPoints.some(function(p) { return Math.abs(p.x - o.x) < 0.001 && Math.abs(p.y - o.y) < 0.001; })) {
+          allPoints.push({ x: o.x, y: o.y, label: o.label || o.id || "" });
         }
       }
+    });
 
+    // Auto-compute bounds from functions + points
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+    evaluators.forEach(function(ev) {
+      var rMin = Math.max(-10, Number(ev.range[0]) || -5);
+      var rMax = Math.min(10, Number(ev.range[1]) || 5);
+      for (var xi = 0; xi <= 100; xi++) {
+        var x = rMin + (rMax - rMin) * xi / 100;
+        var y = ev.fn(x);
+        if (Number.isFinite(y) && Math.abs(y) < 100) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    });
+
+    allPoints.forEach(function(p) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    });
+
+    // Fallback bounds
+    if (!isFinite(minX)) { minX = -5; maxX = 5; minY = -5; maxY = 5; }
+
+    // Add padding
+    var padX = Math.max(1, (maxX - minX) * 0.2);
+    var padY = Math.max(1, (maxY - minY) * 0.2);
+    if (maxX - minX < 0.5) { padX = 2; maxX = minX + 5; }
+    if (maxY - minY < 0.5) { padY = 2; maxY = minY + 5; }
+
+    var bounds = { minX: minX - padX, maxX: maxX + padX, minY: minY - padY, maxY: maxY + padY };
+    var mapper = createMapper(bounds);
+    var svg = createBaseSvg("math-visualization-svg function-svg");
+    renderAxes(svg, mapper, bounds);
+
+    // Draw curves
+    evaluators.forEach(function(ev) {
+      var sMin = Math.max(bounds.minX, Number(ev.range[0]) || -5);
+      var sMax = Math.min(bounds.maxX, Number(ev.range[1]) || 5);
+      var samples = [];
+      for (var i = 0; i <= 200; i++) {
+        var x = sMin + (sMax - sMin) * i / 200;
+        var y = ev.fn(x);
+        if (Number.isFinite(y) && y >= bounds.minY - 50 && y <= bounds.maxY + 50) {
+          var proj = mapper.project({ x: x, y: y });
+          samples.push(proj.x.toFixed(2) + "," + proj.y.toFixed(2));
+        }
+      }
       if (samples.length > 1) {
-        svg.append(
-          createSvgElement("polyline", {
-            points: samples.join(" "),
-            class: "mv-function",
-            "data-object-id": object.id,
-          }),
-        );
+        svg.append(createSvgElement("polyline", { points: samples.join(" "), class: "mv-function" }));
+      }
+    });
+
+    // Draw points
+    allPoints.forEach(function(p) {
+      drawPoint(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, mapper);
+    });
+
+    // Draw auxiliary lines
+    (Array.isArray(spec.auxiliaryLines) ? spec.auxiliaryLines : []).forEach(function(l) {
+      if (l && l.from && l.to && l.kind) {
+        drawLine(svg, l.from, l.to, mapper, { className: "mv-auxiliary-line", dashed: l.style === "dashed" });
+      }
+    });
+
+    // Also from spec.objects
+    (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
+      if (o && (o.kind === "auxiliaryLine" || o.kind === "line" || o.kind === "segment") && o.from && o.to) {
+        drawLine(svg, o.from, o.to, mapper, { className: o.style === "dashed" ? "mv-auxiliary-line" : "mv-segment", dashed: o.style === "dashed" });
       }
     });
 
     container.append(svg);
   }
-
   function renderEquationBalanceLegacy(container, spec) {
     const wrapper = createHtmlElement("div", "equation-balance-board");
     const left = createHtmlElement("div", "equation-side", "左边");
@@ -968,9 +1152,9 @@
     container.append(wrapper);
   }
 
-  function renderEquationBalance(container, spec) {
-    const objects = Array.isArray(spec.objects) ? spec.objects.slice(0, 10) : [];
 
+  function renderEquationBalance(container, spec) {
+    // Prefer leftTerms/rightTerms; fallback to equation splitting; then objects
     function eqSplit(eqStr) {
       if (!eqStr || typeof eqStr !== "string") return { left: [], right: [] };
       var parts = eqStr.split("=");
@@ -983,13 +1167,8 @@
       };
     }
 
-    // Prefer leftTerms/rightTerms; fallback to equation splitting; then objects
-    var leftTerms = Array.isArray(spec.leftTerms) && spec.leftTerms.length
-      ? spec.leftTerms
-      : null;
-    var rightTerms = Array.isArray(spec.rightTerms) && spec.rightTerms.length
-      ? spec.rightTerms
-      : null;
+    var leftTerms = Array.isArray(spec.leftTerms) && spec.leftTerms.length ? spec.leftTerms : null;
+    var rightTerms = Array.isArray(spec.rightTerms) && spec.rightTerms.length ? spec.rightTerms : null;
 
     if (!leftTerms || !rightTerms) {
       var eqSides = eqSplit(spec.equation);
@@ -1003,69 +1182,60 @@
       rightTerms = rightTerms || objs.filter(function(o) { return o && o.side === "right"; }).map(function(o) { return o.label || o.id || ""; });
     }
 
+    if (!leftTerms || !leftTerms.length || !rightTerms || !rightTerms.length) {
+      renderEmpty(container, "暂无可靠方程图示，可查看文字解析。");
+      return;
+    }
+
     var steps = Array.isArray(spec.steps) ? spec.steps : [];
-    var svg = createBaseSvg("math-visualization-svg equation-balance-svg");
+    var flow = createHtmlElement("div", "equation-balance-flow");
 
-    // Draw a term block
-    function drawTerm(svgEl, term, cx, cy) {
-      if (!term) return;
-      var tw = Math.max(term.length * 14 + 24, 48);
-      svgEl.append(
-        createSvgElement("rect", { x: cx - tw / 2, y: cy - 20, width: tw, height: 38, rx: 10, class: "mv-equation-block" })
-      );
-      var t = createSvgElement("text", { x: cx, y: cy + 4, class: "mv-equation-term", "text-anchor": "middle" });
-      t.textContent = term;
-      svgEl.append(t);
+    // Helper: build one term card
+    function termCard(term) {
+      var span = createHtmlElement("span", "equation-block");
+      span.textContent = term || "";
+      return span;
     }
 
-    // Draw one row: left terms | = | right terms
-    function drawRow(leftList, rightList, rowY, showEqual, lblL, lblR) {
-      if (showEqual) {
-        var eq = createSvgElement("text", { x: 280, y: rowY + 4, class: "mv-equation-equal", "text-anchor": "middle" });
-        eq.textContent = "=";
-        svg.append(eq);
-      }
-      if (lblL) { var ll = createSvgElement("text", { x: 130, y: rowY - 12, class: "mv-equation-label", "text-anchor": "middle" }); ll.textContent = lblL; svg.append(ll); }
-      if (lblR) { var rr = createSvgElement("text", { x: 430, y: rowY - 12, class: "mv-equation-label", "text-anchor": "middle" }); rr.textContent = lblR; svg.append(rr); }
-
-      (leftList || []).forEach(function(t, i) { drawTerm(svg, t, 50 + (i % 2) * 100 + 30, rowY + Math.floor(i / 2) * 50); });
-      (rightList || []).forEach(function(t, i) { drawTerm(svg, t, 330 + (i % 2) * 100 + 30, rowY + Math.floor(i / 2) * 50); });
-
-      return Math.max(1, Math.ceil((leftList || []).length / 2), Math.ceil((rightList || []).length / 2)) * 50 + 20;
+    // Helper: build one row: left terms | = | right terms
+    function buildRow(leftList, rightList) {
+      var row = createHtmlElement("div", "equation-row");
+      var leftSide = createHtmlElement("div", "equation-side");
+      (leftList || []).forEach(function(t) { leftSide.append(termCard(t)); });
+      if (!leftSide.children.length) leftSide.textContent = "\u2014";
+      var eqSign = createHtmlElement("div", "equation-balance-beam", "=");
+      var rightSide = createHtmlElement("div", "equation-side");
+      (rightList || []).forEach(function(t) { rightSide.append(termCard(t)); });
+      if (!rightSide.children.length) rightSide.textContent = "\u2014";
+      row.append(leftSide, eqSign, rightSide);
+      return row;
     }
 
-    // Original equation
-    var y = 60;
-    y += drawRow(leftTerms, rightTerms, y, true, "左边", "右边");
+    // Step 0: original equation
+    var step0 = createHtmlElement("article", "equation-balance-step");
+    var h4 = createHtmlElement("h4", "", "原式");
+    step0.append(h4, buildRow(leftTerms, rightTerms));
+    flow.append(step0);
 
-    // Separator
-    svg.append(createSvgElement("line", { x1: 40, y1: y + 4, x2: 520, y2: y + 4, class: "mv-segment", style: "stroke-dasharray: 6 4; opacity: 0.4;" }));
-    y += 20;
-
-    // Steps
-    steps.forEach(function(step) {
-      var sl = createSvgElement("text", { x: 280, y: y - 6, class: "mv-equation-label", "text-anchor": "middle" });
-      sl.textContent = step.label || step.stepTitle || "";
-      svg.append(sl);
-      y += 14;
+    // Step N: each transformation
+    steps.forEach(function(step, i) {
+      var art = createHtmlElement("article", "equation-balance-step");
+      var label = createHtmlElement("h4", "", (i + 1) + ". " + (step.label || step.stepTitle || "步骤 " + (i + 1)));
+      art.append(label);
 
       var slt = Array.isArray(step.leftTerms) ? step.leftTerms : [];
       var srt = Array.isArray(step.rightTerms) ? step.rightTerms : [];
-
-      // Fallback: split step equation if present
       if ((!slt.length || !srt.length) && step.equation) {
         var ss = eqSplit(step.equation);
         if (!slt.length) slt = ss.left;
         if (!srt.length) srt = ss.right;
       }
-
-      y += drawRow(slt, srt, y, false);
+      art.append(buildRow(slt, srt));
+      flow.append(art);
     });
 
-    svg.setAttribute("viewBox", "0 0 560 " + Math.max(y + 20, 260));
-    container.append(svg);
+    container.append(flow);
   }
-
   function renderNumberLine(container, spec) {
     const values = spec.objects
       .map((object) => Number(object.value ?? object.x))

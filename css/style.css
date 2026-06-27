@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: light;
   --blue-50: #eff6ff;
   --blue-100: #dbeafe;
@@ -1013,6 +1013,36 @@ select.form-control {
   fill: #16a34a;
 }
 
+/* Equation balance flow (HTML card layout) */
+.equation-balance-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+.equation-balance-step {
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+}
+
+.equation-balance-step h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-700);
+  padding: 0;
+}
+
+.equation-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
 .equation-balance-board {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -1220,11 +1250,11 @@ select.form-control {
 
 .advanced-result-preview > summary::after {
   color: var(--blue-600);
-  content: "展开";
+  content: "灞曞紑";
 }
 
 .advanced-result-preview[open] > summary::after {
-  content: "收起";
+  content: "鏀惰捣";
 }
 
 .advanced-result-preview .result-toolbar {
@@ -2187,7 +2217,7 @@ select.form-control {
 
 .original-record-more summary::after {
   margin-left: 6px;
-  content: "⌄";
+  content: "鈱?;
 }
 
 .original-record-more[open] summary {
@@ -4372,7 +4402,7 @@ body.is-preview-open {
   left: 0;
   color: var(--blue-600);
   font-weight: 800;
-  content: "✓";
+  content: "鉁?;
 }
 
 .help-note {
@@ -4431,7 +4461,7 @@ body.is-preview-open {
   top: 2px;
   left: 1px;
   color: #d97706;
-  content: "•";
+  content: "鈥?;
 }
 
 .help-faq-list {
@@ -5327,13 +5357,13 @@ body.is-preview-open {
 
 .model-picker-summary::after {
   color: #64748b;
-  content: "展开";
+  content: "灞曞紑";
   font-size: 12px;
   white-space: nowrap;
 }
 
 .model-picker[open] .model-picker-summary::after {
-  content: "收起";
+  content: "鏀惰捣";
 }
 
 .model-picker-summary strong {
@@ -5423,7 +5453,7 @@ body.is-preview-open {
   min-width: 0;
 }
 
-/* 新标准化展示样式 */
+/* 鏂版爣鍑嗗寲灞曠ず鏍峰紡 */
 .solution-tags {
   display: flex;
   flex-wrap: wrap;
@@ -5486,7 +5516,7 @@ body.is-preview-open {
   border-radius: 12px;
 }
 
-/* 推理链样式 */
+/* 鎺ㄧ悊閾炬牱寮?*/
 .solution-reasoning-list {
   list-style: none;
   padding: 0;
@@ -5523,7 +5553,7 @@ body.is-preview-open {
   font-weight: 600;
 }
 
-/* 公式块样式 */
+/* 鍏紡鍧楁牱寮?*/
 .solution-equation-block {
   margin: 10px 0;
   padding: 12px 14px;
@@ -5546,7 +5576,7 @@ body.is-preview-open {
   font-family: "Cambria Math", serif;
 }
 
-/* 已知 / 辅助线列表 */
+/* 宸茬煡 / 杈呭姪绾垮垪琛?*/
 .solution-section-label {
   margin: 10px 0 4px;
   font-size: 14px;
@@ -5599,7 +5629,7 @@ body.is-preview-open {
   margin: 0 auto;
 }
 
-/* 手机端适配 */
+/* 鎵嬫満绔€傞厤 */
 @media (max-width: 480px) {
   .solution-reading-card {
     padding: 14px;
@@ -5744,7 +5774,7 @@ body.is-preview-open {
 }
 
 
-/* 题库卡片摘要样式 */
+/* 棰樺簱鍗＄墖鎽樿鏍峰紡 */
 .library-card-problem-snippet {
   margin: 6px 0 4px;
   color: #475569;

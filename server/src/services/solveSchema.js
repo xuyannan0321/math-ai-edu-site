@@ -521,18 +521,18 @@ function normalizeNonGeometrySpec(source, type, confidence) {
         .filter(Boolean)
     : [];
 
-  // Handle function_graph: add functions, auxiliaryLines, views
+  // Handle function_graph: preserve functions, auxiliaryLines, points
   if (type === "function_graph") {
-    if (!objects.length) {
-      return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
-    }
     return {
       type,
       title: asString(source.title, "函数图像"),
       description: asString(source.description),
       confidence,
       orientation: normalizeOrientation(source.orientation),
-      points: {},
+      equation: asString(source.equation || ""),
+      functions: Array.isArray(source.functions) ? source.functions.map(function(f) { return { id: asString(f.id), label: asString(f.label), expression: asString(f.expression), range: Array.isArray(f.range) ? f.range.map(Number).filter(Number.isFinite).slice(0, 2) : [-5, 5], role: asString(f.role, "original") }; }) : [],
+      points: collectPoints(source),
+      auxiliaryLines: Array.isArray(source.auxiliaryLines) ? source.auxiliaryLines.map(function(l) { return { id: asString(l.id), kind: asString(l.kind || l.type, "line"), label: asString(l.label), from: l.from || {}, to: l.to || {}, style: asString(l.style, "dashed"), role: "auxiliary" }; }) : [],
       objects,
       views: Array.isArray(source.views) ? source.views.map(function(v, i) { return normalizeVisualizationView(v, i, new Set(objects.map(function(o) { return o.id; }))); }).filter(Boolean) : [],
       steps,
@@ -600,6 +600,65 @@ function normalizeEquationBalanceSpec(source, confidence) {
   }
 }
 
+
+function normalizeEquationBalanceSpec(source, confidence) {
+  var equation = asString(source.equation || "");
+  var leftTerms = Array.isArray(source.leftTerms)
+    ? source.leftTerms.map(function(t) { return asString(t); }).filter(Boolean)
+    : [];
+  var rightTerms = Array.isArray(source.rightTerms)
+    ? source.rightTerms.map(function(t) { return asString(t); }).filter(Boolean)
+    : [];
+
+  if ((!leftTerms.length || !rightTerms.length) && equation && equation.includes("=")) {
+    var eqParts = equation.split("=");
+    if (eqParts.length >= 2) {
+      var leftStr = eqParts[0].replace(/\s+/g, "");
+      var rightStr = eqParts[eqParts.length - 1].replace(/\s+/g, "");
+      if (!leftTerms.length) leftTerms = leftStr.match(/[+\-]?[^+\-]+/g) || [leftStr];
+      if (!rightTerms.length) rightTerms = rightStr.match(/[+\-]?[^+\-]+/g) || [rightStr];
+    }
+  }
+
+  if (!leftTerms.length || !rightTerms.length) {
+    var objs = Array.isArray(source.objects) ? source.objects : [];
+    if (!leftTerms.length) leftTerms = objs.filter(function(o) { return o && o.side !== "right"; }).map(function(o) { return asString(o.label || o.id || ""); }).filter(Boolean);
+    if (!rightTerms.length) rightTerms = objs.filter(function(o) { return o && o.side === "right"; }).map(function(o) { return asString(o.label || o.id || ""); }).filter(Boolean);
+  }
+
+  if (!equation && (leftTerms.length || rightTerms.length)) {
+    equation = leftTerms.join("") + "=" + rightTerms.join("");
+  }
+
+  var rawSteps = Array.isArray(source.steps) ? source.steps : [];
+  if (!leftTerms.length && !rightTerms.length) {
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+  }
+
+  var steps = rawSteps.map(function(step) {
+    if (!step || typeof step !== "object") return null;
+    return {
+      label: asString(step.label || step.stepTitle || step.title || ""),
+      leftTerms: Array.isArray(step.leftTerms) ? step.leftTerms.map(function(t) { return asString(t); }).filter(Boolean) : [],
+      rightTerms: Array.isArray(step.rightTerms) ? step.rightTerms.map(function(t) { return asString(t); }).filter(Boolean) : [],
+    };
+  }).filter(Boolean);
+
+  return {
+    type: "equation_balance",
+    title: asString(source.title, "方程平衡示意"),
+    description: asString(source.description, "等式两边保持平衡的图示说明。"),
+    confidence: REQUIRED_CONFIDENCE_VALUES.has(confidence) ? confidence : "medium",
+    equation,
+    leftTerms,
+    rightTerms,
+    steps,
+    orientation: normalizeOrientation(source.orientation),
+    points: {},
+    objects: [],
+    views: [],
+  };
+}
 
 function createEquationBalanceFallback(text) {
   var normalized = asString(text)
@@ -759,6 +818,14 @@ function normalizeVisualizationSpec(value, fallback = {}) {
   }
 
   // If AI returns number_line but problem text is a linear equation, override with equation_balance
+  if (type === "number_line") {
+    var eqOverride = createEquationBalanceFallback(fallback.questionText || "");
+    if (eqOverride) {
+      return eqOverride;
+    }
+  }
+
+  // If AI returns number_line but problem is a linear equation, override
   if (type === "number_line") {
     var eqOverride = createEquationBalanceFallback(fallback.questionText || "");
     if (eqOverride) {
