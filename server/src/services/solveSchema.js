@@ -130,6 +130,48 @@ function normalizeSteps(value) {
     .filter((step) => step && step.content);
 }
 
+function normalizeReasoningLines(rawLines) {
+  const lines = Array.isArray(rawLines) ? rawLines : [];
+  const validTypes = new Set(["because", "therefore", "normal", "calculation", "conclusion"]);
+  return lines
+    .filter(function(line) { return line && typeof line === "object" && validTypes.has(line.type) && line.text; })
+    .map(function(line) { return { type: line.type, text: asString(line.text) }; });
+}
+
+function normalizeEquationBlocks(rawBlocks) {
+  const blocks = Array.isArray(rawBlocks) ? rawBlocks : [];
+  return blocks
+    .filter(function(block) {
+      if (!block || typeof block !== "object") return false;
+      var lines = Array.isArray(block.lines) ? block.lines.filter(Boolean) : [];
+      return lines.length > 0;
+    })
+    .map(function(block) {
+      return {
+        title: asString(block.title, ""),
+        lines: (Array.isArray(block.lines) ? block.lines : []).filter(Boolean).map(function(l) { return asString(l); }),
+      };
+    });
+}
+
+function normalizeKnown(rawKnown) {
+  if (Array.isArray(rawKnown)) return rawKnown.filter(Boolean).map(function(k) { return asString(k); });
+  if (typeof rawKnown === "string") return rawKnown ? [rawKnown] : [];
+  return [];
+}
+
+function normalizeConstruction(rawConstruction) {
+  if (Array.isArray(rawConstruction)) return rawConstruction.filter(Boolean).map(function(k) { return asString(k); });
+  if (typeof rawConstruction === "string") return rawConstruction ? [rawConstruction] : [];
+  return [];
+}
+
+function normalizeKeyBasis(rawKeyBasis) {
+  if (Array.isArray(rawKeyBasis)) return rawKeyBasis.filter(Boolean).map(function(k) { return asString(k); });
+  if (typeof rawKeyBasis === "string") return rawKeyBasis ? [asString(rawKeyBasis)] : [];
+  return [];
+}
+
 function normalizeQualityCheck(value) {
   const source = isPlainObject(value) ? value : {};
   const confidence = REQUIRED_CONFIDENCE_VALUES.has(source.confidence)
@@ -139,6 +181,7 @@ function normalizeQualityCheck(value) {
   return {
     checked: source.checked === undefined ? true : Boolean(source.checked),
     confidence,
+    sourceVerificationPassed: Boolean(source.sourceVerificationPassed === true),
     issues: asStringArray(source.issues),
   };
 }
@@ -463,16 +506,34 @@ function normalizeGeometrySpec(source, confidence, outputType = "geometry") {
 }
 
 function normalizeNonGeometrySpec(source, type, confidence) {
-  const objects = Array.isArray(source.objects)
+  var objects = Array.isArray(source.objects)
     ? source.objects
-        .map((object, index) => normalizeVisualizationObject(object, {}, index))
-        .filter((object) => object && !object.error)
+        .map(function(object, index) { return normalizeVisualizationObject(object, {}, index); })
+        .filter(function(object) { return object && !object.error; })
     : [];
-  const steps = Array.isArray(source.steps)
+  var steps = Array.isArray(source.steps)
     ? source.steps
-        .map((step, index) => normalizeVisualizationStep(step, index, new Set(objects.map((object) => object.id))))
+        .map(function(step, index) { return normalizeVisualizationStep(step, index, new Set(objects.map(function(o) { return o.id; }))); })
         .filter(Boolean)
     : [];
+
+  // Handle function_graph: add functions, auxiliaryLines, views
+  if (type === "function_graph") {
+    if (!objects.length) {
+      return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+    }
+    return {
+      type,
+      title: asString(source.title, "函数图像"),
+      description: asString(source.description),
+      confidence,
+      orientation: normalizeOrientation(source.orientation),
+      points: {},
+      objects,
+      views: Array.isArray(source.views) ? source.views.map(function(v, i) { return normalizeVisualizationView(v, i, new Set(objects.map(function(o) { return o.id; }))); }).filter(Boolean) : [],
+      steps,
+    };
+  }
 
   if (type !== "number_line" && !objects.length) {
     return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
@@ -661,13 +722,17 @@ function normalizeQuestionSections(rawSections, problemText, steps) {
         id: s.id || ("q" + (idx + 1)),
         title: s.title || ("第 " + (idx + 1) + " 问"),
         problem: asString(s.problem || s.question || s.text || ""),
+        known: normalizeKnown(s.known),
+        construction: normalizeConstruction(s.construction),
         idea: asString(s.idea || s.thought || s.method || ""),
-        keyBasis: asString(s.keyBasis || s.keyPoint || s.basis || ""),
+        keyBasis: normalizeKeyBasis(s.keyBasis || s.keyPoint || s.basis || ""),
+        reasoningLines: normalizeReasoningLines(s.reasoningLines),
+        equationBlocks: normalizeEquationBlocks(s.equationBlocks),
         steps: normalizeSteps(s.steps || s.subSteps || []),
         conclusion: asString(s.conclusion || s.result || s.answer || ""),
         diagramViewId: asString(s.diagramViewId || s.viewId || s.view || ""),
       };
-    }).filter(function(s) { return s.problem || s.steps.length > 0 || s.conclusion; });
+    }).filter(function(s) { return s.problem || s.steps.length > 0 || s.conclusion || s.reasoningLines.length > 0; });
   }
 
   // Try to split problem text by markers
@@ -745,6 +810,7 @@ function normalizeSolution(raw, fallback = {}) {
       questionType: fallback.questionType || source.topic,
     }),
     qualityCheck: normalizeQualityCheck(source.qualityCheck),
+    // hiddenVerification is normalized but NOT returned to frontend
   };
 }
 

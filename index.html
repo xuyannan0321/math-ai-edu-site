@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -11,7 +11,20 @@
     <link rel="stylesheet" href="css/style.css" />
     <script src="js/visualization.js" defer></script>
     <script src="js/app.js" defer></script>
-  </head>
+
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["\(", "\)"], ["$", "$"]],
+          displayMath: [["\[", "\]"], ["$$", "$$"]]
+        },
+        options: {
+          skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+        }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
   <body>
     <div class="app-shell">
       <header class="site-header">

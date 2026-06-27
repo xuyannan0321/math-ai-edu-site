@@ -937,17 +937,19 @@ function createVisualizationFallback(result) {
     };
 }
 
-function createReadingCard(className, titleText, bodyText = "") {
-  const card = document.createElement("article");
-  card.className = `solution-reading-card ${className || ""}`.trim();
+function createReadingCard(className, titleText, bodyText, options) {
+  options = options || {};
+  var isHtml = options.isHtml;
+  var card = document.createElement("article");
+  card.className = ("solution-reading-card " + (className || "")).trim();
 
-  const title = document.createElement("h2");
-  title.textContent = titleText;
+  var title = document.createElement("h2");
+  if (isHtml) { setSafeMathContent(title, titleText, ""); } else { title.textContent = titleText; }
   card.append(title);
 
   if (bodyText) {
-    const body = document.createElement("p");
-    body.textContent = bodyText;
+    var body = document.createElement("p");
+    if (isHtml) { setSafeMathContent(body, bodyText, ""); } else { body.textContent = bodyText; }
     card.append(body);
   }
 
@@ -955,20 +957,20 @@ function createReadingCard(className, titleText, bodyText = "") {
 }
 
 function createReadingList(items, emptyText) {
-  const list = document.createElement("ul");
-  const values = Array.isArray(items) ? items : [];
+  var list = document.createElement("ul");
+  var values = Array.isArray(items) ? items : [];
 
   if (!values.length) {
-    const item = document.createElement("li");
-    item.textContent = emptyText;
-    list.append(item);
+    var emptyItem = document.createElement("li");
+    emptyItem.textContent = emptyText;
+    list.append(emptyItem);
     return list;
   }
 
-  values.forEach((value) => {
-    const item = document.createElement("li");
-    item.textContent = String(value || "");
-    list.append(item);
+  values.forEach(function(value) {
+    var li = document.createElement("li");
+    setSafeMathContent(li, String(value || ""));
+    list.append(li);
   });
 
   return list;
@@ -1017,18 +1019,18 @@ function appendVisualizationForView(container, spec, viewId, fallbackTitle = "�
 }
 
 function appendStepContent(card, step) {
-  const thought = step?.thought || step?.idea || step?.method;
+  var thought = step?.thought || step?.idea || step?.method;
 
   if (thought) {
-    const thoughtBox = document.createElement("p");
+    var thoughtBox = document.createElement("p");
     thoughtBox.className = "solution-step-thought";
-    thoughtBox.textContent = `思路：${thought}`;
+    setSafeMathContent(thoughtBox, "思路：" + thought);
     card.append(thoughtBox);
   }
 
-  const content = document.createElement("p");
-  content.textContent = step?.content || step?.explanation || "暂无完整步骤。";
-  card.append(content);
+  var contentP = document.createElement("p");
+  setSafeMathContent(contentP, step?.content || step?.explanation || "暂无完整步骤。");
+  card.append(contentP);
 }
 
 function getStepDiagramViewId(step, views, index) {
@@ -1042,14 +1044,70 @@ function getStepDiagramViewId(step, views, index) {
   return nonOriginalViews[index]?.id || null;
 }
 
+function renderReasoningLines(container, lines) {
+  if (!Array.isArray(lines) || !lines.length) return;
+  var list = document.createElement("ul");
+  list.className = "solution-reasoning-list";
+  lines.forEach(function(line) {
+    var item = document.createElement("li");
+    item.className = "solution-reasoning-line solution-reasoning-" + (line.type || "normal");
+    var prefix = "";
+    if (line.type === "because") prefix = "\u2235 ";
+    else if (line.type === "therefore") prefix = "\u2234 ";
+    setSafeMathContent(item, prefix + line.text);
+    list.append(item);
+  });
+  container.append(list);
+}
+
+function renderEquationBlocks(container, blocks) {
+  if (!Array.isArray(blocks) || !blocks.length) return;
+  blocks.forEach(function(block) {
+    var wrapper = document.createElement("div");
+    wrapper.className = "solution-equation-block";
+    if (block.title) {
+      var blockTitle = document.createElement("p");
+      blockTitle.className = "solution-equation-block-title";
+      blockTitle.textContent = block.title;
+      wrapper.append(blockTitle);
+    }
+    (block.lines || []).forEach(function(line) {
+      var eqLine = document.createElement("p");
+      eqLine.className = "solution-equation-line";
+      setSafeMathContent(eqLine, line);
+      wrapper.append(eqLine);
+    });
+    container.append(wrapper);
+  });
+}
+
+function renderKnownList(container, items, prefix) {
+  if (!Array.isArray(items) || !items.length) return;
+  var label = document.createElement("p");
+  label.className = "solution-section-label";
+  label.textContent = prefix || "已知：";
+  container.append(label);
+  var list = document.createElement("ul");
+  list.className = "solution-known-list";
+  items.forEach(function(item) {
+    var li = document.createElement("li");
+    setSafeMathContent(li, String(item));
+    list.append(li);
+  });
+  container.append(list);
+}
+
 function appendQualityCheck(flow, qualityCheck) {
-  const card = createReadingCard("is-quality", "质量检查");
-  const confidence = qualityCheck?.confidence || "medium";
-  const status = document.createElement("p");
-  status.textContent =
-    confidence === "high"
-      ? "已通过结构化校验。"
-      : "已完成结构化校验，复杂压轴题建议教师复核。";
+  var card = createReadingCard("is-quality", "质量检查");
+  var confidence = qualityCheck?.confidence || "medium";
+  var status = document.createElement("p");
+  if (qualityCheck && qualityCheck.sourceVerificationPassed === true) {
+    status.textContent = "双源校验已通过。";
+  } else if (confidence === "high") {
+    status.textContent = "已通过结构化校验。";
+  } else {
+    status.textContent = "已完成结构化校验，复杂压轴题建议教师复核。";
+  }
   card.append(status, createReadingList(qualityCheck?.issues, "暂无明显问题。"));
   flow.append(card);
 }
@@ -1085,7 +1143,7 @@ function renderStructuredResult(result) {
   /* 1. 原题复现 */
   var originalCard = createReadingCard("is-original", "原题复现");
   var problemP = document.createElement("p");
-  problemP.textContent = result.problemText || "暂无题目文本。";
+  setSafeMathContent(problemP, result.problemText || "暂无题目文本。");
   originalCard.append(problemP);
 
   /* 上传原图兜底（仅当前工作台会话） */
@@ -1135,31 +1193,57 @@ function renderStructuredResult(result) {
   }
 
   /* 4. 分问解析 */
+  function normalizeSectionHeading(section, index, fallbackTitle) {
+    var title = section.title || "";
+    var problem = section.problem || "";
+    var idx = index + 1;
+    if (title && problem && title === problem) { problem = ""; }
+    var hasQW = /第\s*\d+\s*问/.test(title);
+    var hasQWp = /第\s*\d+\s*问/.test(problem);
+    if (hasQW && hasQWp && title.length <= 12 && problem.length <= 12) { problem = ""; }
+    if (!title && !problem) { return { heading: fallbackTitle || ("第 " + idx + " 问"), problem: "" }; }
+    if (!title && problem) { return { heading: fallbackTitle || ("第 " + idx + " 问"), problem: problem }; }
+    return { heading: title, problem: title === problem ? "" : problem };
+  }
+
   var sections = Array.isArray(result.questionSections) ? result.questionSections : [];
   var steps = Array.isArray(result.steps) ? result.steps : [];
 
   if (sections.length) {
     sections.forEach(function(section, idx) {
-      var card = createReadingCard("is-question-step", section.title || ("第 " + (idx + 1) + " 问解析"));
-      var st = document.createElement("h3");
-      st.textContent = section.title || ("第 " + (idx + 1) + " 问");
-      card.append(st);
+      var heading = normalizeSectionHeading(section, idx, "第 " + (idx + 1) + " 问");
+      var card = createReadingCard("is-question-step", heading.heading);
+
+      // Show sub-problem text (if different from heading)
+      if (heading.problem) {
+        var problemP = document.createElement("p");
+        problemP.className = "solution-section-problem";
+        setSafeMathContent(problemP, heading.problem);
+        card.append(problemP);
+      }
+
+      /* 已知条件 */
+      renderKnownList(card, section.known, "已知：");
+
+      /* 辅助线 / 作法 */
+      renderKnownList(card, section.construction, "辅助线作法：");
 
       /* 解题思路 */
       if (section.idea) {
         var ideaP = document.createElement("p");
         ideaP.className = "solution-step-thought";
-        ideaP.textContent = "解题思路：" + section.idea;
+        setSafeMathContent(ideaP, "解题思路：" + section.idea);
         card.append(ideaP);
       }
 
       /* 关键依据 */
-      if (section.keyBasis) {
-        var kbP = document.createElement("p");
-        kbP.className = "solution-key-basis";
-        kbP.textContent = "关键依据：" + section.keyBasis;
-        card.append(kbP);
-      }
+      renderKnownList(card, section.keyBasis, "关键依据：");
+
+      /* 推理链 */
+      renderReasoningLines(card, section.reasoningLines);
+
+      /* 计算过程 */
+      renderEquationBlocks(card, section.equationBlocks);
 
       /* 分步推导 */
       var subSteps = Array.isArray(section.steps) ? section.steps : [];
@@ -1169,11 +1253,11 @@ function renderStructuredResult(result) {
         subSteps.forEach(function(sub) {
           var li = document.createElement("li");
           var stTitle = document.createElement("strong");
-          stTitle.textContent = sub.title || "步骤";
+          setSafeMathContent(stTitle, sub.title || "步骤");
           li.append(stTitle);
           if (sub.content) {
             var stP = document.createElement("p");
-            stP.textContent = sub.content;
+            setSafeMathContent(stP, sub.content);
             li.append(stP);
           }
           stepList.append(li);
@@ -1186,9 +1270,9 @@ function renderStructuredResult(result) {
         var conclP = document.createElement("p");
         conclP.className = "solution-conclusion";
         if (isGeometric) {
-          conclP.textContent = "本问结论：" + section.conclusion;
+          setSafeMathContent(conclP, "本问结论：" + section.conclusion);
         } else {
-          conclP.textContent = "结论：" + section.conclusion;
+          setSafeMathContent(conclP, "结论：" + section.conclusion);
         }
         card.append(conclP);
       }
@@ -3770,6 +3854,42 @@ function escapeHtml(text) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
+function autoWrapLatex(text) {
+  if (!text || typeof text !== "string") return "";
+  // Already has MathJax delimiters? Return as-is (but still escaped by caller)
+  if (/\\\(|\\\[|\$\$|^\$/.test(text) && /\\\)|\\\]|\$\$|\$/.test(text)) return text;
+  // Wrap short LaTeX fragments: fraction, sqrt, angle, triangle, overline, cdot, etc.
+  // Only wrap isolated fragments, not entire sentences
+  return text.replace(
+    /((?:\\frac\{[^}]+\}\{[^}]+\})|(?:\\sqrt\{[^}]+\})|(?:\\triangle)|(?:\\angle)|(?:\\overline\{[^}]+\})|(?:\\cdot)|(?:\\times)|(?:\\div)|(?:\\pm)|(?:\\neq)|(?:\\leq)|(?:\\geq)|(?:\\approx)|(?:\\equiv)|(?:\\pi)|(?:\\degree)|(?:\\bot)|(?:\\parallel)|(?:\\triangle\w+)|(?:\\angle\w+))/g,
+    "\\($1\\)"
+  );
+}
+
+function safeMathHtml(rawText) {
+  if (!rawText) return "";
+  // 1) Escape HTML from AI output to prevent XSS
+  var escaped = String(rawText)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+  // 2) Wrap LaTeX fragments in \(...\)
+  return autoWrapLatex(escaped);
+}
+
+function setSafeMathContent(element, rawText, tagName) {
+  if (!element) return;
+  var html = safeMathHtml(rawText);
+  if (tagName) {
+    element.innerHTML = "<" + tagName + ">" + html + "</" + tagName + ">";
+  } else {
+    element.innerHTML = html;
+  }
+}
+
 
 function createJsonPreviewDocument(source) {
   let displaySource = source;

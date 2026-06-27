@@ -953,6 +953,16 @@ select.form-control {
   fill: var(--gray-400);
 }
 
+.mv-grid-line {
+  stroke: var(--gray-200);
+  stroke-width: 0.8;
+  stroke-dasharray: 3 4;
+}
+
+.mv-grid-layer {
+  pointer-events: none;
+}
+
 .mv-axis-label,
 .mv-label {
   fill: var(--gray-600);
@@ -5379,6 +5389,16 @@ body.is-preview-open {
   color: #1e40af;
 }
 
+.solution-section-problem {
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  color: #475569;
+  font-size: 15px;
+  background: #f8fafc;
+  border-left: 3px solid #94a3b8;
+  border-radius: 0 8px 8px 0;
+}
+
 .solution-reading-card p {
   margin: 8px 0;
   line-height: 1.75;
@@ -5464,6 +5484,86 @@ body.is-preview-open {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   border-radius: 12px;
+}
+
+/* 推理链样式 */
+.solution-reasoning-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
+
+.solution-reasoning-line {
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  font-size: 15px;
+  line-height: 1.75;
+  border-radius: 8px;
+}
+
+.solution-reasoning-because {
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.solution-reasoning-therefore {
+  background: #fefce8;
+  color: #854d0e;
+}
+
+.solution-reasoning-calculation {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px dashed #cbd5e1;
+}
+
+.solution-reasoning-conclusion {
+  background: #f0fdf4;
+  color: #166534;
+  font-weight: 600;
+}
+
+/* 公式块样式 */
+.solution-equation-block {
+  margin: 10px 0;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.solution-equation-block-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.solution-equation-line {
+  margin: 4px 0;
+  font-size: 15px;
+  text-align: center;
+  font-family: "Cambria Math", serif;
+}
+
+/* 已知 / 辅助线列表 */
+.solution-section-label {
+  margin: 10px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.solution-known-list {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 4px 0 8px;
+}
+
+.solution-known-list li {
+  margin-bottom: 4px;
+  font-size: 15px;
+  line-height: 1.65;
 }
 
 .solution-reading-card p {
@@ -5633,6 +5733,12 @@ body.is-preview-open {
 
   .solution-reading-card,
   .solution-card-diagram {
+    padding: 12px;
+  }
+
+  .solution-card-diagram-board {
+    min-height: 220px;
+  }
     padding: 14px;
   }
 }

@@ -615,7 +615,12 @@
     svg.append(text);
   }
 
-  function renderGeometryView(svg, spec, view, mapper, bounds) {
+  function renderGeometryView(svg, spec, view, mapper, bounds, showGrid) {
+    // Draw coordinate grid first (lowest layer)
+    if (showGrid !== false) {
+      renderCoordinateGrid(svg, mapper, bounds);
+    }
+
     const highlighted = new Set(view?.highlightObjects || []);
     const visibleObjects = getVisibleObjects(spec, view);
 
@@ -752,7 +757,7 @@
       const viewCard = createHtmlElement("article", "geometry-view-card");
       const viewTitle = createHtmlElement("h4", "", view.title || "图示");
       const svg = createBaseSvg("math-visualization-svg geometry-svg");
-      renderGeometryView(svg, spec, view, mapper, bounds);
+      renderGeometryView(svg, spec, view, mapper, bounds, options && options.showGrid);
       viewCard.append(viewTitle, svg);
       wrapper.append(viewCard);
     });
@@ -760,7 +765,29 @@
     container.append(wrapper);
   }
 
-  function renderAxes(svg, mapper, bounds) {
+  function renderCoordinateGrid(svg, mapper, bounds) {
+    // 1. Draw light gray grid (lowest layer)
+    const spanX = bounds.maxX - bounds.minX;
+    const spanY = bounds.maxY - bounds.minY;
+    const gridStepX = Math.max(1, Math.pow(10, Math.floor(Math.log10(spanX))));
+    const gridStepY = Math.max(1, Math.pow(10, Math.floor(Math.log10(spanY))));
+    const gridGroup = createSvgElement("g", { class: "mv-grid-layer" });
+
+    for (let x = Math.ceil(bounds.minX / gridStepX) * gridStepX; x <= bounds.maxX; x += gridStepX) {
+      const p = mapper.project({ x, y: 0 });
+      gridGroup.append(createSvgElement("line", {
+        x1: p.x, y1: 0, x2: p.x, y2: mapper.height, class: "mv-grid-line",
+      }));
+    }
+    for (let y = Math.ceil(bounds.minY / gridStepY) * gridStepY; y <= bounds.maxY; y += gridStepY) {
+      const p = mapper.project({ x: 0, y });
+      gridGroup.append(createSvgElement("line", {
+        x1: 0, y1: p.y, x2: mapper.width, y2: p.y, class: "mv-grid-line",
+      }));
+    }
+    svg.prepend(gridGroup);
+
+    // 2. Draw axes with arrows
     const zeroY = Math.min(Math.max(0, bounds.minY), bounds.maxY);
     const zeroX = Math.min(Math.max(0, bounds.minX), bounds.maxX);
     const xStart = mapper.project({ x: bounds.minX, y: zeroY });
@@ -768,41 +795,61 @@
     const yStart = mapper.project({ x: zeroX, y: bounds.minY });
     const yEnd = mapper.project({ x: zeroX, y: bounds.maxY });
 
-    svg.append(
-      createSvgElement("defs", {}),
+    const axesGroup = createSvgElement("g", { class: "mv-axes-layer" });
+    axesGroup.append(
       createSvgElement("line", {
-        x1: xStart.x,
-        y1: xStart.y,
-        x2: xEnd.x,
-        y2: xEnd.y,
-        class: "mv-axis",
-        "marker-end": "url(#axis-arrow)",
+        x1: xStart.x, y1: xStart.y, x2: xEnd.x, y2: xEnd.y,
+        class: "mv-axis", "marker-end": "url(#axis-arrow)",
       }),
       createSvgElement("line", {
-        x1: yStart.x,
-        y1: yStart.y,
-        x2: yEnd.x,
-        y2: yEnd.y,
-        class: "mv-axis",
-        "marker-end": "url(#axis-arrow)",
+        x1: yStart.x, y1: yStart.y, x2: yEnd.x, y2: yEnd.y,
+        class: "mv-axis", "marker-end": "url(#axis-arrow)",
       }),
     );
+    svg.append(axesGroup);
 
-    const marker = createSvgElement("marker", {
-      id: "axis-arrow",
-      markerWidth: 8,
-      markerHeight: 8,
-      refX: 7,
-      refY: 4,
-      orient: "auto",
-      markerUnits: "strokeWidth",
+    // 3. Arrow marker defs
+    if (!svg.querySelector("defs")) {
+      svg.prepend(createSvgElement("defs", {}));
+    }
+    if (!svg.querySelector("#axis-arrow")) {
+      const marker = createSvgElement("marker", {
+        id: "axis-arrow", markerWidth: 8, markerHeight: 8,
+        refX: 7, refY: 4, orient: "auto", markerUnits: "strokeWidth",
+      });
+      marker.append(createSvgElement("path", { d: "M0,0 L8,4 L0,8 Z", class: "mv-axis-arrow" }));
+      svg.querySelector("defs").append(marker);
+    }
+
+    // 4. Axis labels (O, x, y)
+    const axisLabelGroup = createSvgElement("g", { class: "mv-axis-labels" });
+    if (zeroX >= bounds.minX && zeroX <= bounds.maxX && zeroY >= bounds.minY && zeroY <= bounds.maxY) {
+      const oProj = mapper.project({ x: zeroX, y: zeroY });
+      const oLabel = createSvgElement("text", {
+        x: oProj.x + 6, y: oProj.y - 6, class: "mv-axis-label",
+      });
+      oLabel.textContent = "O";
+      axisLabelGroup.append(oLabel);
+    }
+    const xLabelP = mapper.project({ x: bounds.maxX, y: zeroY });
+    const xLabel = createSvgElement("text", {
+      x: xLabelP.x - 15, y: xLabelP.y - 8, class: "mv-axis-label",
     });
-    marker.append(createSvgElement("path", { d: "M0,0 L8,4 L0,8 Z", class: "mv-axis-arrow" }));
-    svg.querySelector("defs").append(marker);
-
-    drawLabel(svg, { ...bounds, x: bounds.maxX, y: zeroY, id: "x-axis" }, "x", mapper, { direction: { x: -1, y: -1 }, className: "mv-axis-label" });
-    drawLabel(svg, { ...bounds, x: zeroX, y: bounds.maxY, id: "y-axis" }, "y", mapper, { direction: { x: 1, y: 1 }, className: "mv-axis-label" });
+    xLabel.textContent = "x";
+    axisLabelGroup.append(xLabel);
+    const yLabelP = mapper.project({ x: zeroX, y: bounds.maxY });
+    const yLabel = createSvgElement("text", {
+      x: yLabelP.x + 8, y: yLabelP.y + 4, class: "mv-axis-label",
+    });
+    yLabel.textContent = "y";
+    axisLabelGroup.append(yLabel);
+    svg.append(axisLabelGroup);
   }
+
+  function renderAxes(svg, mapper, bounds) {
+    renderCoordinateGrid(svg, mapper, bounds);
+  }
+
 
   function parsePolynomialExpression(expression) {
     const normalized = String(expression || "")
@@ -1244,7 +1291,8 @@
       if (spec.type === "function_graph") {
         renderFunctionGraph(board, spec);
       } else if (spec.type === "geometry") {
-        renderGeometry(board, spec, options);
+        var geomOptions = Object.assign({}, options || {}, { showGrid: false });
+        renderGeometry(board, spec, geomOptions);
       } else if (["dynamic_point", "trajectory", "max_value"].includes(spec.type)) {
         renderDynamicPoint(board, spec);
       } else if (spec.type === "equation_balance") {
