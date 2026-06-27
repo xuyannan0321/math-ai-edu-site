@@ -258,6 +258,8 @@
       confidence: spec.confidence || "medium",
       orientation: spec.orientation || {},
       equation: spec.equation || "",
+      functions: Array.isArray(spec.functions) ? spec.functions : [],
+      auxiliaryLines: Array.isArray(spec.auxiliaryLines) ? spec.auxiliaryLines : [],
       leftTerms: Array.isArray(spec.leftTerms) ? spec.leftTerms : [],
       rightTerms: Array.isArray(spec.rightTerms) ? spec.rightTerms : [],
       points: normalizePointMap(spec),
@@ -920,32 +922,80 @@
     return Number.isFinite(n) ? n : NaN;
   }
 
+  // Balanced-brace reader for nested LaTeX like \\frac{\\sqrt{3}}{3}
+  function readBraceContent(text, openIndex) {
+    if (text[openIndex] !== "{") return null;
+    var depth = 0;
+    var start = openIndex + 1;
+    for (var ri = openIndex; ri < text.length; ri++) {
+      if (text[ri] === "{" && (ri === openIndex || text[ri - 1] !== "\\")) depth++;
+      else if (text[ri] === "}" && text[ri - 1] !== "\\") {
+        depth--;
+        if (depth === 0) return { content: text.slice(start, ri), end: ri };
+      }
+    }
+    return null;
+  }
   function normalizeMathExpressionForGraph(expr) {
     if (!expr) return null;
     var s = String(expr)
-      .replace(/^y\s*=\s*/i, "")
-      .replace(/^f\s*\(\s*x\s*\)\s*=\s*/i, "")
-      .replace(/\s+/g, "")
+      .replace(/^y\\s*=\\s*/i, "")
+      .replace(/^f\\s*\\\(\\s*x\\s*\\\)\\s*=\\s*/i, "")
+      .replace(/\\s+/g, "")
       .replace(/²/g, "^2");
 
-    // Replace \frac{a}{b} with numeric value if pure numbers
-    s = s.replace(/\\frac\{([\d.]+)\}\{([\d.]+)\}/g, function(m, a, b) {
+    // Use balanced-brace helper to handle nested LaTeX like \\frac{\\sqrt{3}}{3}
+    function safeReplaceFrac(text) {
+      var result = "";
+      var i = 0;
+      while (i < text.length) {
+        if (text.slice(i, i + 5) === "\\frac" && text[i + 5] === "{") {
+          var numBrace = readBraceContent(text, i + 5);
+          if (!numBrace) { result += text[i]; i++; continue; }
+          var denomIdx = numBrace.end + 1;
+          if (text[denomIdx] !== "{") { result += text[i]; i++; continue; }
+          var denomBrace = readBraceContent(text, denomIdx);
+          if (!denomBrace) { result += text[i]; i++; continue; }
+          // Try to compute numeric, otherwise keep original
+          var numStr = safeReplaceFrac(numBrace.content);
+          var denomStr = safeReplaceFrac(denomBrace.content);
+          var na = Number(numStr), nb = Number(denomStr);
+          if (Number.isFinite(na) && Number.isFinite(nb) && nb !== 0) {
+            result += String(na / nb);
+          } else {
+            result += text.slice(i, denomBrace.end + 1);
+          }
+          i = denomBrace.end + 1;
+        } else if (text.slice(i, i + 5) === "\\sqrt" && text[i + 5] === "{") {
+          var sqBrace = readBraceContent(text, i + 5);
+          if (!sqBrace) { result += text[i]; i++; continue; }
+          var inner = safeReplaceFrac(sqBrace.content);
+          var nv = Number(inner);
+          if (Number.isFinite(nv) && nv >= 0) {
+            result += String(Math.sqrt(nv));
+          } else {
+            result += text.slice(i, sqBrace.end + 1);
+          }
+          i = sqBrace.end + 1;
+        } else if (text[i] === "{" && text[i - 1] !== "\\") {
+          // Unescaped brace - skip
+          result += text[i]; i++;
+        } else {
+          result += text[i]; i++;
+        }
+      }
+      return result;
+    }
+
+    s = safeReplaceFrac(s);
+
+    // Replace (number/number) style
+    s = s.replace(/\(([\-]?[\d.]+)\/([\d.]+)\)/g, function(m, a, b) {
       var na = Number(a), nb = Number(b);
       return (Number.isFinite(na) && Number.isFinite(nb) && nb !== 0) ? String(na / nb) : m;
     });
-    // Replace \sqrt{n} with numeric
-    s = s.replace(/\\sqrt\{([\d.]+)\}/g, function(m, n) {
-      var v = Number(n);
-      return Number.isFinite(v) ? String(Math.sqrt(Math.abs(v))) : m;
-    });
-    // Replace (\sqrt{3}/3) style
-    s = s.replace(/\(\\sqrt\{([\d.]+)\}\/([\d.]+)\)/g, function(m, a, b) {
-      var v = Math.sqrt(Math.abs(Number(a)));
-      var nb = Number(b);
-      return (Number.isFinite(v) && Number.isFinite(nb) && nb !== 0) ? String(v / nb) : m;
-    });
 
-    // If still has LaTeX commands we cant parse, return null
+    // If still has LaTeX commands we can"t parse, return null
     if (/\\[a-zA-Z]/.test(s)) return null;
 
     return s;

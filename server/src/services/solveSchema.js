@@ -505,7 +505,7 @@ function normalizeGeometrySpec(source, confidence, outputType = "geometry") {
   };
 }
 
-function normalizeNonGeometrySpec(source, type, confidence) {
+function normalizeNonGeometrySpec(source, type, confidence, questionText) {
   if (type === "equation_balance") {
     return normalizeEquationBalanceSpec(source, confidence);
   }
@@ -524,8 +524,8 @@ function normalizeNonGeometrySpec(source, type, confidence) {
   // Handle function_graph: preserve functions, auxiliaryLines, points
   if (type === "function_graph") {
     // If functions is empty but questionText has y=expression, fill it
-    if ((!Array.isArray(source.functions) || !source.functions.length) && fallback.questionText) {
-      var funcExpr = extractFunctionExpressionFromText(fallback.questionText);
+    if ((!Array.isArray(source.functions) || !source.functions.length) && questionText) {
+      var funcExpr = extractFunctionExpressionFromText(questionText);
       if (funcExpr) {
         var qspec = buildQuadraticFunctionGraph(funcExpr, null);
         if (qspec && qspec.functions && qspec.functions.length) {
@@ -547,7 +547,7 @@ function normalizeNonGeometrySpec(source, type, confidence) {
       points: collectPoints(source),
       auxiliaryLines: Array.isArray(source.auxiliaryLines) ? source.auxiliaryLines.map(function(l) { return { id: asString(l.id), kind: asString(l.kind || l.type, "line"), label: asString(l.label), from: l.from || {}, to: l.to || {}, style: asString(l.style, "dashed"), role: "auxiliary" }; }) : [],
       objects,
-      views: Array.isArray(source.views) ? source.views.map(function(v, i) { return normalizeVisualizationView(v, i, new Set(objects.map(function(o) { return o.id; }))); }).filter(Boolean) : [],
+      views: Array.isArray(source.views) ? source.views.map(function(v, i) { var allIds = new Set(objects.map(function(o) { return o.id; })); Array.isArray(source.functions) && source.functions.forEach(function(f) { if (f.id) allIds.add(f.id); }); if (source.points) Object.keys(source.points).forEach(function(k) { allIds.add(k); }); Array.isArray(source.auxiliaryLines) && source.auxiliaryLines.forEach(function(l) { if (l.id) allIds.add(l.id); }); return normalizeVisualizationView(v, i, allIds); }).filter(Boolean) : [],
       steps,
     };
   }
@@ -745,6 +745,147 @@ function createEquationBalanceFallback(text) {
 }
 
 
+
+// --- Balanced-brace LaTeX parser helpers (no eval) ---
+
+// Collapse double-backslashes (e.g. "\\\\frac" → "\\frac", "\\\\\\\\" → "\\\\")
+// This repairs LaTeX commands that got string-escaped in transit.
+function normalizeBackslashes(text) {
+  if (typeof text !== "string") return "";
+  var s = text.replace(/\\\\/g, "\x00");
+  s = s.replace(/\x00([a-zA-Z]+)/g, "\\$1");
+  s = s.replace(/\x00/g, "\\");
+  return s;
+}
+
+// Read balanced brace content starting at openIndex.
+// Returns { content: string, end: number } where end is the closing brace index.
+// Returns null if braces are unbalanced.
+function readBraceContent(text, openIndex) {
+  if (text[openIndex] !== "{") return null;
+  var depth = 0;
+  var start = openIndex + 1;
+  for (var i = openIndex; i < text.length; i++) {
+    if (text[i] === "{" && (i === openIndex || text[i - 1] !== "\\")) depth++;
+    else if (text[i] === "}" && text[i - 1] !== "\\") {
+      depth--;
+      if (depth === 0) return { content: text.slice(start, i), end: i };
+    }
+  }
+  return null;
+}
+
+// Parse a LaTeX numeric expression: 3, -3, \sqrt{3}, 2\sqrt{3}, \frac{1}{2}, \frac{\sqrt{3}}{3}
+// Returns the numeric value or NaN. No eval/Function used.
+function parseLatexNumericExpression(text) {
+  if (typeof text !== "string") return NaN;
+  var s = text.trim();
+  if (s === "") return NaN;
+
+  var sign = 1;
+  if (s[0] === "-") { sign = -1; s = s.slice(1).trim(); }
+  else if (s[0] === "+") { s = s.slice(1).trim(); }
+
+  if (s.startsWith("\\frac")) {
+    var numBrace = readBraceContent(s, 5);
+    if (!numBrace) {
+      var m = s.match(/^\\frac(\d)(\d)/);
+      if (m) return sign * Number(m[1]) / Number(m[2]);
+      return NaN;
+    }
+    var denomStart = numBrace.end + 2;
+    if (denomStart >= s.length || s[denomStart - 1] !== "{") return NaN;
+    var denomBrace = readBraceContent(s, denomStart - 1);
+    if (!denomBrace) return NaN;
+    var num = parseLatexNumericExpression(numBrace.content);
+    var denom = parseLatexNumericExpression(denomBrace.content);
+    if (!Number.isFinite(num) || !Number.isFinite(denom) || denom === 0) return NaN;
+    return sign * num / denom;
+  }
+
+  if (s.startsWith("\\sqrt")) {
+    var brace = readBraceContent(s, 5);
+    if (!brace) return NaN;
+    var inner = parseLatexNumericExpression(brace.content);
+    if (!Number.isFinite(inner) || inner < 0) return NaN;
+    return sign * Math.sqrt(inner);
+  }
+
+  if (/\d/.test(s[0])) {
+    var coeffMatch = s.match(/^(\d+(?:\.\d+)?)(.*)/);
+    if (coeffMatch) {
+      var coeff = Number(coeffMatch[1]);
+      var rest = coeffMatch[2].trim();
+      if (rest === "") return sign * coeff;
+      var restVal = parseLatexNumericExpression(rest);
+      if (!Number.isFinite(restVal)) return NaN;
+      return sign * coeff * restVal;
+    }
+  }
+
+  var num = Number(s);
+  if (Number.isFinite(num)) return sign * num;
+
+  return NaN;
+}
+
+// Parse quadratic a, b, c from expression like "y=ax^2+bx+c"
+// Returns { a, b, c } or null.
+function parseQuadraticCoefficientsFromExpression(expression) {
+  if (typeof expression !== "string") return null;
+  var s = expression.trim();
+  s = s.replace(/^y\s*=\s*/i, "").replace(/^f\s*\(\s*x\s*\)\s*=\s*/i, "");
+  s = normalizeBackslashes(s);
+
+  var terms = [];
+  var depth = 0;
+  var current = "";
+  for (var i = 0; i < s.length; i++) {
+    var ch = s[i];
+    if (ch === "{" && s[i - 1] !== "\\") depth++;
+    else if (ch === "}" && s[i - 1] !== "\\") depth--;
+    if ((ch === "+" || ch === "-") && depth === 0 && current.length > 0) {
+      terms.push(current);
+      current = ch === "-" ? "-" : "";
+    } else if (depth === 0) {
+      current += ch;
+    } else {
+      current += ch;
+    }
+  }
+  if (current) terms.push(current);
+
+  var a = 0, b = 0, c = 0;
+  for (var t = 0; t < terms.length; t++) {
+    var term = terms[t].replace(/\*/g, "").replace(/\\cdot/g, "").replace(/\s+/g, "");
+    if (term === "" || term === "+" || term === "-") continue;
+    var termSign = 1;
+    if (term[0] === "-") { termSign = -1; term = term.slice(1); }
+    else if (term[0] === "+") { term = term.slice(1); }
+    if (term === "") continue;
+    if (term.includes("^2")) {
+      var coeffStr = term.replace(/\^2.*$/, "");
+      if (coeffStr === "" || coeffStr === "x") a += termSign;
+      else {
+        coeffStr = coeffStr.replace(/x/g, "");
+        if (coeffStr === "") { a += termSign; }
+        else { var val = parseLatexNumericExpression(coeffStr); if (!Number.isFinite(val)) return null; a += termSign * val; }
+      }
+    } else if (term.includes("x")) {
+      var coeffStr = term.replace(/x.*$/, "");
+      if (coeffStr === "") b += termSign;
+      else { var val = parseLatexNumericExpression(coeffStr); if (!Number.isFinite(val)) return null; b += termSign * val; }
+    } else {
+      var val = parseLatexNumericExpression(term);
+      if (!Number.isFinite(val)) return null;
+      c += termSign * val;
+    }
+  }
+  return { a: a, b: b, c: c };
+}
+
+// --- End balanced-brace helpers ---
+
 // Extract y=... or f(x)=... from problem text, supporting LaTeX
 function extractFunctionExpressionFromText(text) {
   var s = asString(text).replaceAll("−", "-").replaceAll("²", "^2");
@@ -763,36 +904,20 @@ function extractFunctionExpressionFromText(text) {
 function buildQuadraticFunctionGraph(expression, extraPoints) {
   // Parse a, b, c from y = ax^2 + bx + c
   // Use numeric evaluation by sampling
-  function tryEval(expr, x) {
-    // Replace LaTeX with numeric approximations
-    var s = expr
-      .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, function(_, a, b) {
-        var na = parseFloat(a.replace(/\\sqrt\{(\d+)\}/g, function(_, n) { return Math.sqrt(Number(n)); }));
-        var nb = parseFloat(b.replace(/\\sqrt\{(\d+)\}/g, function(_, n) { return Math.sqrt(Number(n)); }));
-        return Number.isFinite(na) && Number.isFinite(nb) && nb !== 0 ? String(na/nb) : "NaN";
-      })
-      .replace(/\\sqrt\{(\d+)\}/g, function(_, n) { return Math.sqrt(Number(n)); })
-      .replace(/\(/g, "(").replace(/\)/g, ")")
-      .replace(/\^/g, "^")
-      .replace(/²/g, "^2")
-      .replace(/x/g, "(" + x + ")")
-      .replace(/\*/g, "*");
+  // Parse coefficients using balanced-brace LaTeX parser (no eval)
+  var coeffs = parseQuadraticCoefficientsFromExpression(expression);
+  if (!coeffs) return null;
+  var a = coeffs.a, b = coeffs.b, c = coeffs.c;
 
-    try { var v = Function("return " + s)(); return Number.isFinite(v) ? v : NaN; }
-    catch(e) { return NaN; }
-  }
+  // Build a safe evaluator using the parsed coefficients
+  function safeEval(x) { return a * x * x + b * x + c; }
 
-  // Get y for 3 x values to determine quadratic coefficients
-  var y0 = tryEval(expression, 0);
-  var y1 = tryEval(expression, 1);
-  var y2 = tryEval(expression, 2);
+  // Verify by evaluating at 3 points
+  var y0 = safeEval(0);
+  var y1 = safeEval(1);
+  var y2 = safeEval(2);
   if (!isFinite(y0) || !isFinite(y1) || !isFinite(y2)) return null;
 
-  var c = y0;
-  var a_plus_b = y1 - c;
-  var four_a_plus_two_b = y2 - c;
-  var a = (four_a_plus_two_b - 2 * a_plus_b) / 2;
-  var b = a_plus_b - a;
 
   var isQuadratic = Math.abs(a) > 1e-9;
   // If linear, return a simple spec
@@ -813,7 +938,7 @@ function buildQuadraticFunctionGraph(expression, extraPoints) {
 
   // Quadratic: compute key features
   var h = -b / (2 * a);
-  var k = tryEval(expression, h);
+  var k = safeEval(h);
   if (!isFinite(k)) return null;
 
   // y-intercept
@@ -843,7 +968,7 @@ function buildQuadraticFunctionGraph(expression, extraPoints) {
     Object.keys(extraPoints).forEach(function(key) {
       var ep = extraPoints[key];
       if (ep && Number.isFinite(ep.x)) {
-        var ey = tryEval(expression, ep.x);
+        var ey = safeEval(ep.x);
         if (isFinite(ey)) {
           points[key] = { x: ep.x, y: round4(ey), label: key + "(" + ep.x + "," + round4(ey) + ")" };
         }
@@ -884,24 +1009,38 @@ function round2(v) { return Math.round(v * 100) / 100; }
 
 function createFunctionGraphFallback(text) {
   // Extract y=expression or f(x)=expression, supporting LaTeX \\frac, \\sqrt
-  var raw = asString(text).replaceAll("−", "-").replaceAll("²", "^2");
-  var match = raw.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+)/i);
-  if (!match || !/[xX]/.test(match[1])) return null;
+  var raw = asString(text).replaceAll("\u2212", "-").replaceAll("\u00B2", "^2");
+  // First try extractFunctionExpressionFromText which handles LaTeX
+  var funcExpr = extractFunctionExpressionFromText(raw);
+  var expression = funcExpr || null;
+  var match;
 
-  var expression = match[1].replace(/\s+/g, "");
-  // Strip trailing non-math content (anything after last x/X/digit/close paren/close brace)
-  expression = expression.replace(/[^0-9xX)\}\]]+$/, "");
-  if (!expression || expression.length < 2 || expression.length > 300) return null;
+  if (!expression) {
+    match = raw.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+)/i);
+    if (!match || !/[xX]/.test(match[1])) return null;
+    expression = "y=" + match[1].replace(/\s+/g, "");
+  }
 
+  // Strip trailing non-math content
+  expression = expression.replace(/[^\d\-+*.xX^\u00B2=\s\\/\(\)\[\]{}\w\u221A$]+$/, "");
+  if (!expression || expression.length < 2 || expression.length > 400) return null;
+
+  // Try deterministic quadratic analysis first
+  var quadSpec = buildQuadraticFunctionGraph(expression, null);
+  if (quadSpec && quadSpec.functions && quadSpec.functions.length) {
+    return quadSpec;
+  }
+
+  // Fallback: basic function_graph with non-empty functions
   return {
     type: "function_graph",
-    title: "函数图像",
-    description: "根据题干函数表达式生成的图像。",
+    title: "\u51FD\u6570\u56FE\u50CF",
+    description: "\u6839\u636E\u9898\u5E72\u51FD\u6570\u8868\u8FBE\u5F0F\u751F\u6210\u7684\u56FE\u50CF\u3002",
     functions: [
       {
         id: "f",
-        label: expression,
-        expression: "y=" + expression,
+        label: expression.replace(/^y=/, ""),
+        expression: expression,
         range: [-8, 8],
         role: "original",
       },
@@ -915,7 +1054,6 @@ function createFunctionGraphFallback(text) {
     orientation: normalizeOrientation(null),
   };
 }
-
 function createSafeFallbackVisualization(fallback) {
   const questionText = fallback.questionText || "";
 
@@ -972,15 +1110,8 @@ function normalizeVisualizationSpec(value, fallback = {}) {
     }
   }
 
-  // If AI returns number_line but problem is a linear equation, override
-  if (type === "number_line") {
-    var eqOverride = createEquationAsFunctionGraphFallback(fallback.questionText || "") || createEquationBalanceFallback(fallback.questionText || "");
-    if (eqOverride) {
-      return eqOverride;
-    }
-  }
 
-  return normalizeNonGeometrySpec(source, type, confidence);
+  return normalizeNonGeometrySpec(source, type, confidence, fallback.questionText || "");
 }
 
 
