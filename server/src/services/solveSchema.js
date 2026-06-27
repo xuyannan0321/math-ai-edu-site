@@ -1,4 +1,4 @@
-const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
+﻿const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
 const VISUALIZATION_TYPES = new Set([
   "equation_balance",
   "function_graph",
@@ -506,6 +506,10 @@ function normalizeGeometrySpec(source, confidence, outputType = "geometry") {
 }
 
 function normalizeNonGeometrySpec(source, type, confidence) {
+  if (type === "equation_balance") {
+    return normalizeEquationBalanceSpec(source, confidence);
+  }
+
   var objects = Array.isArray(source.objects)
     ? source.objects
         .map(function(object, index) { return normalizeVisualizationObject(object, {}, index); })
@@ -552,41 +556,127 @@ function normalizeNonGeometrySpec(source, type, confidence) {
   };
 }
 
+
+function normalizeEquationBalanceSpec(source, confidence) {
+  var equation = asString(source.equation || "");
+  var leftTerms = Array.isArray(source.leftTerms)
+    ? source.leftTerms.map(function(t) { return asString(t); }).filter(Boolean)
+    : [];
+  var rightTerms = Array.isArray(source.rightTerms)
+    ? source.rightTerms.map(function(t) { return asString(t); }).filter(Boolean)
+    : [];
+
+  // Fallback: split from equation string if terms are missing
+  if ((!leftTerms.length || !rightTerms.length) && equation && equation.includes("=")) {
+    var eqParts = equation.split("=");
+    if (eqParts.length >= 2) {
+      var leftStr = eqParts[0].replace(/\s+/g, "");
+      var rightStr = eqParts[eqParts.length - 1].replace(/\s+/g, "");
+      if (!leftTerms.length) leftTerms = leftStr.match(/[+\-]?[^+\-]+/g) || [leftStr];
+      if (!rightTerms.length) rightTerms = rightStr.match(/[+\-]?[^+\-]+/g) || [rightStr];
+    }
+  }
+
+  // Fallback: from objects with side
+  if (!leftTerms.length || !rightTerms.length) {
+    var objs = Array.isArray(source.objects) ? source.objects : [];
+    if (!leftTerms.length) {
+      leftTerms = objs.filter(function(o) { return o && o.side !== "right"; }).map(function(o) { return asString(o.label || o.id || ""); }).filter(Boolean);
+    }
+    if (!rightTerms.length) {
+      rightTerms = objs.filter(function(o) { return o && o.side === "right"; }).map(function(o) { return asString(o.label || o.id || ""); }).filter(Boolean);
+    }
+  }
+
+  // If equation is still empty, derive from leftTerms + rightTerms
+  if (!equation && (leftTerms.length || rightTerms.length)) {
+    equation = leftTerms.join("") + "=" + rightTerms.join("");
+  }
+
+  var rawSteps = Array.isArray(source.steps) ? source.steps : [];
+
+  if (!leftTerms.length && !rightTerms.length) {
+    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
+  }
+}
+
+
 function createEquationBalanceFallback(text) {
-  const normalized = asString(text)
+  var normalized = asString(text)
     .replaceAll("−", "-")
     .replace(/\s+/g, "");
-  const match = normalized.match(/([+-]?\d*)x([+-]\d+(?:\.\d+)?)?=([+-]?\d+(?:\.\d+)?)/i);
+  // Support: 2x+3=11, 3x-5=10, x/2+1=3, -x+5=0, 2x=10
+  var eqMatch = normalized.match(/([\-]?\d*\.?\d*)x\s*([+\-]\s*\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)/i)   // ax + b = c  (with explicit constant)
+    || normalized.match(/([\-]?\d*\.?\d*)x\s*=\s*(\d+(?:\.\d+)?)/i);                    // ax = c   (no constant)
 
-  if (!match) {
+  if (!eqMatch) {
     return null;
   }
 
-  const coefficient = match[1] && !["+", "-"].includes(match[1]) ? match[1] : `${match[1] || ""}1`;
-  const constant = match[2] || "";
-  const rightValue = match[3];
+  var hasConstant = eqMatch[3] !== undefined;  // true when 3 capture groups (ax+b=c)
+  var coeffRaw = eqMatch[1] || "";
+  var coeff, constant, rightVal;
+
+  if (hasConstant) {
+    // ax + b = c
+    if (coeffRaw === "" || coeffRaw === "+") coeff = 1;
+    else if (coeffRaw === "-") coeff = -1;
+    else coeff = Number(coeffRaw);
+    constant = Number(eqMatch[2].replace(/\s+/g, ""));
+    rightVal = Number(eqMatch[3]);
+    if (!isFinite(coeff) || !isFinite(constant) || !isFinite(rightVal)) return null;
+  } else {
+    // ax = c
+    if (coeffRaw === "" || coeffRaw === "+") coeff = 1;
+    else if (coeffRaw === "-") coeff = -1;
+    else coeff = Number(coeffRaw);
+    constant = 0;
+    rightVal = Number(eqMatch[2]);
+    if (!isFinite(coeff) || !isFinite(rightVal)) return null;
+  }
+
+  var absCoeff = Math.abs(coeff);
+  var coeffLabel = coeff === 1 ? "x" : coeff === -1 ? "-x" : (coeff + "x");
+  var constLabel = constant === 0 ? "" : (constant > 0 ? ("+" + constant) : String(constant));
+
+  var leftTerms = [coeffLabel];
+  if (constLabel) leftTerms.push(constLabel);
+  var rightTerms = [String(rightVal)];
+
+  // Build steps: subtract constant, then divide by coefficient
+  var steps = [];
+  if (constant !== 0) {
+    var newRight = rightVal - constant;
+    steps.push({
+      label: "等式两边同时" + (constant > 0 ? "减去" + constant : "加上" + (-constant)),
+      leftTerms: [coeffLabel],
+      rightTerms: [String(newRight)],
+    });
+  }
+
+  if (absCoeff !== 1) {
+    var finalRight = (rightVal - constant) / absCoeff;
+    var sign = coeff < 0 ? (-rightVal + constant) / coeff : (rightVal - constant) / absCoeff;
+    steps.push({
+      label: "等式两边同时除以" + absCoeff,
+      leftTerms: [coeff < 0 ? "-x" : "x"],
+      rightTerms: [String(finalRight)],
+    });
+  }
 
   return {
     type: "equation_balance",
     title: "方程平衡示意",
     description: "根据题目中的一元一次方程生成的基础图示，用来说明等式两边保持平衡。",
-    confidence: "medium",
+    equation: normalized,
+    leftTerms: leftTerms,
+    rightTerms: rightTerms,
+    steps: steps,
+    confidence: "high",
     orientation: normalizeOrientation(null),
     points: {},
-    objects: [
-      { kind: "term", id: "left-x", label: `${coefficient}x`, side: "left", role: "original" },
-      ...(constant ? [{ kind: "term", id: "left-constant", label: constant, side: "left", role: "original" }] : []),
-      { kind: "term", id: "right-value", label: rightValue, side: "right", role: "original" },
-    ],
+    objects: [],
     views: [],
-    steps: [
-      {
-        stepTitle: "等式两边",
-        highlightObjects: [],
-        explanation: "解方程时，对等式两边做同样的运算，才能保持结果不变。",
-        action: "highlight",
-      },
-    ],
   };
 }
 
@@ -657,11 +747,23 @@ function normalizeVisualizationSpec(value, fallback = {}) {
     : "medium";
 
   if (type === "none") {
+    var fallbackSpec = createSafeFallbackVisualization(fallback);
+    if (fallbackSpec && fallbackSpec.type !== "none") {
+      return fallbackSpec;
+    }
     return createNoneVisualizationSpec(asString(source.description, "暂无可靠图示，可查看文字解析。"));
   }
 
   if (type === "geometry" || type === "dynamic_point") {
     return normalizeGeometrySpec({ ...source, type }, confidence, type);
+  }
+
+  // If AI returns number_line but problem text is a linear equation, override with equation_balance
+  if (type === "number_line") {
+    var eqOverride = createEquationBalanceFallback(fallback.questionText || "");
+    if (eqOverride) {
+      return eqOverride;
+    }
   }
 
   return normalizeNonGeometrySpec(source, type, confidence);

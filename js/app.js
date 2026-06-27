@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 /* 安全调试：仅在 localStorage.mathAiEduDebug === "1" 时输出，不泄露敏感信息 */
 function debugLog(...args) {
   try {
@@ -857,33 +857,77 @@ function normalizeMathText(text) {
     .replace(/\s+/g, "");
 }
 
-function createEquationBalanceFallback(text) {
-  const normalized = normalizeMathText(text);
-  const match = normalized.match(/([+-]?\d*)x([+-]\d+(?:\.\d+)?)?=([+-]?\d+(?:\.\d+)?)/i);
 
-  if (!match) {
+function createEquationBalanceFallback(text) {
+  var normalized = normalizeMathText(text);
+  // Support: 2x+3=11, 3x-5=10, x/2+1=3, -x+5=0, 2x=10
+  var eqMatch = normalized.match(/([\-]?\d*\.?\d*)x\s*([+\-]\s*\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)/i)   // ax + b = c
+    || normalized.match(/([\-]?\d*\.?\d*)x\s*=\s*(\d+(?:\.\d+)?)/i);                    // ax = c
+
+  if (!eqMatch) {
     return null;
   }
 
-  const coefficient = match[1] && !["+", "-"].includes(match[1]) ? match[1] : `${match[1] || ""}1`;
-  const constant = match[2] || "";
-  const rightValue = match[3];
+  var hasConstant = eqMatch[3] !== undefined;
+  var coeffRaw = eqMatch[1] || "";
+  var coeff, constant, rightVal;
+
+  if (hasConstant) {
+    if (coeffRaw === "" || coeffRaw === "+") coeff = 1;
+    else if (coeffRaw === "-") coeff = -1;
+    else coeff = Number(coeffRaw);
+    constant = Number(eqMatch[2].replace(/\s+/g, ""));
+    rightVal = Number(eqMatch[3]);
+    if (!isFinite(coeff) || !isFinite(constant) || !isFinite(rightVal)) return null;
+  } else {
+    if (coeffRaw === "" || coeffRaw === "+") coeff = 1;
+    else if (coeffRaw === "-") coeff = -1;
+    else coeff = Number(coeffRaw);
+    constant = 0;
+    rightVal = Number(eqMatch[2]);
+    if (!isFinite(coeff) || !isFinite(rightVal)) return null;
+  }
+
+  var absCoeff = Math.abs(coeff);
+  var coeffLabel = coeff === 1 ? "x" : coeff === -1 ? "-x" : (coeff + "x");
+  var constLabel = constant === 0 ? "" : (constant > 0 ? ("+" + constant) : String(constant));
+
+  var leftTerms = [coeffLabel];
+  if (constLabel) leftTerms.push(constLabel);
+  var rightTerms = [String(rightVal)];
+
+  // Build steps: subtract constant, then divide by coefficient
+  var steps = [];
+  if (constant !== 0) {
+    var newRight = rightVal - constant;
+    steps.push({
+      label: "等式两边同时" + (constant > 0 ? "减去" + constant : "加上" + (-constant)),
+      leftTerms: [coeffLabel],
+      rightTerms: [String(newRight)],
+    });
+  }
+
+  if (absCoeff !== 1) {
+    var finalRight = (rightVal - constant) / absCoeff;
+    steps.push({
+      label: "等式两边同时除以" + absCoeff,
+      leftTerms: [coeff < 0 ? "-x" : "x"],
+      rightTerms: [String(finalRight)],
+    });
+  }
 
   return {
     type: "equation_balance",
     title: "方程平衡示意",
     description: "根据题目中的一元一次方程生成的基础图示，仅用于辅助理解等式两边保持平衡。",
-    objects: [
-      { kind: "term", id: "left-x", label: `${coefficient}x` },
-      { kind: "term", id: "right-value", label: rightValue },
-      ...(constant ? [{ kind: "term", id: "left-constant", label: constant }] : []),
-    ],
-    steps: [
-      {
-        stepTitle: "等式两边",
-        explanation: "解方程时，对等式两边做同样的运算，才能保持结果不变。",
-      },
-    ],
+    equation: normalized,
+    leftTerms: leftTerms,
+    rightTerms: rightTerms,
+    steps: steps,
+    confidence: "high",
+    points: {},
+    objects: [],
+    views: [],
   };
 }
 

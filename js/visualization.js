@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 (function initializeMathVisualization(global) {
   const SVG_NS = "http://www.w3.org/2000/svg";
@@ -257,6 +257,9 @@
       description: spec.description || "",
       confidence: spec.confidence || "medium",
       orientation: spec.orientation || {},
+      equation: spec.equation || "",
+      leftTerms: Array.isArray(spec.leftTerms) ? spec.leftTerms : [],
+      rightTerms: Array.isArray(spec.rightTerms) ? spec.rightTerms : [],
       points: normalizePointMap(spec),
       objects: Array.isArray(spec.objects) ? spec.objects : [],
       views: Array.isArray(spec.views) ? spec.views : [],
@@ -967,80 +970,99 @@
 
   function renderEquationBalance(container, spec) {
     const objects = Array.isArray(spec.objects) ? spec.objects.slice(0, 10) : [];
-    const svg = createBaseSvg("math-visualization-svg equation-balance-svg");
-    const leftObjects = objects.filter((object) => object.side !== "right");
-    const rightObjects = objects.filter((object) => object.side === "right");
 
-    function drawSide(items, startX, label) {
-      const labelText = createSvgElement("text", {
-        x: startX,
-        y: 70,
-        class: "mv-equation-label",
-      });
-      labelText.textContent = label;
-      svg.append(labelText);
-
-      if (!items.length) {
-        const emptyText = createSvgElement("text", {
-          x: startX,
-          y: 170,
-          class: "mv-equation-term",
-        });
-        emptyText.textContent = "—";
-        svg.append(emptyText);
-        return;
-      }
-
-      items.forEach((object, index) => {
-        const x = startX + (index % 3) * 78;
-        const y = 120 + Math.floor(index / 3) * 66;
-        svg.append(
-          createSvgElement("rect", {
-            x,
-            y,
-            width: 64,
-            height: 38,
-            rx: 10,
-            class: "mv-equation-block",
-          }),
-        );
-        const text = createSvgElement("text", {
-          x: x + 32,
-          y: y + 24,
-          class: "mv-equation-term",
-          "text-anchor": "middle",
-        });
-        text.textContent = object.label || object.value || object.id || `项${index + 1}`;
-        svg.append(text);
-      });
+    function eqSplit(eqStr) {
+      if (!eqStr || typeof eqStr !== "string") return { left: [], right: [] };
+      var parts = eqStr.split("=");
+      if (parts.length < 2) return { left: [], right: [] };
+      var left = parts[0].replace(/\s+/g, "");
+      var right = parts[parts.length - 1].replace(/\s+/g, "");
+      return {
+        left: left.match(/[+\-]?[^+\-]+/g) || [left],
+        right: right.match(/[+\-]?[^+\-]+/g) || [right],
+      };
     }
 
-    svg.append(
-      createSvgElement("line", {
-        x1: 80,
-        y1: 265,
-        x2: 480,
-        y2: 265,
-        class: "mv-segment",
-      }),
-      createSvgElement("circle", {
-        cx: 280,
-        cy: 265,
-        r: 8,
-        class: "mv-point",
-      }),
-    );
+    // Prefer leftTerms/rightTerms; fallback to equation splitting; then objects
+    var leftTerms = Array.isArray(spec.leftTerms) && spec.leftTerms.length
+      ? spec.leftTerms
+      : null;
+    var rightTerms = Array.isArray(spec.rightTerms) && spec.rightTerms.length
+      ? spec.rightTerms
+      : null;
 
-    const equal = createSvgElement("text", {
-      x: 280,
-      y: 178,
-      class: "mv-equation-equal",
-      "text-anchor": "middle",
+    if (!leftTerms || !rightTerms) {
+      var eqSides = eqSplit(spec.equation);
+      if (!leftTerms && eqSides.left.length) leftTerms = eqSides.left;
+      if (!rightTerms && eqSides.right.length) rightTerms = eqSides.right;
+    }
+
+    if (!leftTerms || !rightTerms) {
+      var objs = Array.isArray(spec.objects) ? spec.objects : [];
+      leftTerms = leftTerms || objs.filter(function(o) { return o && o.side !== "right"; }).map(function(o) { return o.label || o.id || ""; });
+      rightTerms = rightTerms || objs.filter(function(o) { return o && o.side === "right"; }).map(function(o) { return o.label || o.id || ""; });
+    }
+
+    var steps = Array.isArray(spec.steps) ? spec.steps : [];
+    var svg = createBaseSvg("math-visualization-svg equation-balance-svg");
+
+    // Draw a term block
+    function drawTerm(svgEl, term, cx, cy) {
+      if (!term) return;
+      var tw = Math.max(term.length * 14 + 24, 48);
+      svgEl.append(
+        createSvgElement("rect", { x: cx - tw / 2, y: cy - 20, width: tw, height: 38, rx: 10, class: "mv-equation-block" })
+      );
+      var t = createSvgElement("text", { x: cx, y: cy + 4, class: "mv-equation-term", "text-anchor": "middle" });
+      t.textContent = term;
+      svgEl.append(t);
+    }
+
+    // Draw one row: left terms | = | right terms
+    function drawRow(leftList, rightList, rowY, showEqual, lblL, lblR) {
+      if (showEqual) {
+        var eq = createSvgElement("text", { x: 280, y: rowY + 4, class: "mv-equation-equal", "text-anchor": "middle" });
+        eq.textContent = "=";
+        svg.append(eq);
+      }
+      if (lblL) { var ll = createSvgElement("text", { x: 130, y: rowY - 12, class: "mv-equation-label", "text-anchor": "middle" }); ll.textContent = lblL; svg.append(ll); }
+      if (lblR) { var rr = createSvgElement("text", { x: 430, y: rowY - 12, class: "mv-equation-label", "text-anchor": "middle" }); rr.textContent = lblR; svg.append(rr); }
+
+      (leftList || []).forEach(function(t, i) { drawTerm(svg, t, 50 + (i % 2) * 100 + 30, rowY + Math.floor(i / 2) * 50); });
+      (rightList || []).forEach(function(t, i) { drawTerm(svg, t, 330 + (i % 2) * 100 + 30, rowY + Math.floor(i / 2) * 50); });
+
+      return Math.max(1, Math.ceil((leftList || []).length / 2), Math.ceil((rightList || []).length / 2)) * 50 + 20;
+    }
+
+    // Original equation
+    var y = 60;
+    y += drawRow(leftTerms, rightTerms, y, true, "左边", "右边");
+
+    // Separator
+    svg.append(createSvgElement("line", { x1: 40, y1: y + 4, x2: 520, y2: y + 4, class: "mv-segment", style: "stroke-dasharray: 6 4; opacity: 0.4;" }));
+    y += 20;
+
+    // Steps
+    steps.forEach(function(step) {
+      var sl = createSvgElement("text", { x: 280, y: y - 6, class: "mv-equation-label", "text-anchor": "middle" });
+      sl.textContent = step.label || step.stepTitle || "";
+      svg.append(sl);
+      y += 14;
+
+      var slt = Array.isArray(step.leftTerms) ? step.leftTerms : [];
+      var srt = Array.isArray(step.rightTerms) ? step.rightTerms : [];
+
+      // Fallback: split step equation if present
+      if ((!slt.length || !srt.length) && step.equation) {
+        var ss = eqSplit(step.equation);
+        if (!slt.length) slt = ss.left;
+        if (!srt.length) srt = ss.right;
+      }
+
+      y += drawRow(slt, srt, y, false);
     });
-    equal.textContent = "=";
-    svg.append(equal);
-    drawSide(leftObjects, 86, "左边");
-    drawSide(rightObjects, 330, "右边");
+
+    svg.setAttribute("viewBox", "0 0 560 " + Math.max(y + 20, 260));
     container.append(svg);
   }
 
