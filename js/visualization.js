@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 (function initializeMathVisualization(global) {
   const SVG_NS = "http://www.w3.org/2000/svg";
@@ -1003,7 +1003,8 @@
     return function(x) { return a * x + b; };
   }
 
-  function renderFunctionGraph(container, spec) {
+  function renderFunctionGraph(container, spec, options) {
+    if (options === undefined) options = {};
     // Collect functions from spec.functions and spec.objects
     var funcDefs = [];
 
@@ -1109,6 +1110,7 @@
     // Draw points
     allPoints.forEach(function(p) {
       drawPoint(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, mapper);
+      if (p.label) drawLabel(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, p.label, mapper);
     });
 
     // Draw auxiliary lines
@@ -1481,7 +1483,7 @@
       container.append(title, description, board);
 
       if (spec.type === "function_graph") {
-        renderFunctionGraph(board, spec);
+        renderFunctionGraph(board, spec, options);
       } else if (spec.type === "geometry") {
         var geomOptions = Object.assign({}, options || {}, { showGrid: false });
         renderGeometry(board, spec, geomOptions);
@@ -1494,9 +1496,12 @@
       }
 
       renderStepControls(container, spec);
-    } catch {
+    } catch (error) {
+      if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
+        console.error("[MathVisualization] render failed:", error && error.message ? error.message : error);
+      }
       container.replaceChildren();
-      renderEmpty(container, "暂无可靠图示，可查看文字解析。");
+      renderEmpty(container, "暂无可靠图示，可查看文字解析。", options && options.uploadedImageUrl);
     }
   }
 

@@ -1145,10 +1145,12 @@ function appendQualityCheck(flow, qualityCheck) {
   var card = createReadingCard("is-quality", "质量检查");
   var confidence = qualityCheck?.confidence || "medium";
   var status = document.createElement("p");
-  if (qualityCheck && qualityCheck.sourceVerificationPassed === true) {
+  if (qualityCheck && qualityCheck.sourceVerificationPassed === true && confidence !== "low") {
     status.textContent = "双源校验已通过。";
   } else if (confidence === "high") {
     status.textContent = "已通过结构化校验。";
+  } else if (confidence === "low") {
+    status.textContent = "当前结果置信度较低，请核对题干后使用。";
   } else {
     status.textContent = "已完成结构化校验，复杂压轴题建议教师复核。";
   }
@@ -1499,10 +1501,6 @@ function startGenerationStatusUpdates({
   state.generationStatusTimers.push(timer60);
 }
 
-function clearGenerationStatusTimers() {
-  state.generationStatusTimers.forEach((timerId) => window.clearTimeout(timerId));
-  state.generationStatusTimers = [];
-}
 
 function startGenerationStatusUpdates({
   target = elements.generateButtonText,
@@ -2041,14 +2039,20 @@ async function solveImageFromUpload() {
     showRecognizedText(data.recognizedText);
     state.uploadedImageUrl = state.filePreviewUrl || null;
 
-    renderAiHtmlResult(data.htmlResult);
-    renderStructuredResult(data.result);
-    state.currentSolveRecordId = data.recordId || null;
-    state.currentSolveResult = data.result || null;
-    state.currentHtmlResult = data.htmlResult || "";
-    state.currentLibraryType = "original";
-    showResultActions(data.recordId);
-    showToast("图片题已解析，可保存到原创题库或策略库。");
+    if (data.partial) {
+      // Partial recognition: show draft + original image, let user edit and retry
+      showPartialRecognitionResult(data);
+      showToast("已提取到部分题目信息，请核对后继续解析。");
+    } else {
+      renderAiHtmlResult(data.htmlResult);
+      renderStructuredResult(data.result);
+      state.currentSolveRecordId = data.recordId || null;
+      state.currentSolveResult = data.result || null;
+      state.currentHtmlResult = data.htmlResult || "";
+      state.currentLibraryType = "original";
+      showResultActions(data.recordId);
+      showToast("图片题已解析，可保存到原创题库或策略库。");
+    }
   } catch (error) {
     if (error.data?.recognizedText) {
       showRecognizedText(error.data.recognizedText);
@@ -2061,6 +2065,51 @@ async function solveImageFromUpload() {
     elements.solveImageButtonText.textContent = "识别并解析";
     state.generationTimer = null;
   }
+}
+
+
+function showPartialRecognitionResult(data) {
+  var flow = document.querySelector("#solution-reading-flow") || document.querySelector(".solution-reading-flow");
+  flow.replaceChildren();
+
+  // Show uploaded image
+  if (state.uploadedImageUrl) {
+    var imgCard = createReadingCard("is-original", "识别原图");
+    var imgWrap = document.createElement("div");
+    imgWrap.className = "uploaded-image-fallback";
+    var img = document.createElement("img");
+    img.src = state.uploadedImageUrl;
+    img.alt = "上传的题目图片";
+    img.className = "problem-original-image";
+    imgWrap.append(img);
+    imgCard.append(imgWrap);
+    flow.append(imgCard);
+  }
+
+  // Show recognized text draft
+  var draftCard = createReadingCard("is-analysis", "识别草稿");
+  var draftP = document.createElement("p");
+  draftP.textContent = data.recognizedText || "未能识别到文字，请检查图片是否清晰。";
+  draftCard.append(draftP);
+
+  if (Array.isArray(data.warnings) && data.warnings.length) {
+    var warnP = document.createElement("p");
+    warnP.className = "solution-warning";
+    warnP.textContent = data.warnings.join(" ");
+    draftCard.append(warnP);
+  }
+
+  flow.append(draftCard);
+
+  // Hint to edit and retry
+  var hintCard = createReadingCard("is-warning", "请核对后重新解析");
+  var hintP = document.createElement("p");
+  hintP.textContent = "已提取到部分题目信息。请在左侧文本框核对并修改识别结果，然后点击【用修改后的文本重新解析】。";
+  hintCard.append(hintP);
+  flow.append(hintCard);
+
+  // Disable save/export since no record yet
+  showResultActions(null);
 }
 
 async function reanalyzeRecognizedText() {
@@ -3922,6 +3971,37 @@ function safeMathHtml(rawText) {
     .replaceAll("'", "&#039;");
   // 2) Wrap LaTeX fragments in \(...\)
   return autoWrapLatex(escaped);
+}
+
+
+function sanitizeLatexText(text) {
+  if (!text || typeof text !== "string") return text;
+  var s = text;
+  // Count \left and \right
+  var leftCount = (s.match(/\\left/g) || []).length;
+  var rightCount = (s.match(/\\right/g) || []).length;
+  if (leftCount !== rightCount) {
+    // Remove unmatched \left and \right
+    s = s.replace(/\\left\s*[\[(\{]/g, "(");
+    s = s.replace(/\\right\s*[\])\}]]/g, ")");
+    // Remove any remaining bare \left \right
+    s = s.replace(/\\left\s*/g, "");
+    s = s.replace(/\\right\s*/g, "");
+  }
+  // Check brace balance for \frac and \sqrt
+  var braceDepth = 0;
+  for (var i = 0; i < s.length; i++) {
+    if (s[i] === "{") braceDepth++;
+    else if (s[i] === "}") braceDepth--;
+    if (braceDepth < 0) {
+      // Unbalanced - return plain text
+      return s.replace(/\\frac\{/g, "").replace(/\\sqrt\{/g, "√(").replace(/\\triangle/g, "△").replace(/\\angle/g, "∠").replace(/[{}]/g, "");
+    }
+  }
+  if (braceDepth !== 0) {
+    return s.replace(/\\frac\{/g, "").replace(/\\sqrt\{/g, "√(").replace(/\\triangle/g, "△").replace(/\\angle/g, "∠").replace(/[{}]/g, "");
+  }
+  return s;
 }
 
 function setSafeMathContent(element, rawText, tagName) {
