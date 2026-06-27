@@ -61,6 +61,14 @@ const env = {
       visionModel: process.env.GEMINI_VISION_MODEL || "",
     },
   },
+  mathpix: {
+    appId: process.env.MATHPIX_APP_ID || '',
+    appKey: process.env.MATHPIX_APP_KEY || '',
+    baseUrl: process.env.MATHPIX_BASE_URL || 'https://api.mathpix.com/v3/text',
+  },
+  ocr: {
+    providerPriority: (process.env.OCR_PROVIDER_PRIORITY || 'mathpix,qwen-vl,openai-vision,gemini-vision').split(',').map(function(s) { return s.trim(); }).filter(Boolean),
+  },
   upload: {
     maxImageSizeMb: parsePositiveNumber(process.env.MAX_IMAGE_SIZE_MB, 3),
   },

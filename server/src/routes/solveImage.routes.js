@@ -54,17 +54,17 @@ router.post("/solve-image", authRequired, uploadProblemImage, async (req, res, n
     });
     const recognizedText = visionResult.result.recognizedText.trim();
 
+    // Partial recognition: return draft for user review instead of blocking
     if (recognizedText.length < 4) {
-      return res.status(422).json({
-        success: false,
-        message: "图片中的题目文字不够清晰，请换一张更清楚的图片，或手动输入题目后解析。",
-        data: {
-          recognizedText,
-          visionProvider: visionResult.provider,
-          visionModelName: visionResult.modelName,
-          imageQuality: visionResult.result.imageQuality,
-          warnings: visionResult.result.warnings,
-        },
+      return sendSuccess(res, {
+        recognizedText,
+        visionProvider: visionResult.provider,
+        visionModelName: visionResult.modelName,
+        imageQuality: visionResult.result.imageQuality || "low",
+        warnings: visionResult.result.warnings || ["识别文本可能不完整，请核对后继续。"],
+        partial: true,
+        needsUserReview: true,
+        canRetryWithEditedText: true,
       });
     }
 
@@ -84,16 +84,16 @@ router.post("/solve-image", authRequired, uploadProblemImage, async (req, res, n
         },
       });
     } catch (error) {
-      return res.status(error.statusCode || 503).json({
-        success: false,
-        message: "题目已识别，但生成解析失败。你可以修改识别文本后重新解析。",
-        data: {
-          recognizedText,
-          visionProvider: visionResult.provider,
-          visionModelName: visionResult.modelName,
-          imageQuality: visionResult.result.imageQuality,
-          warnings: visionResult.result.warnings,
-        },
+      return sendSuccess(res, {
+        recognizedText,
+        visionProvider: visionResult.provider,
+        visionModelName: visionResult.modelName,
+        imageQuality: visionResult.result.imageQuality || "medium",
+        warnings: visionResult.result.warnings || [],
+        partial: true,
+        needsUserReview: true,
+        canRetryWithEditedText: true,
+        solveError: error.expose ? error.message : "生成解析失败，请修改识别文本后重新解析。",
       });
     }
 

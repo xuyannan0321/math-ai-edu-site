@@ -1,15 +1,28 @@
 const { insertModelCallLog } = require("./modelRouter");
-const { buildImageRecognitionMessages, normalizeVisionResult } = require("./imagePrompt");
+const {
+  buildImageRecognitionMessages,
+  normalizeVisionResult,
+} = require("./imagePrompt");
+const mathpixProvider = require("./providers/mathpixProvider");
 const qwenVlProvider = require("./providers/qwenVlProvider");
 const geminiVisionProvider = require("./providers/geminiVisionProvider");
 const gptVisionProvider = require("./providers/gptVisionProvider");
 
-const VISION_PROVIDERS = [qwenVlProvider, geminiVisionProvider, gptVisionProvider];
+const VISION_PROVIDERS = [
+  mathpixProvider,
+  qwenVlProvider,
+  geminiVisionProvider,
+  gptVisionProvider,
+];
 
 function orderVisionProviders(preferredProvider) {
-  const preferred = String(preferredProvider || "").trim().toLowerCase();
+  const preferred = String(preferredProvider || "")
+    .trim()
+    .toLowerCase();
   const ordered = [...VISION_PROVIDERS];
-  const preferredIndex = ordered.findIndex((provider) => provider.name === preferred);
+  const preferredIndex = ordered.findIndex(
+    (provider) => provider.name === preferred,
+  );
 
   if (preferredIndex > 0) {
     const [provider] = ordered.splice(preferredIndex, 1);
@@ -23,12 +36,7 @@ function buildDataUrl(file) {
   return `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
 }
 
-async function runImageRecognition({
-  userId,
-  file,
-  preferredProvider,
-  input,
-}) {
+async function runImageRecognition({ userId, file, preferredProvider, input }) {
   const imageDataUrl = buildDataUrl(file);
   const messages = buildImageRecognitionMessages({
     imageDataUrl,
@@ -93,9 +101,10 @@ async function runImageRecognition({
     }
   }
 
-  const message = skippedProviders.length === VISION_PROVIDERS.length
-    ? "暂未配置可用的图片识别模型，请先在 server/.env 中配置 DASHSCOPE_VISION_MODEL 和对应 Key。"
-    : "当前图片识别模型调用失败，请稍后再试。";
+  const message =
+    skippedProviders.length === VISION_PROVIDERS.length
+      ? "暂未配置可用的图片识别模型，请先在 server/.env 中配置 DASHSCOPE_VISION_MODEL 和对应 Key。"
+      : "当前图片识别模型调用失败，请稍后再试。";
   const error = new Error(message);
   error.statusCode = 503;
   error.expose = true;

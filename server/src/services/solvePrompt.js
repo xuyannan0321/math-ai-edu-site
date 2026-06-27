@@ -28,6 +28,7 @@ function getVisualizationSchemaTemplate() {
   return [
     '  "visualizationSpec": {',
     '    "type": "geometry | equation_balance | function_graph | dynamic_point | number_line | none",',
+    "// function_graph 含 functions、points、auxiliaryLines；方程题/f(x)=题优先用 function_graph",
     '    "title": "图示标题",',
     '    "description": "图示说明；无法可靠绘制时说明原因",',
     '    "confidence": "low | medium | high",',

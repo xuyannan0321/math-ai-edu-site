@@ -523,6 +523,19 @@ function normalizeNonGeometrySpec(source, type, confidence) {
 
   // Handle function_graph: preserve functions, auxiliaryLines, points
   if (type === "function_graph") {
+    // If functions is empty but questionText has y=expression, fill it
+    if ((!Array.isArray(source.functions) || !source.functions.length) && fallback.questionText) {
+      var funcExpr = extractFunctionExpressionFromText(fallback.questionText);
+      if (funcExpr) {
+        var qspec = buildQuadraticFunctionGraph(funcExpr, null);
+        if (qspec && qspec.functions && qspec.functions.length) {
+          source.functions = qspec.functions;
+          if (!source.points || !Object.keys(source.points || {}).length) source.points = qspec.points;
+          if (!source.auxiliaryLines || !source.auxiliaryLines.length) source.auxiliaryLines = qspec.auxiliaryLines;
+          if (!source.objects || !source.objects.length) source.objects = qspec.objects || [];
+        }
+      }
+    }
     return {
       type,
       title: asString(source.title, "函数图像"),
@@ -601,62 +614,54 @@ function normalizeEquationBalanceSpec(source, confidence) {
 }
 
 
-function normalizeEquationBalanceSpec(source, confidence) {
-  var equation = asString(source.equation || "");
-  var leftTerms = Array.isArray(source.leftTerms)
-    ? source.leftTerms.map(function(t) { return asString(t); }).filter(Boolean)
-    : [];
-  var rightTerms = Array.isArray(source.rightTerms)
-    ? source.rightTerms.map(function(t) { return asString(t); }).filter(Boolean)
-    : [];
 
-  if ((!leftTerms.length || !rightTerms.length) && equation && equation.includes("=")) {
-    var eqParts = equation.split("=");
-    if (eqParts.length >= 2) {
-      var leftStr = eqParts[0].replace(/\s+/g, "");
-      var rightStr = eqParts[eqParts.length - 1].replace(/\s+/g, "");
-      if (!leftTerms.length) leftTerms = leftStr.match(/[+\-]?[^+\-]+/g) || [leftStr];
-      if (!rightTerms.length) rightTerms = rightStr.match(/[+\-]?[^+\-]+/g) || [rightStr];
-    }
+function createEquationAsFunctionGraphFallback(text, finalAnswer) {
+  var normalized = asString(text).replaceAll("−", "-").replace(/\s+/g, "");
+  // Match: ax + b = c  or  ax = c
+  var eqMatch = normalized.match(/([\-]?\d*\.?\d*)x\s*([+\-]\s*\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)/i)
+    || normalized.match(/([\-]?\d*\.?\d*)x\s*=\s*(\d+(?:\.\d+)?)/i);
+  if (!eqMatch) return null;
+
+  var hasConstant = eqMatch[3] !== undefined;
+  var coeffRaw = eqMatch[1] || "";
+  var coeff, constant, rightVal;
+  if (hasConstant) {
+    if (coeffRaw === "" || coeffRaw === "+") coeff = 1; else if (coeffRaw === "-") coeff = -1; else coeff = Number(coeffRaw);
+    constant = Number(eqMatch[2].replace(/\s+/g, ""));
+    rightVal = Number(eqMatch[3]);
+    if (!isFinite(coeff) || !isFinite(constant) || !isFinite(rightVal)) return null;
+  } else {
+    if (coeffRaw === "" || coeffRaw === "+") coeff = 1; else if (coeffRaw === "-") coeff = -1; else coeff = Number(coeffRaw);
+    constant = 0;
+    rightVal = Number(eqMatch[2]);
+    if (!isFinite(coeff) || !isFinite(rightVal)) return null;
   }
 
-  if (!leftTerms.length || !rightTerms.length) {
-    var objs = Array.isArray(source.objects) ? source.objects : [];
-    if (!leftTerms.length) leftTerms = objs.filter(function(o) { return o && o.side !== "right"; }).map(function(o) { return asString(o.label || o.id || ""); }).filter(Boolean);
-    if (!rightTerms.length) rightTerms = objs.filter(function(o) { return o && o.side === "right"; }).map(function(o) { return asString(o.label || o.id || ""); }).filter(Boolean);
-  }
+  var xSolution = (rightVal - constant) / coeff;
+  // Build left function expression: y = coeff*x + constant
+  var leftExpr = "y=" + (coeff === 1 ? "x" : coeff === -1 ? "-x" : coeff + "x") + (constant >= 0 ? "+" + constant : String(constant));
+  var rightExpr = "y=" + rightVal;
 
-  if (!equation && (leftTerms.length || rightTerms.length)) {
-    equation = leftTerms.join("") + "=" + rightTerms.join("");
-  }
-
-  var rawSteps = Array.isArray(source.steps) ? source.steps : [];
-  if (!leftTerms.length && !rightTerms.length) {
-    return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
-  }
-
-  var steps = rawSteps.map(function(step) {
-    if (!step || typeof step !== "object") return null;
-    return {
-      label: asString(step.label || step.stepTitle || step.title || ""),
-      leftTerms: Array.isArray(step.leftTerms) ? step.leftTerms.map(function(t) { return asString(t); }).filter(Boolean) : [],
-      rightTerms: Array.isArray(step.rightTerms) ? step.rightTerms.map(function(t) { return asString(t); }).filter(Boolean) : [],
-    };
-  }).filter(Boolean);
+  // Compute visible range around intersection
+  var padX = Math.max(2, Math.abs(xSolution) * 0.5 + 2);
+  var range = [xSolution - padX, xSolution + padX];
 
   return {
-    type: "equation_balance",
-    title: asString(source.title, "方程平衡示意"),
-    description: asString(source.description, "等式两边保持平衡的图示说明。"),
-    confidence: REQUIRED_CONFIDENCE_VALUES.has(confidence) ? confidence : "medium",
-    equation,
-    leftTerms,
-    rightTerms,
-    steps,
-    orientation: normalizeOrientation(source.orientation),
-    points: {},
-    objects: [],
-    views: [],
+    type: "function_graph",
+    title: "方程图像解法",
+    description: "两条图像交点的横坐标就是方程的解。",
+    functions: [
+      { id: "left", label: leftExpr, expression: leftExpr, range: range, role: "original" },
+      { id: "right", label: rightExpr, expression: rightExpr, range: range, role: "original" },
+    ],
+    points: {
+      P: { x: xSolution, y: rightVal, label: "P(" + xSolution + "," + rightVal + ")" },
+    },
+    auxiliaryLines: [
+      { id: "x-sol", kind: "segment", label: "x=" + xSolution, from: { x: xSolution, y: 0 }, to: { x: xSolution, y: rightVal }, style: "dashed" },
+    ],
+    confidence: "high",
+    orientation: normalizeOrientation(null),
   };
 }
 
@@ -739,40 +744,175 @@ function createEquationBalanceFallback(text) {
   };
 }
 
-function createFunctionGraphFallback(text) {
-  const match = asString(text)
-    .replaceAll("−", "-")
-    .replaceAll("²", "^2")
-    .match(/(?:y|f\(x\))\s*=\s*([+\-0-9.xX^*²\s]+)/i);
 
-  if (!match || !/[xX]/.test(match[1])) {
-    return null;
+// Extract y=... or f(x)=... from problem text, supporting LaTeX
+function extractFunctionExpressionFromText(text) {
+  var s = asString(text).replaceAll("−", "-").replaceAll("²", "^2");
+  // Match y = ...  or  f(x) = ... until end-of-line or Chinese punctuation
+  var m = s.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+?)(?:\s*$|\s*[,，。；;]|\s*(?:与|x轴|y轴|交于|对称|顶点|其中|where|画出|图像|图象|求|的))/i)
+       || s.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+)/i);
+  if (!m) return null;
+  var expr = m[1].replace(/\s+/g, "");
+  // Strip trailing non-math chars
+  expr = expr.replace(/[^0-9xX)\}\^\-+*/\\.=√²\\\[\]{}()]+$/, "");
+  if (!expr || expr.length < 2 || expr.length > 300) return null;
+  return "y=" + expr;
+}
+
+// Deterministic quadratic analyzer - no npm deps
+function buildQuadraticFunctionGraph(expression, extraPoints) {
+  // Parse a, b, c from y = ax^2 + bx + c
+  // Use numeric evaluation by sampling
+  function tryEval(expr, x) {
+    // Replace LaTeX with numeric approximations
+    var s = expr
+      .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, function(_, a, b) {
+        var na = parseFloat(a.replace(/\\sqrt\{(\d+)\}/g, function(_, n) { return Math.sqrt(Number(n)); }));
+        var nb = parseFloat(b.replace(/\\sqrt\{(\d+)\}/g, function(_, n) { return Math.sqrt(Number(n)); }));
+        return Number.isFinite(na) && Number.isFinite(nb) && nb !== 0 ? String(na/nb) : "NaN";
+      })
+      .replace(/\\sqrt\{(\d+)\}/g, function(_, n) { return Math.sqrt(Number(n)); })
+      .replace(/\(/g, "(").replace(/\)/g, ")")
+      .replace(/\^/g, "^")
+      .replace(/²/g, "^2")
+      .replace(/x/g, "(" + x + ")")
+      .replace(/\*/g, "*");
+
+    try { var v = Function("return " + s)(); return Number.isFinite(v) ? v : NaN; }
+    catch(e) { return NaN; }
   }
 
-  const expression = match[1].replace(/\s+/g, "");
+  // Get y for 3 x values to determine quadratic coefficients
+  var y0 = tryEval(expression, 0);
+  var y1 = tryEval(expression, 1);
+  var y2 = tryEval(expression, 2);
+  if (!isFinite(y0) || !isFinite(y1) || !isFinite(y2)) return null;
 
-  if (!/^[+\-0-9.xX^*²]+$/.test(expression)) {
-    return null;
+  var c = y0;
+  var a_plus_b = y1 - c;
+  var four_a_plus_two_b = y2 - c;
+  var a = (four_a_plus_two_b - 2 * a_plus_b) / 2;
+  var b = a_plus_b - a;
+
+  var isQuadratic = Math.abs(a) > 1e-9;
+  // If linear, return a simple spec
+  if (!isQuadratic) {
+    var slope = b || (y1 - y0);
+    return {
+      type: "function_graph",
+      title: "一次函数图像",
+      functions: [{ id: "f", label: expression, expression: expression, range: [-8, 8], role: "original" }],
+      points: {},
+      auxiliaryLines: [],
+      objects: [],
+      views: [],
+      steps: [],
+      confidence: "medium",
+    };
   }
+
+  // Quadratic: compute key features
+  var h = -b / (2 * a);
+  var k = tryEval(expression, h);
+  if (!isFinite(k)) return null;
+
+  // y-intercept
+  var yIntercept = c;
+
+  // x-intercepts (solve ax^2+bx+c=0)
+  var discriminant = b * b - 4 * a * c;
+  var xIntercepts = [];
+  if (discriminant >= -1e-9) {
+    var d = Math.sqrt(Math.max(0, discriminant));
+    xIntercepts.push((-b - d) / (2 * a), (-b + d) / (2 * a));
+  }
+
+  // Build points
+  var points = {};
+  xIntercepts.forEach(function(x, i) {
+    var name = i === 0 ? "A" : "B";
+    points[name] = { x: round4(x), y: 0, label: name + "(" + round4(x) + ",0)" };
+  });
+  points["C"] = { x: 0, y: round4(yIntercept), label: "C(0," + round4(yIntercept) + ")" };
+  points["V"] = { x: round4(h), y: round4(k), label: "V(" + round4(h) + "," + round4(k) + ")" };
+  // D: axis intersection with x-axis
+  points["D"] = { x: round4(h), y: 0, label: "D(" + round4(h) + ",0)" };
+
+  // Extra points from text
+  if (extraPoints && typeof extraPoints === "object") {
+    Object.keys(extraPoints).forEach(function(key) {
+      var ep = extraPoints[key];
+      if (ep && Number.isFinite(ep.x)) {
+        var ey = tryEval(expression, ep.x);
+        if (isFinite(ey)) {
+          points[key] = { x: ep.x, y: round4(ey), label: key + "(" + ep.x + "," + round4(ey) + ")" };
+        }
+      }
+    });
+  }
+
+  // Range
+  var allXs = Object.values(points).map(function(p) { return p.x; });
+  var allYs = Object.values(points).map(function(p) { return p.y; });
+  var minX = Math.min.apply(null, allXs.concat(-3));
+  var maxX = Math.max.apply(null, allXs.concat(3));
+  var minY = Math.min.apply(null, allYs.concat(k - 2));
+  var maxY = Math.max.apply(null, allYs.concat(k + 2));
+  var padX = Math.max(1, (maxX - minX) * 0.3);
+  var padY = Math.max(1, (maxY - minY) * 0.3);
+  var range = [Math.floor(minX - padX), Math.ceil(maxX + padX)];
 
   return {
     type: "function_graph",
-    title: "函数图像基础示意",
-    description: "根据题目中可识别的函数表达式生成的安全基础图像；复杂表达式会自动跳过。",
-    confidence: "medium",
+    title: "二次函数图像",
+    description: "自动分析：对称轴 x=" + round2(h) + "，顶点 V(" + round2(h) + "," + round2(k) + ")。",
+    functions: [{ id: "parabola", label: "抛物线", expression: expression, range: range, role: "original" }],
+    points: points,
+    auxiliaryLines: [
+      { id: "symmetry-axis", kind: "line", label: "对称轴 x=" + round2(h), from: { x: h, y: Math.min(-4, minY) }, to: { x: h, y: Math.max(4, maxY) }, style: "dashed" },
+    ],
+    objects: [],
+    views: [{ id: "q1", title: "函数图像", showObjects: ["parabola"], highlightObjects: [] }],
+    steps: [],
+    confidence: "high",
     orientation: normalizeOrientation(null),
-    points: {},
-    objects: [
+  };
+}
+
+function round4(v) { return Math.round(v * 10000) / 10000; }
+function round2(v) { return Math.round(v * 100) / 100; }
+
+function createFunctionGraphFallback(text) {
+  // Extract y=expression or f(x)=expression, supporting LaTeX \\frac, \\sqrt
+  var raw = asString(text).replaceAll("−", "-").replaceAll("²", "^2");
+  var match = raw.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+)/i);
+  if (!match || !/[xX]/.test(match[1])) return null;
+
+  var expression = match[1].replace(/\s+/g, "");
+  // Strip trailing non-math content (anything after last x/X/digit/close paren/close brace)
+  expression = expression.replace(/[^0-9xX)\}\]]+$/, "");
+  if (!expression || expression.length < 2 || expression.length > 300) return null;
+
+  return {
+    type: "function_graph",
+    title: "函数图像",
+    description: "根据题干函数表达式生成的图像。",
+    functions: [
       {
-        kind: "function",
         id: "f",
-        expression,
-        range: [-5, 5],
+        label: expression,
+        expression: "y=" + expression,
+        range: [-8, 8],
         role: "original",
       },
     ],
+    points: {},
+    auxiliaryLines: [],
+    objects: [],
     views: [],
     steps: [],
+    confidence: "medium",
+    orientation: normalizeOrientation(null),
   };
 }
 
@@ -784,6 +924,7 @@ function createSafeFallbackVisualization(fallback) {
   }
 
   return createFunctionGraphFallback(questionText)
+    || createEquationAsFunctionGraphFallback(questionText)
     || createEquationBalanceFallback(questionText)
     || createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
 }
@@ -805,6 +946,12 @@ function normalizeVisualizationSpec(value, fallback = {}) {
     ? source.confidence
     : "medium";
 
+  // For y= or f(x)= problems, force function_graph even if AI says none
+  var isFuncProblem = /y\s*=|f\s*\(\s*x\s*\)\s*=|一次函数|二次函数|抛物线|函数图像|画出函数/i.test(fallback.questionText || "");
+  if (type === "none" && isFuncProblem) {
+    var funcGraph = createFunctionGraphFallback(fallback.questionText || "");
+    if (funcGraph) { return funcGraph; }
+  }
   if (type === "none") {
     var fallbackSpec = createSafeFallbackVisualization(fallback);
     if (fallbackSpec && fallbackSpec.type !== "none") {
@@ -819,7 +966,7 @@ function normalizeVisualizationSpec(value, fallback = {}) {
 
   // If AI returns number_line but problem text is a linear equation, override with equation_balance
   if (type === "number_line") {
-    var eqOverride = createEquationBalanceFallback(fallback.questionText || "");
+    var eqOverride = createEquationAsFunctionGraphFallback(fallback.questionText || "") || createEquationBalanceFallback(fallback.questionText || "");
     if (eqOverride) {
       return eqOverride;
     }
@@ -827,7 +974,7 @@ function normalizeVisualizationSpec(value, fallback = {}) {
 
   // If AI returns number_line but problem is a linear equation, override
   if (type === "number_line") {
-    var eqOverride = createEquationBalanceFallback(fallback.questionText || "");
+    var eqOverride = createEquationAsFunctionGraphFallback(fallback.questionText || "") || createEquationBalanceFallback(fallback.questionText || "");
     if (eqOverride) {
       return eqOverride;
     }
