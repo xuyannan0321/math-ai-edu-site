@@ -1015,7 +1015,7 @@ function createReadingCard(className, titleText, bodyText, options) {
 
   if (bodyText) {
     var body = document.createElement("p");
-    if (isHtml) { setSafeMathContent(body, bodyText, ""); } else { body.textContent = bodyText; }
+    setSafeMathContent(body, bodyText, "");
     card.append(body);
   }
 
@@ -1063,7 +1063,7 @@ function appendVisualizationForView(container, spec, viewId, fallbackTitle = "�
   panel.className = "solution-card-diagram";
   const view = findVisualizationView(spec, viewId);
   const title = document.createElement("h3");
-  title.textContent = view?.title || fallbackTitle;
+  setSafeMathContent(title, view?.title || fallbackTitle);
   panel.append(title);
 
   const board = document.createElement("div");
@@ -1134,7 +1134,7 @@ function renderEquationBlocks(container, blocks) {
     if (block.title) {
       var blockTitle = document.createElement("p");
       blockTitle.className = "solution-equation-block-title";
-      blockTitle.textContent = block.title;
+      setSafeMathContent(blockTitle, block.title);
       wrapper.append(blockTitle);
     }
     (block.lines || []).forEach(function(line) {
@@ -1363,7 +1363,7 @@ function renderStructuredResult(result) {
     steps.forEach(function(step, index) {
       var card = createReadingCard("is-question-step", "分步解析");
       var stTitle = document.createElement("h3");
-      stTitle.textContent = step.title || ("步骤 " + (index + 1));
+      setSafeMathContent(stTitle, step.title || ("步骤 " + (index + 1)));
       card.append(stTitle);
       appendStepContent(card, step);
 
@@ -3951,6 +3951,82 @@ function escapeHtml(text) {
 }
 
 // Helper: read balanced { ... } text, returns { content, endPos } or null
+// --- Unified Math Text Rendering Pipeline ---
+
+// Normalize display LaTeX: fix double-escaped commands, remove \\left/\\right
+function normalizeDisplayLatex(text) {
+  if (!text || typeof text !== "string") return "";
+  var s = text;
+  // Fix double-escaped LaTeX delimiters (common AI output error)
+  // Replace \\\\( with \\( and \\\\) with \\)
+  while (s.indexOf("\\\\\\(") !== -1) { s = s.split("\\\\\\(").join("\\("); }
+  while (s.indexOf("\\\\\\)") !== -1) { s = s.split("\\\\\\)").join("\\)"); }
+  while (s.indexOf("\\\\\\[") !== -1) { s = s.split("\\\\\\[").join("\\["); }
+  while (s.indexOf("\\\\\\]") !== -1) { s = s.split("\\\\\\]").join("\\]"); }
+  // Fix double-escaped LaTeX commands
+  while (s.indexOf("\\\\frac") !== -1) { s = s.split("\\\\frac").join("\\frac"); }
+  while (s.indexOf("\\\\sqrt") !== -1) { s = s.split("\\\\sqrt").join("\\sqrt"); }
+  while (s.indexOf("\\\\cdot") !== -1) { s = s.split("\\\\cdot").join("\\cdot"); }
+  while (s.indexOf("\\\\times") !== -1) { s = s.split("\\\\times").join("\\times"); }
+  while (s.indexOf("\\\\triangle") !== -1) { s = s.split("\\\\triangle").join("\\triangle"); }
+  while (s.indexOf("\\\\angle") !== -1) { s = s.split("\\\\angle").join("\\angle"); }
+  // Remove or replace \\left / \\right
+  s = s.split("\\left(").join("(");
+  s = s.split("\\left[").join("[");
+  s = s.split("\\left{").join("{");
+  s = s.split("\\right)").join(")");
+  s = s.split("\\right]").join("]");
+  s = s.split("\\right}").join("}");
+  while (s.indexOf("\\left") !== -1) { s = s.split("\\left").join(""); }
+  while (s.indexOf("\\right") !== -1) { s = s.split("\\right").join(""); }
+  return s;
+}
+
+// Remove unsupported LaTeX controls that cause MathJax errors
+function removeUnsupportedLatexControls(text) {
+  if (!text || typeof text !== "string") return "";
+  var s = text;
+  while (s.indexOf("\\left.") !== -1) { s = s.split("\\left.").join(""); }
+  while (s.indexOf("\\right.") !== -1) { s = s.split("\\right.").join(""); }
+  while (s.indexOf("\\left") !== -1) { s = s.split("\\left").join(""); }
+  while (s.indexOf("\\right") !== -1) { s = s.split("\\right").join(""); }
+  s = s.split("\\bigl").join("").split("\\bigr").join("");
+  s = s.split("\\Bigl").join("").split("\\Bigr").join("");
+  s = s.split("\\biggl").join("").split("\\biggr").join("");
+  return s;
+}
+
+// Normalize LaTeX backslashes in already-delimited formulas
+function normalizeLatexBackslashes(text) {
+  if (!text || typeof text !== "string") return "";
+  var s = text;
+  while (s.indexOf("\\\\frac") !== -1) { s = s.split("\\\\frac").join("\\frac"); }
+  while (s.indexOf("\\\\sqrt") !== -1) { s = s.split("\\\\sqrt").join("\\sqrt"); }
+  while (s.indexOf("\\\\cdot") !== -1) { s = s.split("\\\\cdot").join("\\cdot"); }
+  while (s.indexOf("\\\\times") !== -1) { s = s.split("\\\\times").join("\\times"); }
+  return s;
+}
+
+// Strip broken LaTeX delimiters (unmatched open/close)
+function stripBrokenLatexDelimiters(text) {
+  if (!text || typeof text !== "string") return text;
+  var s = text;
+  // Count using split
+  var leftInline = (s.split("\\(").length - 1);
+  var rightInline = (s.split("\\)").length - 1);
+  var leftDisplay = (s.split("\\[").length - 1);
+  var rightDisplay = (s.split("\\]").length - 1);
+  if (leftInline !== rightInline) {
+    s = s.split("\\(").join("").split("\\)").join("");
+  }
+  if (leftDisplay !== rightDisplay) {
+    s = s.split("\\[").join("").split("\\]").join("");
+  }
+  return s;
+}
+
+// --- End Unified Math Text Rendering Pipeline ---
+
 function readBalancedBrace(text, openIndex) {
   if (openIndex >= text.length || text[openIndex] !== "{") return null;
   var depth = 0;
@@ -4048,6 +4124,41 @@ function wrapLatexFragments(text) {
   return result;
 }
 
+// Queue MathJax typesetting for an element
+var _mathJaxPending = null;
+function queueMathTypeset(element) {
+  if (!element) return;
+  if (typeof MathJax !== "undefined" && MathJax.typesetPromise) {
+    if (_mathJaxPending) clearTimeout(_mathJaxPending);
+    _mathJaxPending = setTimeout(function() {
+      MathJax.typesetPromise([element]).catch(function(err) {
+        if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
+          console.warn("[MathJax] typesetPromise error:", err && err.message ? err.message : err);
+        }
+      });
+    }, 50);
+  }
+}
+
+// Unified math text rendering for any element
+function renderMathText(element, rawText) {
+  if (!element || rawText === undefined || rawText === null) return;
+  var cleaned = normalizeDisplayLatex(rawText);
+  cleaned = removeUnsupportedLatexControls(cleaned);
+  cleaned = stripBrokenLatexDelimiters(cleaned);
+  var html = safeMathHtml(cleaned);
+  element.innerHTML = html;
+  queueMathTypeset(element);
+
+  // Debug check
+  if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
+    var tc = element.textContent || "";
+    if (tc.indexOf("\\\\(") !== -1 || tc.indexOf("\\\\)") !== -1 || tc.indexOf("\\\\[") !== -1 || tc.indexOf("\\\\]") !== -1 || tc.indexOf("\\\\frac") !== -1 || tc.indexOf("\\\\sqrt") !== -1 || tc.indexOf("\\\\left") !== -1 || tc.indexOf("\\\\right") !== -1) {
+      console.warn("[MathJaxDisplay] raw latex remains in:", tc.slice(0, 120));
+    }
+  }
+}
+
 function autoWrapLatex(text) {
   if (!text || typeof text !== "string") return "";
   // If text already has MathJax delimiters, return as-is
@@ -4070,45 +4181,67 @@ function safeMathHtml(rawText) {
 }
 
 
+
+// Fix broken LaTeX braced commands like \\frac{..}{..} or \\sqrt{..}
+// cmd = command name, braceCount = number of brace groups
+// Uses balanced-brace scanning; removes only broken commands
+function fixLatexBracedCommands(text, cmd, braceCount) {
+  if (!text || typeof text !== "string") return text;
+  var s = text;
+  var pos = 0;
+  var prefixLen = cmd.length;
+  while ((pos = s.indexOf(cmd, pos)) !== -1) {
+    var nextIdx = pos + prefixLen;
+    if (nextIdx >= s.length || s[nextIdx] !== "{") { pos++; continue; }
+    var valid = true;
+    var readIdx = nextIdx;
+    for (var g = 0; g < braceCount; g++) {
+      if (readIdx >= s.length || s[readIdx] !== "{") { valid = false; break; }
+      var br = readBalancedBrace(s, readIdx);
+      if (!br) { valid = false; break; }
+      readIdx = br.end + 1;
+    }
+    if (!valid) {
+      s = s.slice(0, pos) + s.slice(nextIdx);
+      continue;
+    }
+    pos = readIdx;
+  }
+  return s;
+}
+
 function sanitizeLatexText(text) {
   if (!text || typeof text !== "string") return text;
   var s = text;
-  // Count \left and \right
-  var leftCount = (s.match(/\\left/g) || []).length;
-  var rightCount = (s.match(/\\right/g) || []).length;
-  if (leftCount !== rightCount) {
-    // Remove unmatched \left and \right
-    s = s.replace(/\\left\s*[\[(\{]/g, "(");
-    s = s.replace(/\\right\s*[\])\}]]/g, ")");
-    // Remove any remaining bare \left \right
-    s = s.replace(/\\left\s*/g, "");
-    s = s.replace(/\\right\s*/g, "");
-  }
-  // Check brace balance for \frac and \sqrt
-  var braceDepth = 0;
-  for (var i = 0; i < s.length; i++) {
-    if (s[i] === "{") braceDepth++;
-    else if (s[i] === "}") braceDepth--;
-    if (braceDepth < 0) {
-      // Unbalanced - return plain text
-      return s.replace(/\\frac\{/g, "").replace(/\\sqrt\{/g, "√(").replace(/\\triangle/g, "△").replace(/\\angle/g, "∠").replace(/[{}]/g, "");
-    }
-  }
-  if (braceDepth !== 0) {
-    return s.replace(/\\frac\{/g, "").replace(/\\sqrt\{/g, "√(").replace(/\\triangle/g, "△").replace(/\\angle/g, "∠").replace(/[{}]/g, "");
-  }
+  // Remove orphan \\left / \\right (paired ones already handled by normalizeDisplayLatex)
+  while (s.indexOf("\\left") !== -1) { s = s.split("\\left").join(""); }
+  while (s.indexOf("\\right") !== -1) { s = s.split("\\right").join(""); }
+  // Fix each \\frac{...}{...} and \\sqrt{...} individually — only strip broken ones
+  s = fixLatexBracedCommands(s, "\\frac", 2);
+  s = fixLatexBracedCommands(s, "\\sqrt", 1);
   return s;
 }
 
 function setSafeMathContent(element, rawText, tagName) {
   if (!element) return;
-  // Sanitize LaTeX first (fix \\left/\\right, brace balance)
-  var sanitized = sanitizeLatexText(rawText);
+  // Full pipeline: normalize -> remove unsupported -> sanitize -> wrap -> HTML escape
+  var cleaned = normalizeDisplayLatex(rawText);
+  cleaned = removeUnsupportedLatexControls(cleaned);
+  cleaned = stripBrokenLatexDelimiters(cleaned);
+  var sanitized = sanitizeLatexText(cleaned);
   var html = safeMathHtml(sanitized);
   if (tagName) {
     element.innerHTML = "<" + tagName + ">" + html + "</" + tagName + ">";
   } else {
     element.innerHTML = html;
+  }
+  queueMathTypeset(element);
+  // Debug check
+  if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
+    var tc = element.textContent || "";
+    if (tc.indexOf("\\\\(") !== -1 || tc.indexOf("\\\\)") !== -1 || tc.indexOf("\\\\[") !== -1 || tc.indexOf("\\\\]") !== -1 || tc.indexOf("\\\\frac") !== -1 || tc.indexOf("\\\\sqrt") !== -1 || tc.indexOf("\\\\left") !== -1 || tc.indexOf("\\\\right") !== -1) {
+      console.warn("[MathJaxDisplay] raw latex remains in:", tc.slice(0, 120));
+    }
   }
 }
 

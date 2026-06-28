@@ -106,6 +106,8 @@ function buildBaseSystemPrompt() {
     "  - 禁止在 \\frac 的分子/分母外部再额外包裹括号，例如不要写 \\frac{(\\sqrt{3})}{3}，应写 \\frac{\\sqrt{3}}{3}。",
     "  - 结论文本示例：顶点为 \\(V(1,-\\frac{4\\sqrt{3}}{3})\\)，对称轴为 \\(x=1\\)。",
     "  - 不要输出类似于 \\(\\frac{4\\sqrt{3}}{3}\\) 被拆成两段 (\\(\\frac{4\\) 和 \\(\\sqrt{3}}{3}\\)) 的坏公式。",
+    "  - 普通几何名称不要过度 LaTeX 化：点 P、直线 CE、三角形 PCE 写为普通文字，不要写成 \\(P\\)、\\(CE\\)、\\(\\triangle PCE\\)。仅数学公式数值需要 LaTeX。",
+    "  - 仅在确实需要数学排版时使用 LaTeX，例如 \\(\\sqrt{3}\\)、\\(\\frac{4\\sqrt{3}}{3}\\)、\\(x=1\\)。线段名、点名称、三角形名称使用普通文字即可。",
     "AI 只允许输出结构化 JSON；严禁输出 <svg>、<canvas>、<script>、完整 HTML 或任何可执行绘图代码。",
     "visualizationSpec / diagramSpec 只能描述点、线、圆、角、视图和高亮等结构化数据。",
     "函数题、方程题、平面直角坐标题优先使用 function_graph，必须包含 functions、points、auxiliaryLines、views 字段。",

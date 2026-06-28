@@ -2,8 +2,8 @@
 
 (function initializeMathVisualization(global) {
   const SVG_NS = "http://www.w3.org/2000/svg";
-  const WIDTH = 560;
-  const HEIGHT = 340;
+  const WIDTH = 480;
+  const HEIGHT = 260;
   const SAFE_TYPES = new Set([
     "equation_balance",
     "function_graph",

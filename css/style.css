@@ -894,6 +894,42 @@ select.form-control {
   border-color: #fed7aa;
 }
 
+.visualization-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.math-visualization {
+  max-width: 980px;
+  margin: 12px auto 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.math-visualization svg {
+  display: block;
+  width: 100%;
+  max-height: 460px;
+}
+
+@media (max-width: 640px) {
+  .visualization-card {
+    padding: 12px;
+  }
+  .math-visualization svg {
+    max-height: 320px;
+  }
+  .mv-label {
+    font-size: 12px;
+  }
+  .mv-axis-number {
+    font-size: 10px;
+  }
+}
+
 .visualization-empty {
   margin: 0;
   color: var(--gray-500);
@@ -913,9 +949,16 @@ select.form-control {
 
 .visualization-board {
   overflow: hidden;
-  background: linear-gradient(180deg, var(--gray-50), var(--white));
+  background: linear-gradient(180deg, var(--gray-50) 0%, var(--white) 100%);
   border: 1px solid var(--gray-200);
   border-radius: 14px;
+}
+
+.visualization-board .visualization-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--gray-500);
+  font-size: 13px;
 }
 
 .geometry-view-list {
@@ -945,8 +988,8 @@ select.form-control {
 
 .mv-axis,
 .mv-line {
-  stroke: var(--gray-400);
-  stroke-width: 1.5;
+  stroke: #94a3b8;
+  stroke-width: 1.6;
 }
 
 .mv-axis-arrow {
@@ -973,8 +1016,8 @@ select.form-control {
 
 .mv-auxiliary-line {
   fill: none;
-  stroke: var(--gray-400);
-  stroke-width: 1.5;
+  stroke: #94a3b8;
+  stroke-width: 1.8;
   stroke-dasharray: 6 5;
 }
 
@@ -987,15 +1030,15 @@ select.form-control {
 
 .mv-auxiliary-line {
   fill: none;
-  stroke: var(--gray-400);
-  stroke-width: 1.5;
+  stroke: #94a3b8;
+  stroke-width: 1.8;
   stroke-dasharray: 6 5;
 }
 
 .mv-grid-line {
-  stroke: var(--gray-200);
-  stroke-width: 0.8;
-  stroke-dasharray: 3 4;
+  stroke: rgba(148, 163, 184, 0.22);
+  stroke-width: 1;
+  stroke-dasharray: 4 6;
 }
 
 .mv-grid-layer {
@@ -1003,8 +1046,12 @@ select.form-control {
 }
 
 .mv-axis-label,
+.mv-label-bg {
+  pointer-events: none;
+}
+
 .mv-label {
-  fill: var(--gray-600);
+  fill: #334155;
   font-size: 13px;
   font-weight: 700;
 }
@@ -1012,8 +1059,10 @@ select.form-control {
 .mv-segment,
 .mv-function {
   fill: none;
-  stroke: var(--blue-600);
-  stroke-width: 2.5;
+  stroke: #2563eb;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .mv-arc,
@@ -1043,8 +1092,8 @@ select.form-control {
 }
 
 .mv-point {
-  fill: var(--blue-600);
-  stroke: var(--white);
+  fill: #2563eb;
+  stroke: #ffffff;
   stroke-width: 2;
 }
 
