@@ -945,7 +945,39 @@
       .replace(/²/g, "^2");
 
     // Use balanced-brace helper to handle nested LaTeX like \\frac{\\sqrt{3}}{3}
+    // Pre-process: convert √ (U+221A) to \sqrt{...} form
+    function preprocessSqrt(text) {
+      var result = "";
+      var i = 0;
+      while (i < text.length) {
+        if (text[i] === "√" || text[i] === "u{221A}") {
+          i++;
+          // Read the radicand: single digit or parenthesized expression
+          if (i < text.length && text[i] === "(") {
+            var depth = 0;
+            var start = i;
+            while (i < text.length) {
+              if (text[i] === "(") depth++;
+              else if (text[i] === ")") { depth--; if (depth === 0) { i++; break; } }
+              i++;
+            }
+            result += "\sqrt{" + text.slice(start + 1, i - 1) + "}";
+          } else if (i < text.length && /\d/.test(text[i])) {
+            result += "\sqrt{" + text[i] + "}";
+            i++;
+          } else {
+            result += "\sqrt{}";
+          }
+        } else {
+          result += text[i];
+          i++;
+        }
+      }
+      return result;
+    }
+
     function safeReplaceFrac(text) {
+      text = preprocessSqrt(text);
       var result = "";
       var i = 0;
       while (i < text.length) {
@@ -1053,6 +1085,28 @@
     return function(x) { return a * x + b; };
   }
 
+  // Resolve a point reference: {x,y} object stays, string looks up in points dict
+  function resolveGraphPoint(value, points) {
+    if (!value) return null;
+    if (typeof value === "object" && value !== null) {
+      var x = Number(value.x);
+      var y = Number(value.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) return { x: x, y: y };
+      return null;
+    }
+    if (typeof value === "string") {
+      var trimmed = value.trim();
+      var p = points && points[trimmed];
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return { x: p.x, y: p.y };
+      // Try removing quotes
+      var unquoted = trimmed.replace(/^['""]+|['""]+$/g, "");
+      if (unquoted !== trimmed) {
+        p = points && points[unquoted];
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return { x: p.x, y: p.y };
+      }
+    }
+    return null;
+  }
   function renderFunctionGraph(container, spec, options) {
     if (options === undefined) options = {};
     // Collect functions from spec.functions and spec.objects
@@ -1153,7 +1207,7 @@
         }
       }
       if (samples.length > 1) {
-        svg.append(createSvgElement("polyline", { points: samples.join(" "), class: "mv-function" }));
+        svg.append(createSvgElement("path", { d: "M" + samples.join("L"), class: "mv-function" }));
       }
     });
 
@@ -1163,19 +1217,35 @@
       if (p.label) drawLabel(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, p.label, mapper);
     });
 
-    // Draw auxiliary lines
+    // Draw auxiliary lines (with point reference resolution)
+    var auxDebugSkipped = 0;
     (Array.isArray(spec.auxiliaryLines) ? spec.auxiliaryLines : []).forEach(function(l) {
-      if (l && l.from && l.to && l.kind) {
-        drawLine(svg, l.from, l.to, mapper, { className: "mv-auxiliary-line", dashed: l.style === "dashed" });
-      }
+      if (!l || !l.kind) return;
+      var from = resolveGraphPoint(l.from, spec.points || {});
+      var to = resolveGraphPoint(l.to, spec.points || {});
+      if (!from || !to) { auxDebugSkipped++; return; }
+      var dashed = l.style === "dashed" || l.kind === "auxiliaryLine";
+      var opts = { className: dashed ? "mv-auxiliary-line" : "mv-segment", dashed: dashed };
+      if (l.kind === "segment") { drawSegment(svg, from, to, mapper, opts); }
+      else { drawLine(svg, from, to, mapper, bounds, opts); }
     });
 
-    // Also from spec.objects
+    // Also from spec.objects (with point reference resolution)
     (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
-      if (o && (o.kind === "auxiliaryLine" || o.kind === "line" || o.kind === "segment") && o.from && o.to) {
-        drawLine(svg, o.from, o.to, mapper, { className: o.style === "dashed" ? "mv-auxiliary-line" : "mv-segment", dashed: o.style === "dashed" });
-      }
+      if (!o || !(o.kind === "auxiliaryLine" || o.kind === "line" || o.kind === "segment")) return;
+      var from = resolveGraphPoint(o.from, spec.points || {});
+      var to = resolveGraphPoint(o.to, spec.points || {});
+      if (!from || !to) { auxDebugSkipped++; return; }
+      var dashed = o.style === "dashed" || o.kind === "auxiliaryLine";
+      var opts = { className: dashed ? "mv-auxiliary-line" : "mv-segment", dashed: dashed };
+      if (o.kind === "segment") { drawSegment(svg, from, to, mapper, opts); }
+      else { drawLine(svg, from, to, mapper, bounds, opts); }
     });
+    if (auxDebugSkipped > 0) {
+      if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
+        console.warn("[FunctionGraph] skipped " + auxDebugSkipped + " invalid auxiliary line(s)");
+      }
+    }
 
     container.append(svg);
   }

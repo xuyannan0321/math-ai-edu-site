@@ -16,19 +16,24 @@ const VISION_PROVIDERS = [
 ];
 
 function orderVisionProviders(preferredProvider) {
+  // Mathpix is always attempted first if configured; it falls through gracefully
+  const ordered = [...VISION_PROVIDERS];
+  // If user explicitly prefers a non-Mathpix provider, put Mathpix first anyway
+  // but also ensure the user's preferred provider comes second
   const preferred = String(preferredProvider || "")
     .trim()
     .toLowerCase();
-  const ordered = [...VISION_PROVIDERS];
-  const preferredIndex = ordered.findIndex(
-    (provider) => provider.name === preferred,
-  );
-
-  if (preferredIndex > 0) {
-    const [provider] = ordered.splice(preferredIndex, 1);
-    ordered.unshift(provider);
+  if (preferred && preferred !== "mathpix") {
+    const preferredIndex = ordered.findIndex(
+      (provider) => provider.name === preferred,
+    );
+    if (preferredIndex > 0) {
+      const [provider] = ordered.splice(preferredIndex, 1);
+      // Insert after Mathpix (index 1) if Mathpix is first
+      const mathpixIdx = ordered.findIndex(p => p.name === "mathpix");
+      ordered.splice(Math.max(1, mathpixIdx + 1), 0, provider);
+    }
   }
-
   return ordered;
 }
 

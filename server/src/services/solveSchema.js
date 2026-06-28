@@ -1,4 +1,4 @@
-﻿const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
+const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
 const VISUALIZATION_TYPES = new Set([
   "equation_balance",
   "function_graph",
@@ -820,6 +820,65 @@ function parseLatexNumericExpression(text) {
       var restVal = parseLatexNumericExpression(rest);
       if (!Number.isFinite(restVal)) return NaN;
       return sign * coeff * restVal;
+    }
+  }
+
+  // Handle √ (U+221A) - square root without backslash, e.g. √3, √(3)
+  if (s[0] === "√" || s[0] === "u{221A}") {
+    var rest = s.slice(1).trim();
+    var inner = parseLatexNumericExpression(rest);
+    if (!Number.isFinite(inner) || inner < 0) return NaN;
+    return sign * Math.sqrt(inner);
+  }
+
+  // Handle parenthesized expression: (a/b) or (expr)
+  if (s[0] === "(") {
+    var parenDepth = 0;
+    var closeIdx = -1;
+    for (var pi = 0; pi < s.length; pi++) {
+      if (s[pi] === "(") parenDepth++;
+      else if (s[pi] === ")") { parenDepth--; if (parenDepth === 0) { closeIdx = pi; break; } }
+    }
+    if (closeIdx > 0 && closeIdx < s.length - 1) {
+      // Expression continues after closing paren, e.g. (√3/3)x
+      var parenContent = s.slice(1, closeIdx);
+      var afterParen = s.slice(closeIdx + 1);
+      var parenVal = parseLatexNumericExpression(parenContent);
+      if (!Number.isFinite(parenVal)) return NaN;
+      if (afterParen.trim() === "") return sign * parenVal;
+      // Has trailing content like x or x^2 - try to parse it
+      var afterVal = parseLatexNumericExpression(afterParen);
+      if (Number.isFinite(afterVal)) return sign * parenVal * afterVal;
+      return NaN;
+    }
+    if (closeIdx === s.length - 1) {
+      // Entire string is in parens: (expr) - try division inside
+      var innerExpr = s.slice(1, closeIdx);
+      // If contains / outside nested parens, treat as division
+      var hasDivision = false;
+      var divDepth = 0;
+      for (var di = 0; di < innerExpr.length; di++) {
+        if (innerExpr[di] === "(") divDepth++;
+        else if (innerExpr[di] === ")") divDepth--;
+        else if (innerExpr[di] === "/" && divDepth === 0) { hasDivision = true; break; }
+      }
+      if (hasDivision) {
+        var slashIdx = -1;
+        divDepth = 0;
+        for (var si = 0; si < innerExpr.length; si++) {
+          if (innerExpr[si] === "(") divDepth++;
+          else if (innerExpr[si] === ")") divDepth--;
+          else if (innerExpr[si] === "/" && divDepth === 0) { slashIdx = si; break; }
+        }
+        if (slashIdx > 0) {
+          var leftPart = innerExpr.slice(0, slashIdx);
+          var rightPart = innerExpr.slice(slashIdx + 1);
+          var lv = parseLatexNumericExpression(leftPart);
+          var rv = parseLatexNumericExpression(rightPart);
+          if (Number.isFinite(lv) && Number.isFinite(rv) && rv !== 0) return sign * lv / rv;
+        }
+      }
+      return sign * parseLatexNumericExpression(innerExpr);
     }
   }
 
