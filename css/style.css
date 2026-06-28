@@ -569,6 +569,40 @@ select.form-control {
   resize: vertical;
 }
 
+.recognized-text-note,
+.visualization-stage-note {
+  margin: 8px 0 10px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.recognized-text-note {
+  padding: 8px 10px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+}
+
+.visualization-stage-note {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+}
+
+.visualization-stage-note.is-soft {
+  color: #64748b;
+  background: #ffffff;
+}
+
+.ocr-draft-raw-text {
+  font-family: Consolas, "SFMono-Regular", "Liberation Mono", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .model-picker {
   margin-top: 18px;
   overflow: hidden;

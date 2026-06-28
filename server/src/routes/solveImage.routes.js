@@ -37,6 +37,53 @@ function validateImageInput(body) {
   };
 }
 
+function detectMultipleQuestions(text) {
+  const normalized = asString(text)
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ");
+
+  if (!normalized) {
+    return false;
+  }
+
+  const markers = [
+    /(?:^|\n)\s*(?:\d{1,2}|[一二三四五六七八九十]+)[\.．、)]\s*\S/g,
+    /(?:^|\n)\s*\(\s*\d{1,2}\s*\)\s*\S/g,
+    /(?:^|\n)\s*第\s*[一二三四五六七八九十\d]+\s*[题問问]\s*/g,
+    /(?:^|\n)\s*[（(]\s*[一二三四五六七八九十\d]+\s*[）)]\s*\S/g,
+  ];
+  const markerCount = markers.reduce((count, pattern) => {
+    const matches = normalized.match(pattern);
+    return count + (matches ? matches.length : 0);
+  }, 0);
+  const mathCommandCount = (normalized.match(/\\(?:frac|sqrt|angle|triangle|overline|begin)\b/g) || []).length;
+  const lineCount = normalized.split("\n").filter((line) => line.trim().length >= 8).length;
+
+  return markerCount >= 3 || (markerCount >= 2 && lineCount >= 5) || (lineCount >= 8 && mathCommandCount >= 5);
+}
+
+function buildPartialRecognitionResponse({
+  recognizedText,
+  visionResult,
+  imageQuality,
+  warnings = [],
+  reviewReason,
+  solveError = "",
+}) {
+  return {
+    recognizedText,
+    visionProvider: visionResult.provider,
+    visionModelName: visionResult.modelName,
+    imageQuality: imageQuality || visionResult.result.imageQuality || "medium",
+    warnings,
+    partial: true,
+    needsUserReview: true,
+    canRetryWithEditedText: true,
+    reviewReason,
+    solveError,
+  };
+}
+
 router.post("/solve-image", authRequired, uploadProblemImage, async (req, res, next) => {
   try {
     const validated = validateImageInput(req.body || {});
@@ -54,18 +101,28 @@ router.post("/solve-image", authRequired, uploadProblemImage, async (req, res, n
     });
     const recognizedText = visionResult.result.recognizedText.trim();
 
-    // Partial recognition: return draft for user review instead of blocking
+    // Partial recognition: return draft for user review instead of blocking.
     if (recognizedText.length < 4) {
-      return sendSuccess(res, {
+      return sendSuccess(res, buildPartialRecognitionResponse({
         recognizedText,
-        visionProvider: visionResult.provider,
-        visionModelName: visionResult.modelName,
-        imageQuality: visionResult.result.imageQuality || "low",
+        visionResult,
+        imageQuality: "low",
         warnings: visionResult.result.warnings || ["识别文本可能不完整，请核对后继续。"],
-        partial: true,
-        needsUserReview: true,
-        canRetryWithEditedText: true,
-      });
+        reviewReason: "too_short",
+      }));
+    }
+
+    if (detectMultipleQuestions(recognizedText)) {
+      return sendSuccess(res, buildPartialRecognitionResponse({
+        recognizedText,
+        visionResult,
+        imageQuality: visionResult.result.imageQuality || "medium",
+        warnings: [
+          ...(visionResult.result.warnings || []),
+          "识别结果疑似包含整页多题。请裁剪单题，或在草稿中只保留一个小题后重新解析。",
+        ],
+        reviewReason: "multiple_questions",
+      }));
     }
 
     let solveResult;
@@ -84,17 +141,13 @@ router.post("/solve-image", authRequired, uploadProblemImage, async (req, res, n
         },
       });
     } catch (error) {
-      return sendSuccess(res, {
+      return sendSuccess(res, buildPartialRecognitionResponse({
         recognizedText,
-        visionProvider: visionResult.provider,
-        visionModelName: visionResult.modelName,
-        imageQuality: visionResult.result.imageQuality || "medium",
+        visionResult,
         warnings: visionResult.result.warnings || [],
-        partial: true,
-        needsUserReview: true,
-        canRetryWithEditedText: true,
+        reviewReason: "solve_failed",
         solveError: error.expose ? error.message : "生成解析失败，请修改识别文本后重新解析。",
-      });
+      }));
     }
 
     const htmlResult = buildHtmlResult(solveResult.result);
