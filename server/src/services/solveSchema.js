@@ -611,6 +611,28 @@ function normalizeEquationBalanceSpec(source, confidence) {
   if (!leftTerms.length && !rightTerms.length) {
     return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
   }
+
+  var normalizedSteps = rawSteps.map(function(s, idx) {
+    return {
+      label: asString(s.label, "步骤 " + (idx + 1)),
+      leftTerms: Array.isArray(s.leftTerms) ? s.leftTerms.map(asString).filter(Boolean) : [],
+      rightTerms: Array.isArray(s.rightTerms) ? s.rightTerms.map(asString).filter(Boolean) : [],
+    };
+  });
+
+  return {
+    type: "equation_balance",
+    title: asString(source.title, "方程平衡示意"),
+    description: asString(source.description, "根据等式两边同加同减生成的平衡示意。"),
+    confidence,
+    equation,
+    leftTerms,
+    rightTerms,
+    steps: normalizedSteps,
+    points: {},
+    objects: [],
+    views: [],
+  };
 }
 
 

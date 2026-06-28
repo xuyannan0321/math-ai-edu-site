@@ -961,12 +961,12 @@
               else if (text[i] === ")") { depth--; if (depth === 0) { i++; break; } }
               i++;
             }
-            result += "\sqrt{" + text.slice(start + 1, i - 1) + "}";
+            result += "\\sqrt{" + text.slice(start + 1, i - 1) + "}";
           } else if (i < text.length && /\d/.test(text[i])) {
-            result += "\sqrt{" + text[i] + "}";
+            result += "\\sqrt{" + text[i] + "}";
             i++;
           } else {
-            result += "\sqrt{}";
+            result += "\\sqrt{}";
           }
         } else {
           result += text[i];
@@ -1041,21 +1041,22 @@
     var a = 0, b = 0, c = 0;
     // Split by + or - (but not at start)
     var terms = s.match(/[+\-]?[^+\-]+/g) || [];
-    terms.forEach(function(term) {
+    for (var ti = 0; ti < terms.length; ti++) {
+      var term = terms[ti];
       if (/x\^2/.test(term)) {
         var coeff = term.replace(/x\^2.*$/, "").replace(/\*/g, "");
-        if (coeff === "" || coeff === "+") a += 1;
-        else if (coeff === "-") a -= 1;
-        else { var n = Number(coeff); if (Number.isFinite(n)) a += n; else return null; }
+        if (coeff === "" || coeff === "+") { a += 1; }
+        else if (coeff === "-") { a -= 1; }
+        else { var n1 = Number(coeff); if (Number.isFinite(n1)) { a += n1; } else { return null; } }
       } else if (/x/.test(term)) {
-        var coeff = term.replace(/x.*$/, "").replace(/\*/g, "");
-        if (coeff === "" || coeff === "+") b += 1;
-        else if (coeff === "-") b -= 1;
-        else { var n = Number(coeff); if (Number.isFinite(n)) b += n; else return null; }
+        var coeff2 = term.replace(/x.*$/, "").replace(/\*/g, "");
+        if (coeff2 === "" || coeff2 === "+") { b += 1; }
+        else if (coeff2 === "-") { b -= 1; }
+        else { var n2 = Number(coeff2); if (Number.isFinite(n2)) { b += n2; } else { return null; } }
       } else {
-        var n = Number(term); if (Number.isFinite(n)) c += n; else return null;
+        var n3 = Number(term); if (Number.isFinite(n3)) { c += n3; } else { return null; }
       }
-    });
+    }
 
     return function(x) { return a * x * x + b * x + c; };
   }
@@ -1070,17 +1071,18 @@
     if (!s) return null;
 
     var b = 0, a = 0;
-    var terms = s.match(/[+\-]?[^+\-]+/g) || [];
-    terms.forEach(function(term) {
+    var terms2 = s.match(/[+\-]?[^+\-]+/g) || [];
+    for (var ti2 = 0; ti2 < terms2.length; ti2++) {
+      var term = terms2[ti2];
       if (/x/.test(term)) {
-        var coeff = term.replace(/x.*$/, "").replace(/\*/g, "");
-        if (coeff === "" || coeff === "+") a += 1;
-        else if (coeff === "-") a -= 1;
-        else { var n = Number(coeff); if (Number.isFinite(n)) a += n; else return null; }
+        var coeff3 = term.replace(/x.*$/, "").replace(/\*/g, "");
+        if (coeff3 === "" || coeff3 === "+") { a += 1; }
+        else if (coeff3 === "-") { a -= 1; }
+        else { var n4 = Number(coeff3); if (Number.isFinite(n4)) { a += n4; } else { return null; } }
       } else {
-        var n = Number(term); if (Number.isFinite(n)) b += n; else return null;
+        var n5 = Number(term); if (Number.isFinite(n5)) { b += n5; } else { return null; }
       }
-    });
+    }
 
     return function(x) { return a * x + b; };
   }
@@ -1132,8 +1134,15 @@
       if (fn) evaluators.push({ fn: fn, range: fd.range, label: fd.label });
     });
 
+    var dbg = (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1");
+    if (dbg) {
+      console.log("[FunctionGraph] spec.type:", spec.type, "functions.len:", funcDefs.length, "evaluators.len:", evaluators.length);
+      evaluators.forEach(function(ev, ei) { console.log("[FunctionGraph] fn[" + ei + "] label:", ev.label); });
+      console.log("[FunctionGraph] points:", Object.keys(spec.points || {}).length, "auxLines:", (spec.auxiliaryLines || []).length);
+    }
     if (!evaluators.length) {
-      renderEmpty(container, "暂无可靠函数图示，可查看文字解析。");
+      if (dbg) console.warn("[FunctionGraph] No evaluators - cannot render");
+      renderEmpty(container, "函数表达式暂不可解析，请查看文字解析。");
       return;
     }
 
@@ -1207,7 +1216,10 @@
         }
       }
       if (samples.length > 1) {
+        if (dbg) console.log("[FunctionGraph] Drawing curve with " + samples.length + " samples");
         svg.append(createSvgElement("path", { d: "M" + samples.join("L"), class: "mv-function" }));
+      } else {
+        if (dbg) console.warn("[FunctionGraph] Skipped curve - only " + samples.length + " samples");
       }
     });
 

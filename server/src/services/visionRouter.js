@@ -5,14 +5,14 @@ const {
 } = require("./imagePrompt");
 const mathpixProvider = require("./providers/mathpixProvider");
 const qwenVlProvider = require("./providers/qwenVlProvider");
-const geminiVisionProvider = require("./providers/geminiVisionProvider");
 const gptVisionProvider = require("./providers/gptVisionProvider");
+const geminiVisionProvider = require("./providers/geminiVisionProvider");
 
 const VISION_PROVIDERS = [
   mathpixProvider,
   qwenVlProvider,
-  geminiVisionProvider,
   gptVisionProvider,
+  geminiVisionProvider,
 ];
 
 function orderVisionProviders(preferredProvider) {
@@ -30,7 +30,7 @@ function orderVisionProviders(preferredProvider) {
     if (preferredIndex > 0) {
       const [provider] = ordered.splice(preferredIndex, 1);
       // Insert after Mathpix (index 1) if Mathpix is first
-      const mathpixIdx = ordered.findIndex(p => p.name === "mathpix");
+      const mathpixIdx = ordered.findIndex((p) => p.name === "mathpix");
       ordered.splice(Math.max(1, mathpixIdx + 1), 0, provider);
     }
   }

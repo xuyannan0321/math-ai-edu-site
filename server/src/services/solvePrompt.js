@@ -28,7 +28,6 @@ function getVisualizationSchemaTemplate() {
   return [
     '  "visualizationSpec": {',
     '    "type": "geometry | equation_balance | function_graph | dynamic_point | number_line | none",',
-    "// function_graph 含 functions、points、auxiliaryLines；方程题/f(x)=题优先用 function_graph",
     '    "title": "图示标题",',
     '    "description": "图示说明；无法可靠绘制时说明原因",',
     '    "confidence": "low | medium | high",',
@@ -37,23 +36,29 @@ function getVisualizationSchemaTemplate() {
     '      "baselineDirection": "left-to-right",',
     '      "above": ["A"],',
     '      "below": []',
-    "    },",
+    '    },',
     '    "points": {',
     '      "A": { "x": 0, "y": 3, "label": "A" },',
     '      "B": { "x": -2, "y": 0, "label": "B" }',
-    "    },",
+    '    },',
     '    "objects": [',
     '      { "kind": "segment", "id": "AB", "from": "A", "to": "B", "role": "original" },',
     '      { "kind": "segment", "id": "AH", "from": "A", "to": "H", "role": "auxiliary", "style": "dashed", "usedIn": ["q1"] }',
-    "    ],",
+    '    ],',
+    '    "functions": [',
+    '      { "id": "f1", "label": "y=x^2-2x-3", "expression": "y=x^2-2x-3", "range": [-5, 5], "role": "original" }',
+    '    ],',
+    '    "auxiliaryLines": [',
+    '      { "id": "symmetry-axis", "kind": "line", "label": "对称轴", "from": { "x": 1, "y": -5 }, "to": { "x": 1, "y": 5 }, "style": "dashed" }',
+    '    ],',
     '    "views": [',
     '      { "id": "original", "title": "原题图", "showObjects": ["AB"], "highlightObjects": [] },',
     '      { "id": "q1", "title": "第1问解析图", "showObjects": ["AB", "AH"], "highlightObjects": ["AH"] }',
-    "    ],",
+    '    ],',
     '    "steps": [',
     '      { "stepTitle": "作辅助线", "highlightObjects": ["AH"], "explanation": "过点 A 作 BC 的垂线，垂足为 H。", "action": "highlight" }',
-    "    ]",
-    "  },",
+    '    ]',
+    '  },',
   ];
 }
 
@@ -96,6 +101,8 @@ function buildBaseSystemPrompt() {
     "LaTeX 规范：行内公式必须用 \( ... \) 包裹；独立公式必须用 \[ ... \] 包裹。禁止使用 \left 和 \right 控制符，统一使用普通括号。禁止输出裸露的 \frac、\sqrt、\angle、\triangle 等命令（必须包裹在公式分隔符内）。",
     "AI 只允许输出结构化 JSON；严禁输出 <svg>、<canvas>、<script>、完整 HTML 或任何可执行绘图代码。",
     "visualizationSpec / diagramSpec 只能描述点、线、圆、角、视图和高亮等结构化数据。",
+    "函数题、方程题、平面直角坐标题优先使用 function_graph，必须包含 functions、points、auxiliaryLines、views 字段。",
+    "几何题不要强行猜 coordinates；无法可靠绘制几何图时 type 用 none，前端会显示原题图兜底。",
   ].join("\n");
 }
 
@@ -186,7 +193,7 @@ function buildGeometryUserPrompt({
     "10. 不要输出 HTML、SVG、Canvas、script 或绘图代码。",
     "11. 函数题/平面直角坐标题必须输出 visualizationSpec.type = \"function_graph\"，至少包含 functions、points、auxiliaryLines、views。无法可靠解析时 type 使用 none。",
     "11. reasoningLines 每条需填写 type：because（因为/已知）、therefore（所以/推出）、normal（普通叙述）、calculation（代数计算）、conclusion（阶段性结论）。",
-    "12. equationBlocks 每块含 title（如\"方程推导\"）和 lines（纯 LaTeX 公式行，用 \\[ \\] 包裹）。",
+    "12. equationBlocks 每块含 title（如\"方程推导\"）和 lines（纯 LaTeX 公式行，用 \\\\[ \\\\] 包裹）。",
     "11. qualityCheck 不要写绝对承诺；可以写“已通过结构化校验”“已通过几何逻辑自检”“复杂压轴题建议教师复核”。",
   ].join("\n");
 }

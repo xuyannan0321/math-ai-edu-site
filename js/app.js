@@ -932,55 +932,37 @@ function createEquationBalanceFallback(text) {
 }
 
 function createFunctionGraphFallback(text) {
-  const normalized = String(text || "")
-    .replaceAll("−", "-")
-    .replaceAll("²", "^2");
-  const match = normalized.match(/(?:y|f\(x\))\s*=\s*([+\-0-9.xX^*²\s]+)/i);
-
-  if (!match || !/[xX]/.test(match[1])) {
-    return null;
-  }
-
-  const expression = match[1].replace(/\s+/g, "");
-
-  if (!/^[+\-0-9.xX^*²]+$/.test(expression)) {
-    return null;
-  }
-
+  var raw = String(text || '').replace(/\s+/g, ' ');
+  var match = raw.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+)/i);
+  if (!match || match[1].length < 2 || match[1].length > 400) return null;
   return {
-    type: "function_graph",
-    title: "函数图像基础示意",
-    description: "根据题目中可识别的函数表达式生成的安全基础图像；复杂表达式会自动跳过。",
-    objects: [
-      {
-        kind: "function",
-        id: "f",
-        expression,
-        range: [-5, 5],
-      },
-    ],
+    type: 'function_graph',
+    title: '函数图像',
+    functions: [{ id: 'f', expression: 'y=' + match[1].replace(/\s+/g, ''), range: [-8, 8], role: 'original' }],
+    points: {},
+    auxiliaryLines: [],
+    objects: [],
+    views: [],
+    confidence: 'low',
   };
 }
-
 function createVisualizationFallback(result) {
-  const combinedText = [
-    result?.problemText,
-    result?.topic,
-    result?.analysis,
-    result?.finalAnswer,
-  ].filter(Boolean).join("\n");
+  if (result.visualizationSpec && result.visualizationSpec.type === 'function_graph'
+    && Array.isArray(result.visualizationSpec.functions) && result.visualizationSpec.functions.length) {
+    return result.visualizationSpec;
+  }
 
-  return createFunctionGraphFallback(combinedText)
-    || createEquationBalanceFallback(combinedText)
-    || {
-      type: "none",
-      title: "图示讲解",
-      description: /三角形|几何|圆|角|线段|平行|垂直|相似|全等/.test(combinedText)
-        ? "暂无可靠图示，可查看文字解析。几何题需要明确的点、线、角或圆数据后再绘制。"
-        : "暂无可靠图示，可查看文字解析。",
-    };
+  var text = result.problemText || '';
+  if (/y\s*=|f\s*\(\s*x\s*\)\s*=/.test(text)) {
+    return createFunctionGraphFallback(text);
+  }
+
+  if (/三角形|几何|圆|相似|全等|角平分线|垂直|平行|中点/.test(text)) {
+    return null;
+  }
+
+  return createEquationBalanceFallback(text) || null;
 }
-
 function createReadingCard(className, titleText, bodyText, options) {
   options = options || {};
   var isHtml = options.isHtml;
@@ -1502,26 +1484,6 @@ function startGenerationStatusUpdates({
 }
 
 
-function startGenerationStatusUpdates({
-  target = elements.generateButtonText,
-  statuses = [
-    "正在整理题目...",
-    "正在调用 AI...",
-    "正在生成解析...",
-    "正在保存记录...",
-  ],
-} = {}) {
-  clearGenerationStatusTimers();
-
-  target.textContent = statuses[0] || "正在处理...";
-
-  statuses.slice(1).forEach((status, index) => {
-    const timerId = window.setTimeout(() => {
-      target.textContent = status;
-    }, (index + 1) * 1400);
-    state.generationStatusTimers.push(timerId);
-  });
-}
 
 function getQuestionTypeFromText(text) {
   if (/函数|一次函数|二次函数|抛物线|坐标系/.test(text)) {
