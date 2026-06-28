@@ -1,4 +1,4 @@
-const GEOMETRY_KEYWORDS = [
+﻿const GEOMETRY_KEYWORDS = [
   "三角形",
   "圆",
   "四点共圆",
@@ -98,7 +98,14 @@ function buildBaseSystemPrompt() {
     "默认使用初中数学方法，避免向量、微积分、矩阵、高中复杂三角恒等变换和超纲解析几何技巧。",
     "如果题目条件不足，要明确指出条件不足，不要编造题目中没有的条件。",
     "公式可使用 LaTeX 文本，但最终响应必须是纯 JSON，不要包含 Markdown、代码块或额外说明。",
-    "LaTeX 规范：行内公式必须用 \( ... \) 包裹；独立公式必须用 \[ ... \] 包裹。禁止使用 \left 和 \right 控制符，统一使用普通括号。禁止输出裸露的 \frac、\sqrt、\angle、\triangle 等命令（必须包裹在公式分隔符内）。",
+    "LaTeX 严格规范（必须遵守）：",
+    "  - 所有行内公式必须用 \\( ... \\) 完整包裹，独立公式必须用 \\[ ... \\] 完整包裹。",
+    "  - 禁止输出裸露的 \\frac、\\sqrt、\\angle、\\triangle 等命令（必须包裹在公式分隔符内）。",
+    "  - 禁止使用 \\left 和 \\right 控制符，统一使用普通括号。",
+    "  - 禁止将一个公式拆成多个碎片（如把 \\frac{\\sqrt{3}}{3} 拆成 \\frac{ (\\sqrt{3}) }{3}）。一个 \\frac 结构内部必须完整包含分子和分母。",
+    "  - 禁止在 \\frac 的分子/分母外部再额外包裹括号，例如不要写 \\frac{(\\sqrt{3})}{3}，应写 \\frac{\\sqrt{3}}{3}。",
+    "  - 结论文本示例：顶点为 \\(V(1,-\\frac{4\\sqrt{3}}{3})\\)，对称轴为 \\(x=1\\)。",
+    "  - 不要输出类似于 \\(\\frac{4\\sqrt{3}}{3}\\) 被拆成两段 (\\(\\frac{4\\) 和 \\(\\sqrt{3}}{3}\\)) 的坏公式。",
     "AI 只允许输出结构化 JSON；严禁输出 <svg>、<canvas>、<script>、完整 HTML 或任何可执行绘图代码。",
     "visualizationSpec / diagramSpec 只能描述点、线、圆、角、视图和高亮等结构化数据。",
     "函数题、方程题、平面直角坐标题优先使用 function_graph，必须包含 functions、points、auxiliaryLines、views 字段。",

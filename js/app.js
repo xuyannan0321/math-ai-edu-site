@@ -3950,16 +3950,110 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
+// Helper: read balanced { ... } text, returns { content, endPos } or null
+function readBalancedBrace(text, openIndex) {
+  if (openIndex >= text.length || text[openIndex] !== "{") return null;
+  var depth = 0;
+  var start = openIndex + 1;
+  for (var i = openIndex; i < text.length; i++) {
+    if (text[i] === "{" && (i === openIndex || text[i - 1] !== "\\")) { depth++; }
+    else if (text[i] === "}" && (i === 0 || text[i - 1] !== "\\")) {
+      depth--;
+      if (depth === 0) return { content: text.slice(start, i), end: i };
+    }
+  }
+  return null;
+}
+
+// Check if position is inside \(..\) or \[..\] or $$..$$
+function isInsideMathDelimiter(text, index) {
+  // Look backwards for unclosed \( or \[ or $$
+  var i = index - 1;
+  while (i >= 0) {
+    if (i >= 1 && text.slice(i - 1, i + 1) === "\\(") return true;
+    if (i >= 1 && text.slice(i - 1, i + 1) === "\\[") return true;
+    if (i >= 1 && text.slice(i - 1, i + 1) === "$$") return true;
+    if (i >= 1 && text.slice(i - 1, i + 1) === "\\)") return false;
+    if (i >= 1 && text.slice(i - 1, i + 1) === "\\]") return false;
+    if (i >= 1 && text.slice(i - 1, i + 1) === "$$" && i > 1 && text.slice(i - 2, i) !== "$$") return false;
+    i--;
+  }
+  return false;
+}
+
+// Find the end of a LaTeX command fragment (\\frac{..}{..} or \\sqrt{..})
+// Returns the position after the fragment, or -1 if not valid
+function findLatexFragmentEnd(text, startIndex) {
+  if (text.slice(startIndex, startIndex + 5) === "\\frac" && text[startIndex + 5] === "{") {
+    var numBr = readBalancedBrace(text, startIndex + 5);
+    if (!numBr) return -1;
+    var denIdx = numBr.end + 1;
+    if (denIdx >= text.length || text[denIdx] !== "{") return -1;
+    var denBr = readBalancedBrace(text, denIdx);
+    if (!denBr) return -1;
+    return denBr.end + 1;
+  }
+  if (text.slice(startIndex, startIndex + 5) === "\\sqrt" && text[startIndex + 5] === "{") {
+    var sqBr = readBalancedBrace(text, startIndex + 5);
+    if (!sqBr) return -1;
+    return sqBr.end + 1;
+  }
+  // Simple commands: \\triangle, \\angle, \\cdot, \\times, \\div, etc.
+  var simpleMatch = text.slice(startIndex).match(/^\\[a-zA-Z]+/);
+  if (simpleMatch) return startIndex + simpleMatch[0].length;
+  return -1;
+}
+
+// Main function: wrap LaTeX fragments in \(...\) using balanced-brace scanning
+function wrapLatexFragments(text) {
+  if (!text || typeof text !== "string") return "";
+  var result = "";
+  var i = 0;
+  while (i < text.length) {
+    // Check for already-wrapped delimiters
+    if (text.slice(i, i + 2) === "\\(" || text.slice(i, i + 2) === "\\[") {
+      // Pass through existing delimiters
+      var closeDelim = text.slice(i, i + 2) === "\\(" ? "\\)" : "\\]";
+      var closePos = text.indexOf(closeDelim, i + 2);
+      if (closePos >= 0) {
+        result += text.slice(i, closePos + 2);
+        i = closePos + 2;
+        continue;
+      }
+    }
+    if (text.slice(i, i + 2) === "$$") {
+      var closePos2 = text.indexOf("$$", i + 2);
+      if (closePos2 >= 0) {
+        result += text.slice(i, closePos2 + 2);
+        i = closePos2 + 2;
+        continue;
+      }
+    }
+
+    // Check for LaTeX command start
+    if (text[i] === "\\" && !isInsideMathDelimiter(result, result.length)) {
+      var fragEnd = findLatexFragmentEnd(text, i);
+      if (fragEnd > i) {
+        // Wrap the fragment
+        result += "\\(" + text.slice(i, fragEnd) + "\\)";
+        i = fragEnd;
+        continue;
+      }
+      // Fall through: treat as regular text
+    }
+
+    result += text[i];
+    i++;
+  }
+  return result;
+}
+
 function autoWrapLatex(text) {
   if (!text || typeof text !== "string") return "";
-  // Already has MathJax delimiters? Return as-is (but still escaped by caller)
-  if (/\\\(|\\\[|\$\$|^\$/.test(text) && /\\\)|\\\]|\$\$|\$/.test(text)) return text;
-  // Wrap short LaTeX fragments: fraction, sqrt, angle, triangle, overline, cdot, etc.
-  // Only wrap isolated fragments, not entire sentences
-  return text.replace(
-    /((?:\\frac\{[^}]+\}\{[^}]+\})|(?:\\sqrt\{[^}]+\})|(?:\\triangle)|(?:\\angle)|(?:\\overline\{[^}]+\})|(?:\\cdot)|(?:\\times)|(?:\\div)|(?:\\pm)|(?:\\neq)|(?:\\leq)|(?:\\geq)|(?:\\approx)|(?:\\equiv)|(?:\\pi)|(?:\\degree)|(?:\\bot)|(?:\\parallel)|(?:\\triangle\w+)|(?:\\angle\w+))/g,
-    "\\($1\\)"
-  );
+  // If text already has MathJax delimiters, return as-is
+  if (/\\\(|\\\[|\$\$/.test(text)) return text;
+  // Use balanced-brace wrapper
+  return wrapLatexFragments(text);
 }
 
 function safeMathHtml(rawText) {
