@@ -846,7 +846,33 @@ function renderStructuredSteps(steps) {
 }
 
 function hasRenderableVisualizationSpec(spec) {
-  return Boolean(spec && typeof spec === "object" && spec.type && spec.type !== "none");
+  if (!spec || typeof spec !== "object" || !spec.type || spec.type === "none") {
+    return false;
+  }
+
+  // For function_graph, check that it actually has renderable data
+  if (spec.type === "function_graph") {
+    return Boolean(
+      // Has curves with samples
+      (Array.isArray(spec.curves) && spec.curves.some(function(c) {
+        return Array.isArray(c.samples) && c.samples.length > 1;
+      })) ||
+      // Has functions with expressions
+      (Array.isArray(spec.functions) && spec.functions.some(function(f) {
+        return f && f.expression && /[xX]/.test(f.expression);
+      }))
+    );
+  }
+
+  // For geometry, check it has points and objects
+  if (spec.type === "geometry") {
+    var hasPoints = spec.points && typeof spec.points === "object" && Object.keys(spec.points).length > 0;
+    var hasObjects = Array.isArray(spec.objects) && spec.objects.length > 0;
+    return hasPoints || hasObjects;
+  }
+
+  // All other types pass if type is set
+  return true;
 }
 
 function normalizeMathText(text) {

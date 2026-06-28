@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 (function initializeMathVisualization(global) {
   const SVG_NS = "http://www.w3.org/2000/svg";
@@ -251,7 +251,7 @@
       };
     }
 
-    return {
+    var normalized = {
       type: spec.type,
       title: spec.title || "图示讲解",
       description: spec.description || "",
@@ -262,11 +262,19 @@
       auxiliaryLines: Array.isArray(spec.auxiliaryLines) ? spec.auxiliaryLines : [],
       leftTerms: Array.isArray(spec.leftTerms) ? spec.leftTerms : [],
       rightTerms: Array.isArray(spec.rightTerms) ? spec.rightTerms : [],
+      coordinateSystem: spec.coordinateSystem || null,
+      curves: Array.isArray(spec.curves) ? spec.curves : [],
       points: normalizePointMap(spec),
       objects: Array.isArray(spec.objects) ? spec.objects : [],
       views: Array.isArray(spec.views) ? spec.views : [],
       steps: Array.isArray(spec.steps) ? spec.steps : [],
     };
+
+    if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
+      console.log("[MathVisualization] normalized type:", normalized.type, "curves:", normalized.curves.length, "coordinateSystem:", normalized.coordinateSystem ? "present" : "missing");
+    }
+
+    return normalized;
   }
 
 
@@ -936,157 +944,171 @@
     }
     return null;
   }
+  // Unified function expression parser - no eval, supports LaTeX and √
   function normalizeMathExpressionForGraph(expr) {
     if (!expr) return null;
     var s = String(expr)
-      .replace(/^y\\s*=\\s*/i, "")
-      .replace(/^f\\s*\\\(\\s*x\\s*\\\)\\s*=\\s*/i, "")
-      .replace(/\\s+/g, "")
-      .replace(/²/g, "^2");
+      .replace(/^y\s*=\s*/i, "")
+      .replace(/^f\s*\(\s*x\s*\)\s*=\s*/i, "")
+      .replace(/\s+/g, "")
+      .replace(/\u00B2/g, "^2")
+      .replace(/\u2212/g, "-");
 
-    // Use balanced-brace helper to handle nested LaTeX like \\frac{\\sqrt{3}}{3}
-    // Pre-process: convert √ (U+221A) to \sqrt{...} form
-    function preprocessSqrt(text) {
-      var result = "";
-      var i = 0;
-      while (i < text.length) {
-        if (text[i] === "√" || text[i] === "u{221A}") {
-          i++;
-          // Read the radicand: single digit or parenthesized expression
-          if (i < text.length && text[i] === "(") {
-            var depth = 0;
-            var start = i;
-            while (i < text.length) {
-              if (text[i] === "(") depth++;
-              else if (text[i] === ")") { depth--; if (depth === 0) { i++; break; } }
-              i++;
-            }
-            result += "\\sqrt{" + text.slice(start + 1, i - 1) + "}";
-          } else if (i < text.length && /\d/.test(text[i])) {
-            result += "\\sqrt{" + text[i] + "}";
-            i++;
-          } else {
-            result += "\\sqrt{}";
-          }
-        } else {
-          result += text[i];
-          i++;
-        }
-      }
-      return result;
-    }
+    // Convert √ to \sqrt{...} form (handles √3, √(3), (√3/3))
+    s = preprocessRadical(s);
 
-    function safeReplaceFrac(text) {
-      text = preprocessSqrt(text);
-      var result = "";
-      var i = 0;
-      while (i < text.length) {
-        if (text.slice(i, i + 5) === "\\frac" && text[i + 5] === "{") {
-          var numBrace = readBraceContent(text, i + 5);
-          if (!numBrace) { result += text[i]; i++; continue; }
-          var denomIdx = numBrace.end + 1;
-          if (text[denomIdx] !== "{") { result += text[i]; i++; continue; }
-          var denomBrace = readBraceContent(text, denomIdx);
-          if (!denomBrace) { result += text[i]; i++; continue; }
-          // Try to compute numeric, otherwise keep original
-          var numStr = safeReplaceFrac(numBrace.content);
-          var denomStr = safeReplaceFrac(denomBrace.content);
-          var na = Number(numStr), nb = Number(denomStr);
-          if (Number.isFinite(na) && Number.isFinite(nb) && nb !== 0) {
-            result += String(na / nb);
-          } else {
-            result += text.slice(i, denomBrace.end + 1);
-          }
-          i = denomBrace.end + 1;
-        } else if (text.slice(i, i + 5) === "\\sqrt" && text[i + 5] === "{") {
-          var sqBrace = readBraceContent(text, i + 5);
-          if (!sqBrace) { result += text[i]; i++; continue; }
-          var inner = safeReplaceFrac(sqBrace.content);
-          var nv = Number(inner);
-          if (Number.isFinite(nv) && nv >= 0) {
-            result += String(Math.sqrt(nv));
-          } else {
-            result += text.slice(i, sqBrace.end + 1);
-          }
-          i = sqBrace.end + 1;
-        } else if (text[i] === "{" && text[i - 1] !== "\\") {
-          // Unescaped brace - skip
-          result += text[i]; i++;
-        } else {
-          result += text[i]; i++;
-        }
-      }
-      return result;
-    }
+    // Convert \frac{...}{...} and \sqrt{...} to numeric values using balanced braces
+    s = safeReplaceLaTeX(s);
 
-    s = safeReplaceFrac(s);
-
-    // Replace (number/number) style
+    // Convert (number/number) style: (\u221A3/3) -> numeric
     s = s.replace(/\(([\-]?[\d.]+)\/([\d.]+)\)/g, function(m, a, b) {
       var na = Number(a), nb = Number(b);
       return (Number.isFinite(na) && Number.isFinite(nb) && nb !== 0) ? String(na / nb) : m;
     });
 
-    // If still has LaTeX commands we can"t parse, return null
+    // If still has LaTeX commands, return null (can't parse)
     if (/\\[a-zA-Z]/.test(s)) return null;
 
     return s;
   }
 
-  function parseQuadraticCoefficients(expr) {
+  // Convert √ symbol and various radical notations to \sqrt{...}
+  function preprocessRadical(text) {
+    var result = "";
+    var i = 0;
+    while (i < text.length) {
+      if (text[i] === "\u221A") {
+        i++;
+        if (i < text.length && text[i] === "(") {
+          var depth = 1, start = i + 1;
+          i++;
+          while (i < text.length && depth > 0) {
+            if (text[i] === "(") depth++;
+            else if (text[i] === ")") depth--;
+            i++;
+          }
+          result += "\\sqrt{" + text.slice(start, i - 1) + "}";
+        } else if (i < text.length && /\d/.test(text[i])) {
+          result += "\\sqrt{" + text[i] + "}";
+          i++;
+        }
+      } else {
+        result += text[i];
+        i++;
+      }
+    }
+    return result;
+  }
+
+  // Safe LaTeX replacement using balanced-brace reader
+  function safeReplaceLaTeX(text) {
+    var result = "";
+    var i = 0;
+    while (i < text.length) {
+      if (text.slice(i, i + 5) === "\\frac" && text[i + 5] === "{") {
+        var numBr = readBraceContent(text, i + 5);
+        if (!numBr) { result += text[i]; i++; continue; }
+        var denIdx = numBr.end + 1;
+        if (text[denIdx] !== "{") { result += text[i]; i++; continue; }
+        var denBr = readBraceContent(text, denIdx);
+        if (!denBr) { result += text[i]; i++; continue; }
+        var numStr = safeReplaceLaTeX(numBr.content);
+        var denStr = safeReplaceLaTeX(denBr.content);
+        var na = Number(numStr), nb = Number(denStr);
+        if (Number.isFinite(na) && Number.isFinite(nb) && nb !== 0) {
+          result += String(na / nb);
+        } else {
+          result += text.slice(i, denBr.end + 1);
+        }
+        i = denBr.end + 1;
+      } else if (text.slice(i, i + 5) === "\\sqrt" && text[i + 5] === "{") {
+        var sqBr = readBraceContent(text, i + 5);
+        if (!sqBr) { result += text[i]; i++; continue; }
+        var inner = safeReplaceLaTeX(sqBr.content);
+        var nv = Number(inner);
+        if (Number.isFinite(nv) && nv >= 0) {
+          result += String(Math.sqrt(nv));
+        } else {
+          result += text.slice(i, sqBr.end + 1);
+        }
+        i = sqBr.end + 1;
+      } else {
+        result += text[i];
+        i++;
+      }
+    }
+    return result;
+  }
+
+  // Unified parser: returns { kind, a, b, c, evaluate } or null
+  function parseFunctionExpression(expr) {
     var s = normalizeMathExpressionForGraph(expr);
     if (!s) return null;
 
-    // Replace x^2, x, constants
+    // Try to split into terms
+    var terms = splitTerms(s);
+    if (!terms) return null;
+
     var a = 0, b = 0, c = 0;
-    // Split by + or - (but not at start)
-    var terms = s.match(/[+\-]?[^+\-]+/g) || [];
     for (var ti = 0; ti < terms.length; ti++) {
       var term = terms[ti];
       if (/x\^2/.test(term)) {
-        var coeff = term.replace(/x\^2.*$/, "").replace(/\*/g, "");
-        if (coeff === "" || coeff === "+") { a += 1; }
-        else if (coeff === "-") { a -= 1; }
-        else { var n1 = Number(coeff); if (Number.isFinite(n1)) { a += n1; } else { return null; } }
+        var coeff = extractCoeff(term, /x\^2.*$/);
+        if (coeff === null) return null;
+        a += coeff;
       } else if (/x/.test(term)) {
-        var coeff2 = term.replace(/x.*$/, "").replace(/\*/g, "");
-        if (coeff2 === "" || coeff2 === "+") { b += 1; }
-        else if (coeff2 === "-") { b -= 1; }
-        else { var n2 = Number(coeff2); if (Number.isFinite(n2)) { b += n2; } else { return null; } }
+        var coeff = extractCoeff(term, /x.*$/);
+        if (coeff === null) return null;
+        b += coeff;
       } else {
-        var n3 = Number(term); if (Number.isFinite(n3)) { c += n3; } else { return null; }
+        var val = Number(term);
+        if (!Number.isFinite(val)) return null;
+        c += val;
       }
     }
 
-    return function(x) { return a * x * x + b * x + c; };
+    var kind = Math.abs(a) > 1e-9 ? "quadratic" : Math.abs(b) > 1e-9 ? "linear" : "constant";
+    return {
+      kind: kind,
+      a: a, b: b, c: c,
+      evaluate: function(x) { return a * x * x + b * x + c; }
+    };
   }
 
+  // Split expression into terms, respecting sign
+  function splitTerms(s) {
+    var terms = [];
+    var current = "";
+    var i = 0;
+    while (i < s.length) {
+      var ch = s[i];
+      if ((ch === "+" || ch === "-") && current.length > 0) {
+        terms.push(current);
+        current = ch === "-" ? "-" : "";
+      } else {
+        current += ch;
+      }
+      i++;
+    }
+    if (current) terms.push(current);
+    return terms;
+  }
+
+  // Extract coefficient from term, returns number or null
+  function extractCoeff(term, varRegex) {
+    var s = term.replace(varRegex, "").replace(/\*/g, "");
+    if (s === "" || s === "+") return 1;
+    if (s === "-") return -1;
+    var n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Backward-compatible: evaluateMathExpression wraps parseFunctionExpression
   function evaluateMathExpression(expr) {
-    // Try quadratic first
-    var quad = parseQuadraticCoefficients(expr);
-    if (quad) return quad;
-
-    // Try linear: ax + b
-    var s = normalizeMathExpressionForGraph(expr);
-    if (!s) return null;
-
-    var b = 0, a = 0;
-    var terms2 = s.match(/[+\-]?[^+\-]+/g) || [];
-    for (var ti2 = 0; ti2 < terms2.length; ti2++) {
-      var term = terms2[ti2];
-      if (/x/.test(term)) {
-        var coeff3 = term.replace(/x.*$/, "").replace(/\*/g, "");
-        if (coeff3 === "" || coeff3 === "+") { a += 1; }
-        else if (coeff3 === "-") { a -= 1; }
-        else { var n4 = Number(coeff3); if (Number.isFinite(n4)) { a += n4; } else { return null; } }
-      } else {
-        var n5 = Number(term); if (Number.isFinite(n5)) { b += n5; } else { return null; }
-      }
-    }
-
-    return function(x) { return a * x + b; };
+    var parsed = parseFunctionExpression(expr);
+    if (parsed) return parsed.evaluate;
+    return null;
   }
-
   // Resolve a point reference: {x,y} object stays, string looks up in points dict
   function resolveGraphPoint(value, points) {
     if (!value) return null;
@@ -1109,159 +1131,335 @@
     }
     return null;
   }
+  // Local sample builder - tries functions expressions when curves.samples missing
+  function buildLocalSamples(spec, bounds) {
+    var funcs = Array.isArray(spec.functions) ? spec.functions : [];
+    if (!funcs.length) return null;
+    for (var fi = 0; fi < funcs.length; fi++) {
+      var expr = funcs[fi].expression;
+      if (!expr || (!/[xX]/.test(expr) && !/\bfunction\b/i.test(expr))) continue;
+      var parsed = parseFunctionExpression(expr);
+      if (!parsed || !parsed.evaluate) continue;
+      var range = Array.isArray(funcs[fi].range) ? funcs[fi].range : [bounds.minX, bounds.maxX];
+      var samples = [];
+      var count = 200;
+      for (var si = 0; si <= count; si++) {
+        var x = range[0] + (range[1] - range[0]) * si / count;
+        var y = parsed.evaluate(x);
+        if (Number.isFinite(y)) samples.push({ x: x, y: y });
+      }
+      if (samples.length > 1) return samples;
+    }
+    return null;
+  }
+
   function renderFunctionGraph(container, spec, options) {
     if (options === undefined) options = {};
-    // Collect functions from spec.functions and spec.objects
-    var funcDefs = [];
-
-    (Array.isArray(spec.functions) ? spec.functions : []).forEach(function(f) {
-      if (f && f.expression) funcDefs.push({ expression: f.expression, range: f.range || [-5, 5], label: f.label || "" });
-    });
-
-    (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
-      if (o && o.kind === "function" && o.expression) funcDefs.push({ expression: o.expression, range: o.range || [-5, 5], label: o.label || "" });
-    });
-
-    if (!funcDefs.length) {
-      renderEmpty(container, "暂无可靠函数图示，可查看文字解析。");
-      return;
-    }
-
-    // Collect all evaluators
-    var evaluators = [];
-    funcDefs.forEach(function(fd) {
-      var fn = evaluateMathExpression(fd.expression);
-      if (fn) evaluators.push({ fn: fn, range: fd.range, label: fd.label });
-    });
-
     var dbg = (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1");
+
     if (dbg) {
-      console.log("[FunctionGraph] spec.type:", spec.type, "functions.len:", funcDefs.length, "evaluators.len:", evaluators.length);
-      evaluators.forEach(function(ev, ei) { console.log("[FunctionGraph] fn[" + ei + "] label:", ev.label); });
+      console.log("[FunctionGraph] spec.type:", spec.type);
+      console.log("[FunctionGraph] curves:", (spec.curves || []).length, "functions:", (spec.functions || []).length);
+      if (spec.coordinateSystem) console.log("[FunctionGraph] coordinateSystem:", spec.coordinateSystem);
       console.log("[FunctionGraph] points:", Object.keys(spec.points || {}).length, "auxLines:", (spec.auxiliaryLines || []).length);
     }
-    if (!evaluators.length) {
-      if (dbg) console.warn("[FunctionGraph] No evaluators - cannot render");
-      renderEmpty(container, "函数表达式暂不可解析，请查看文字解析。");
-      return;
+
+    // HARD RULE: spec.type === "function_graph" MUST try to render
+    // Priority: curves.samples > curves.coefficients > functions.expression
+
+    // Compute bounds early (used by fallback too)
+    var cs = spec.coordinateSystem || {};
+    var bounds = {
+      minX: Number.isFinite(cs.xMin) ? cs.xMin : -5,
+      maxX: Number.isFinite(cs.xMax) ? cs.xMax : 5,
+      minY: Number.isFinite(cs.yMin) ? cs.yMin : -5,
+      maxY: Number.isFinite(cs.yMax) ? cs.yMax : 5,
+    };
+
+    var curves = Array.isArray(spec.curves) ? spec.curves : [];
+    var hasSamples = curves.some(function(c) { return Array.isArray(c.samples) && c.samples.length > 1; });
+
+    if (!hasSamples) {
+      // Fallback: try local evaluation from functions expressions
+      if (dbg) console.warn("[FunctionGraph] No curves.samples, trying local expression evaluation");
+
+      var localSamples = buildLocalSamples(spec, bounds);
+      if (localSamples && localSamples.length > 1) {
+        curves = [{ id: "local", kind: "unknown", samples: localSamples }];
+        hasSamples = true;
+        if (dbg) console.log("[FunctionGraph] local samples generated:", localSamples.length);
+      } else {
+        renderEmpty(container, "函数表达式暂不可解析，请查看文字解析。");
+        return;
+      }
     }
 
-    // Collect all points
-    var allPoints = [];
-    // From spec.points
-    var ptMap = spec.points || {};
-    if (typeof ptMap === "object") {
-      Object.keys(ptMap).forEach(function(id) {
-        var p = ptMap[id];
-        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
-          allPoints.push({ x: p.x, y: p.y, label: p.label || id });
-        }
-      });
-    }
-    // From spec.objects with kind:point or kind:label
-    (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
-      if (o && (o.kind === "point") && Number.isFinite(o.x) && Number.isFinite(o.y)) {
-        if (!allPoints.some(function(p) { return Math.abs(p.x - o.x) < 0.001 && Math.abs(p.y - o.y) < 0.001; })) {
-          allPoints.push({ x: o.x, y: o.y, label: o.label || o.id || "" });
-        }
-      }
-    });
+    var xStep = Number.isFinite(cs.xStep) ? cs.xStep : niceStep(bounds.maxX - bounds.minX);
+    var yStep = Number.isFinite(cs.yStep) ? cs.yStep : niceStep(bounds.maxY - bounds.minY);
+    var showGrid = cs.showGrid !== false;
+    var showTicks = cs.showTicks !== false;
+    var showNumbers = cs.showAxisNumbers !== false;
 
-    // Auto-compute bounds from functions + points
-    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-
-    evaluators.forEach(function(ev) {
-      var rMin = Math.max(-10, Number(ev.range[0]) || -5);
-      var rMax = Math.min(10, Number(ev.range[1]) || 5);
-      for (var xi = 0; xi <= 100; xi++) {
-        var x = rMin + (rMax - rMin) * xi / 100;
-        var y = ev.fn(x);
-        if (Number.isFinite(y) && Math.abs(y) < 100) {
-          if (x < minX) minX = x; if (x > maxX) maxX = x;
-          if (y < minY) minY = y; if (y > maxY) maxY = y;
-        }
-      }
-    });
-
-    allPoints.forEach(function(p) {
-      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-    });
-
-    // Fallback bounds
-    if (!isFinite(minX)) { minX = -5; maxX = 5; minY = -5; maxY = 5; }
-
-    // Add padding
-    var padX = Math.max(1, (maxX - minX) * 0.2);
-    var padY = Math.max(1, (maxY - minY) * 0.2);
-    if (maxX - minX < 0.5) { padX = 2; maxX = minX + 5; }
-    if (maxY - minY < 0.5) { padY = 2; maxY = minY + 5; }
-
-    var bounds = { minX: minX - padX, maxX: maxX + padX, minY: minY - padY, maxY: maxY + padY };
     var mapper = createMapper(bounds);
     var svg = createBaseSvg("math-visualization-svg function-svg");
-    renderAxes(svg, mapper, bounds);
 
-    // Draw curves
-    evaluators.forEach(function(ev) {
-      var sMin = Math.max(bounds.minX, Number(ev.range[0]) || -5);
-      var sMax = Math.min(bounds.maxX, Number(ev.range[1]) || 5);
-      var samples = [];
-      for (var i = 0; i <= 200; i++) {
-        var x = sMin + (sMax - sMin) * i / 200;
-        var y = ev.fn(x);
-        if (Number.isFinite(y) && y >= bounds.minY - 50 && y <= bounds.maxY + 50) {
-          var proj = mapper.project({ x: x, y: y });
-          samples.push(proj.x.toFixed(2) + "," + proj.y.toFixed(2));
+    // --- LAYER 1: Grid ---
+    if (showGrid) {
+      renderGraphGrid(svg, mapper, bounds, xStep, yStep);
+    }
+
+    // --- LAYER 2: Axes ---
+    renderGraphAxes(svg, mapper, bounds);
+
+    // --- LAYER 3: Ticks and numbers ---
+    if (showTicks || showNumbers) {
+      renderGraphTicks(svg, mapper, bounds, xStep, yStep, showTicks, showNumbers);
+    }
+
+    // --- LAYER 4: Curves (from samples) ---
+    curves.forEach(function(curve, ci) {
+      if (!Array.isArray(curve.samples) || curve.samples.length < 2) {
+        if (dbg) console.warn("[FunctionGraph] curve[" + ci + "] " + (curve.id || "?") + " skipped - no samples");
+        return;
+      }
+      // Build path from samples
+      var pathParts = [];
+      curve.samples.forEach(function(s) {
+        if (s && Number.isFinite(s.x) && Number.isFinite(s.y)) {
+          var proj = mapper.project({ x: s.x, y: s.y });
+          if (Number.isFinite(proj.x) && Number.isFinite(proj.y)) {
+            pathParts.push(proj.x.toFixed(2) + "," + proj.y.toFixed(2));
+          }
         }
-      }
-      if (samples.length > 1) {
-        if (dbg) console.log("[FunctionGraph] Drawing curve with " + samples.length + " samples");
-        svg.append(createSvgElement("path", { d: "M" + samples.join("L"), class: "mv-function" }));
+      });
+      if (pathParts.length > 1) {
+        var cls = ci === 0 ? "mv-function" : "mv-function-secondary";
+        svg.append(createSvgElement("path", { d: "M" + pathParts.join("L"), class: cls }));
+        if (dbg) console.log("[FunctionGraph] curve[" + ci + "] " + (curve.id || "?") + " samples:", curve.samples.length, "path pts:", pathParts.length, "APPENDED");
       } else {
-        if (dbg) console.warn("[FunctionGraph] Skipped curve - only " + samples.length + " samples");
+        if (dbg) console.warn("[FunctionGraph] curve[" + ci + "] skipped - no valid projected points");
       }
     });
 
-    // Draw points
+    // --- LAYER 5: Points ---
+    var allPoints = collectDrawablePoints(spec);
     allPoints.forEach(function(p) {
-      drawPoint(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, mapper);
-      if (p.label) drawLabel(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, p.label, mapper);
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+        drawPoint(svg, { x: p.x, y: p.y, id: p.label || "" }, mapper);
+        if (p.label) drawLabel(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, p.label, mapper);
+      }
     });
+    if (dbg) console.log("[FunctionGraph] drawn points:", allPoints.length);
 
-    // Draw auxiliary lines (with point reference resolution)
-    var auxDebugSkipped = 0;
+    // --- LAYER 6: Auxiliary Lines ---
+    var auxSkipped = 0;
     (Array.isArray(spec.auxiliaryLines) ? spec.auxiliaryLines : []).forEach(function(l) {
-      if (!l || !l.kind) return;
+      if (!l || !l.kind) { auxSkipped++; return; }
       var from = resolveGraphPoint(l.from, spec.points || {});
       var to = resolveGraphPoint(l.to, spec.points || {});
-      if (!from || !to) { auxDebugSkipped++; return; }
+      if (!from || !to) { auxSkipped++; return; }
       var dashed = l.style === "dashed" || l.kind === "auxiliaryLine";
       var opts = { className: dashed ? "mv-auxiliary-line" : "mv-segment", dashed: dashed };
       if (l.kind === "segment") { drawSegment(svg, from, to, mapper, opts); }
       else { drawLine(svg, from, to, mapper, bounds, opts); }
     });
-
-    // Also from spec.objects (with point reference resolution)
-    (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
-      if (!o || !(o.kind === "auxiliaryLine" || o.kind === "line" || o.kind === "segment")) return;
-      var from = resolveGraphPoint(o.from, spec.points || {});
-      var to = resolveGraphPoint(o.to, spec.points || {});
-      if (!from || !to) { auxDebugSkipped++; return; }
-      var dashed = o.style === "dashed" || o.kind === "auxiliaryLine";
-      var opts = { className: dashed ? "mv-auxiliary-line" : "mv-segment", dashed: dashed };
-      if (o.kind === "segment") { drawSegment(svg, from, to, mapper, opts); }
-      else { drawLine(svg, from, to, mapper, bounds, opts); }
-    });
-    if (auxDebugSkipped > 0) {
-      if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
-        console.warn("[FunctionGraph] skipped " + auxDebugSkipped + " invalid auxiliary line(s)");
-      }
-    }
+    if (dbg && auxSkipped > 0) console.warn("[FunctionGraph] skipped " + auxSkipped + " invalid auxiliary lines");
 
     container.append(svg);
   }
-  function renderEquationBalanceLegacy(container, spec) {
+
+  // --- Helper: collect drawable points from spec ---
+  function collectDrawablePoints(spec) {
+    var pts = [];
+    var ptMap = spec.points || {};
+    if (typeof ptMap === "object") {
+      Object.keys(ptMap).forEach(function(id) {
+        var p = ptMap[id];
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+          pts.push({ x: p.x, y: p.y, label: p.label || id });
+        }
+      });
+    }
+    (Array.isArray(spec.objects) ? spec.objects : []).forEach(function(o) {
+      if (o && o.kind === "point" && Number.isFinite(o.x) && Number.isFinite(o.y)) {
+        if (!pts.some(function(ep) { return Math.abs(ep.x - o.x) < 0.001 && Math.abs(ep.y - o.y) < 0.001; })) {
+          pts.push({ x: o.x, y: o.y, label: o.label || o.id || "" });
+        }
+      }
+    });
+    return pts;
+  }
+
+  // --- Helper: nice step for grid spacing ---
+  function niceStep(span) {
+    var raw = span / 5;
+    var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var res = raw / mag;
+    if (res <= 1.5) return mag;
+    if (res <= 3) return 2 * mag;
+    if (res <= 7) return 5 * mag;
+    return 10 * mag;
+  }
+
+  // --- Render Graph Grid ---
+  function renderGraphGrid(svg, mapper, bounds, xStep, yStep) {
+    var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    // Vertical grid lines
+    var xStart = Math.ceil(bounds.minX / xStep) * xStep;
+    for (var x = xStart; x <= bounds.maxX; x += xStep) {
+      var proj = mapper.project({ x: x, y: 0 });
+      var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", proj.x.toFixed(2));
+      line.setAttribute("y1", "34");
+      line.setAttribute("x2", proj.x.toFixed(2));
+      line.setAttribute("y2", (mapper.height - 34).toFixed(2));
+      line.setAttribute("class", "mv-grid-line");
+      g.append(line);
+    }
+    // Horizontal grid lines
+    var yStart = Math.ceil(bounds.minY / yStep) * yStep;
+    for (var y = yStart; y <= bounds.maxY; y += yStep) {
+      var proj = mapper.project({ x: 0, y: y });
+      var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", "34");
+      line.setAttribute("y1", proj.y.toFixed(2));
+      line.setAttribute("x2", (mapper.width - 34).toFixed(2));
+      line.setAttribute("y2", proj.y.toFixed(2));
+      line.setAttribute("class", "mv-grid-line");
+      g.append(line);
+    }
+    svg.append(g);
+  }
+
+  // --- Render Graph Axes ---
+  function renderGraphAxes(svg, mapper, bounds) {
+    var origin = mapper.project({ x: 0, y: 0 });
+    var ox = Math.max(34, Math.min(mapper.width - 34, origin.x));
+    var oy = Math.max(34, Math.min(mapper.height - 34, origin.y));
+
+    // X axis
+    var xAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    xAxis.setAttribute("x1", "34");
+    xAxis.setAttribute("y1", oy.toFixed(2));
+    xAxis.setAttribute("x2", (mapper.width - 34).toFixed(2));
+    xAxis.setAttribute("y2", oy.toFixed(2));
+    xAxis.setAttribute("class", "mv-axis");
+    svg.append(xAxis);
+
+    // Y axis
+    var yAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    yAxis.setAttribute("x1", ox.toFixed(2));
+    yAxis.setAttribute("y1", "34");
+    yAxis.setAttribute("x2", ox.toFixed(2));
+    yAxis.setAttribute("y2", (mapper.height - 34).toFixed(2));
+    yAxis.setAttribute("class", "mv-axis");
+    svg.append(yAxis);
+
+    // X arrow
+    var xArr = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    var ax = mapper.width - 34, ay = oy;
+    xArr.setAttribute("points", (ax - 8).toFixed(2) + "," + (ay - 4).toFixed(2) + " " + ax.toFixed(2) + "," + ay.toFixed(2) + " " + (ax - 8).toFixed(2) + "," + (ay + 4).toFixed(2));
+    xArr.setAttribute("class", "mv-axis-arrow");
+    svg.append(xArr);
+
+    // Y arrow
+    var yArr = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    var ax2 = ox, ay2 = 34;
+    yArr.setAttribute("points", (ax2 - 4).toFixed(2) + "," + (ay2 + 8).toFixed(2) + " " + ax2.toFixed(2) + "," + ay2.toFixed(2) + " " + (ax2 + 4).toFixed(2) + "," + (ay2 + 8).toFixed(2));
+    yArr.setAttribute("class", "mv-axis-arrow");
+    svg.append(yArr);
+
+    // Origin O
+    var oText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    oText.setAttribute("x", (ox - 6).toFixed(2));
+    oText.setAttribute("y", (oy + 14).toFixed(2));
+    oText.setAttribute("class", "mv-axis-number");
+    oText.textContent = "O";
+    svg.append(oText);
+
+    // X label
+    var xLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    xLabel.setAttribute("x", (mapper.width - 30).toFixed(2));
+    xLabel.setAttribute("y", (oy + 16).toFixed(2));
+    xLabel.setAttribute("class", "mv-axis-number");
+    xLabel.textContent = "x";
+    svg.append(xLabel);
+
+    // Y label
+    var yLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    yLabel.setAttribute("x", (ox + 6).toFixed(2));
+    yLabel.setAttribute("y", "30");
+    yLabel.setAttribute("class", "mv-axis-number");
+    yLabel.textContent = "y";
+    svg.append(yLabel);
+  }
+
+  // --- Render Graph Ticks ---
+  function renderGraphTicks(svg, mapper, bounds, xStep, yStep, showTicks, showNumbers) {
+    var origin = mapper.project({ x: 0, y: 0 });
+    var ox = Math.max(34, Math.min(mapper.width - 34, origin.x));
+    var oy = Math.max(34, Math.min(mapper.height - 34, origin.y));
+
+    // X ticks
+    var xStart = Math.ceil(bounds.minX / xStep) * xStep;
+    for (var x = xStart; x <= bounds.maxX; x += xStep) {
+      if (Math.abs(x) < xStep * 0.01) continue; // skip origin
+      var proj = mapper.project({ x: x, y: 0 });
+      if (proj.x >= 34 && proj.x <= mapper.width - 34) {
+        if (showTicks) {
+          var tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          tick.setAttribute("x1", proj.x.toFixed(2));
+          tick.setAttribute("y1", (oy - 4).toFixed(2));
+          tick.setAttribute("x2", proj.x.toFixed(2));
+          tick.setAttribute("y2", (oy + 4).toFixed(2));
+          tick.setAttribute("class", "mv-axis-tick");
+          svg.append(tick);
+        }
+        if (showNumbers) {
+          var num = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          num.setAttribute("x", proj.x.toFixed(2));
+          num.setAttribute("y", (oy + 16).toFixed(2));
+          num.setAttribute("text-anchor", "middle");
+          num.setAttribute("class", "mv-axis-number");
+          num.textContent = formatAxisNumber(x);
+          svg.append(num);
+        }
+      }
+    }
+
+    // Y ticks
+    var yStart = Math.ceil(bounds.minY / yStep) * yStep;
+    for (var y = yStart; y <= bounds.maxY; y += yStep) {
+      if (Math.abs(y) < yStep * 0.01) continue; // skip origin
+      var proj = mapper.project({ x: 0, y: y });
+      if (proj.y >= 34 && proj.y <= mapper.height - 34) {
+        if (showTicks) {
+          var tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          tick.setAttribute("x1", (ox - 4).toFixed(2));
+          tick.setAttribute("y1", proj.y.toFixed(2));
+          tick.setAttribute("x2", (ox + 4).toFixed(2));
+          tick.setAttribute("y2", proj.y.toFixed(2));
+          tick.setAttribute("class", "mv-axis-tick");
+          svg.append(tick);
+        }
+        if (showNumbers) {
+          var num = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          num.setAttribute("x", (ox - 8).toFixed(2));
+          num.setAttribute("y", (proj.y + 4).toFixed(2));
+          num.setAttribute("text-anchor", "end");
+          num.setAttribute("class", "mv-axis-number");
+          num.textContent = formatAxisNumber(y);
+          svg.append(num);
+        }
+      }
+    }
+  }
+
+  function formatAxisNumber(v) {
+    if (Math.abs(v) < 1e-9) return "0";
+    if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+    return Number(v.toFixed(2)).toString();
+  }  function renderEquationBalanceLegacy(container, spec) {
     const wrapper = createHtmlElement("div", "equation-balance-board");
     const left = createHtmlElement("div", "equation-side", "左边");
     const beam = createHtmlElement("div", "equation-balance-beam", "=");

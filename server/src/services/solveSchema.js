@@ -1,3 +1,4 @@
+const { buildFunctionGraphFromText, buildFunctionGraphFromExpression, buildEquationGraphFromText, enrichFunctionGraphSpec } = require("./graphEngine");
 const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
 const VISUALIZATION_TYPES = new Set([
   "equation_balance",
@@ -525,15 +526,14 @@ function normalizeNonGeometrySpec(source, type, confidence, questionText) {
   if (type === "function_graph") {
     // If functions is empty but questionText has y=expression, fill it
     if ((!Array.isArray(source.functions) || !source.functions.length) && questionText) {
-      var funcExpr = extractFunctionExpressionFromText(questionText);
-      if (funcExpr) {
-        var qspec = buildQuadraticFunctionGraph(funcExpr, null);
-        if (qspec && qspec.functions && qspec.functions.length) {
-          source.functions = qspec.functions;
-          if (!source.points || !Object.keys(source.points || {}).length) source.points = qspec.points;
-          if (!source.auxiliaryLines || !source.auxiliaryLines.length) source.auxiliaryLines = qspec.auxiliaryLines;
-          if (!source.objects || !source.objects.length) source.objects = qspec.objects || [];
-        }
+      var graph = buildFunctionGraphFromText(questionText);
+      if (graph && graph.curves && graph.curves.length) {
+        source.functions = graph.functions;
+        if (!source.points || !Object.keys(source.points || {}).length) source.points = graph.points;
+        if (!source.auxiliaryLines || !source.auxiliaryLines.length) source.auxiliaryLines = graph.auxiliaryLines;
+        if (!source.objects || !source.objects.length) source.objects = graph.objects || [];
+        if (!source.curves || !source.curves.length) source.curves = graph.curves;
+        if (!source.coordinateSystem) source.coordinateSystem = graph.coordinateSystem;
       }
     }
     return {
@@ -543,6 +543,8 @@ function normalizeNonGeometrySpec(source, type, confidence, questionText) {
       confidence,
       orientation: normalizeOrientation(source.orientation),
       equation: asString(source.equation || ""),
+      coordinateSystem: source.coordinateSystem || null,
+      curves: Array.isArray(source.curves) ? source.curves : [],
       functions: Array.isArray(source.functions) ? source.functions.map(function(f) { return { id: asString(f.id), label: asString(f.label), expression: asString(f.expression), range: Array.isArray(f.range) ? f.range.map(Number).filter(Number.isFinite).slice(0, 2) : [-5, 5], role: asString(f.role, "original") }; }) : [],
       points: collectPoints(source),
       auxiliaryLines: Array.isArray(source.auxiliaryLines) ? source.auxiliaryLines.map(function(l) { return { id: asString(l.id), kind: asString(l.kind || l.type, "line"), label: asString(l.label), from: l.from || {}, to: l.to || {}, style: asString(l.style, "dashed"), role: "auxiliary" }; }) : [],
@@ -638,6 +640,11 @@ function normalizeEquationBalanceSpec(source, confidence) {
 
 
 function createEquationAsFunctionGraphFallback(text, finalAnswer) {
+  // Use deterministic graphEngine first
+  var graph = buildEquationGraphFromText(text);
+  if (graph && graph.curves && graph.curves.length) {
+    return graph;
+  }
   var normalized = asString(text).replaceAll("−", "-").replace(/\s+/g, "");
   // Match: ax + b = c  or  ax = c
   var eqMatch = normalized.match(/([\-]?\d*\.?\d*)x\s*([+\-]\s*\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)/i)
@@ -1089,6 +1096,11 @@ function round4(v) { return Math.round(v * 10000) / 10000; }
 function round2(v) { return Math.round(v * 100) / 100; }
 
 function createFunctionGraphFallback(text) {
+  // Use deterministic graphEngine first
+  var graph = buildFunctionGraphFromText(text);
+  if (graph && graph.curves && graph.curves.length && graph.curves[0].samples && graph.curves[0].samples.length > 1) {
+    return graph;
+  }
   // Extract y=expression or f(x)=expression, supporting LaTeX \\frac, \\sqrt
   var raw = asString(text).replaceAll("\u2212", "-").replaceAll("\u00B2", "^2");
   // First try extractFunctionExpressionFromText which handles LaTeX
@@ -1169,7 +1181,7 @@ function normalizeVisualizationSpec(value, fallback = {}) {
   var isFuncProblem = /y\s*=|f\s*\(\s*x\s*\)\s*=|一次函数|二次函数|抛物线|函数图像|画出函数/i.test(fallback.questionText || "");
   if (type === "none" && isFuncProblem) {
     var funcGraph = createFunctionGraphFallback(fallback.questionText || "");
-    if (funcGraph) { return funcGraph; }
+    if (funcGraph) { return enrichFunctionGraphSpec(funcGraph, fallback.questionText || ""); }
   }
   if (type === "none") {
     var fallbackSpec = createSafeFallbackVisualization(fallback);
