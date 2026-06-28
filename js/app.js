@@ -852,16 +852,30 @@ function hasRenderableVisualizationSpec(spec) {
 
   // For function_graph, check that it actually has renderable data
   if (spec.type === "function_graph") {
-    return Boolean(
-      // Has curves with samples
-      (Array.isArray(spec.curves) && spec.curves.some(function(c) {
-        return Array.isArray(c.samples) && c.samples.length > 1;
-      })) ||
-      // Has functions with expressions
-      (Array.isArray(spec.functions) && spec.functions.some(function(f) {
-        return f && f.expression && /[xX]/.test(f.expression);
-      }))
-    );
+    // Priority 1: curves with samples from backend graphEngine
+    if (Array.isArray(spec.curves) && spec.curves.some(function(c) {
+      return Array.isArray(c.samples) && c.samples.length > 1;
+    })) {
+      return true;
+    }
+    // Priority 2: functions with SIMPLE expressions only
+    // Complex LaTeX expressions (\\frac, \\sqrt, √, sqrt(, /) are NOT renderable without backend samples
+    if (Array.isArray(spec.functions) && spec.functions.some(function(f) {
+      if (!f || !f.expression || !(/[xX]/.test(f.expression))) return false;
+      var expr = f.expression;
+      // Reject complex LaTeX that frontend cannot reliably parse
+      if (expr.indexOf("\\\\frac") !== -1 || expr.indexOf("\\\\sqrt") !== -1 || expr.indexOf("\u221A") !== -1 || expr.indexOf("sqrt(") !== -1 || (expr.indexOf("(") !== -1 && expr.indexOf("/") !== -1)) {
+        if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
+          console.warn("[App] function_graph rejected: complex expression without backend samples -", expr.slice(0, 60));
+        }
+        return false;
+      }
+      // Allow simple expressions: y=x^2-2x-3, y=2x+3, y=11
+      return true;
+    })) {
+      return true;
+    }
+    return false;
   }
 
   // For geometry, check it has points and objects
@@ -3994,7 +4008,9 @@ function sanitizeLatexText(text) {
 
 function setSafeMathContent(element, rawText, tagName) {
   if (!element) return;
-  var html = safeMathHtml(rawText);
+  // Sanitize LaTeX first (fix \\left/\\right, brace balance)
+  var sanitized = sanitizeLatexText(rawText);
+  var html = safeMathHtml(sanitized);
   if (tagName) {
     element.innerHTML = "<" + tagName + ">" + html + "</" + tagName + ">";
   } else {

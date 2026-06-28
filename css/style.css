@@ -978,6 +978,20 @@ select.form-control {
   stroke-dasharray: 6 5;
 }
 
+.mv-empty-warning {
+  fill: var(--gray-500);
+  font-size: 13px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-style: italic;
+}
+
+.mv-auxiliary-line {
+  fill: none;
+  stroke: var(--gray-400);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+}
+
 .mv-grid-line {
   stroke: var(--gray-200);
   stroke-width: 0.8;

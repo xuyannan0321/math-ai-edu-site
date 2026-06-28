@@ -1,4 +1,4 @@
-// graphEngine.js — Deterministic Graph Tool
+﻿// graphEngine.js — Deterministic Graph Tool
 // No eval/Function, no npm deps, no AI dependency.
 // Supports: y=x^2-2x-3, y=2x+3, y=11, LaTeX \frac \sqrt, √, (√3/3), (√3)/3
 
@@ -76,15 +76,74 @@ function parseMathNumber(text) {
     return sign * Math.sqrt(inner);
   }
 
-  // √ symbol (U+221A)
+  // sqrt(expr) function syntax: sqrt(3), sqrt(3)/3, 2*sqrt(3)/3
+  if (s.startsWith("sqrt(")) {
+    var parenDepth = 1, closeP = -1;
+    for (var pi = 5; pi < s.length; pi++) {
+      if (s[pi] === "(") parenDepth++;
+      else if (s[pi] === ")") { parenDepth--; if (parenDepth === 0) { closeP = pi; break; } }
+    }
+    if (closeP < 0) return NaN;
+    var radicand = parseMathNumber(s.slice(5, closeP));
+    if (!Number.isFinite(radicand) || radicand < 0) return NaN;
+    var sqrtVal = Math.sqrt(radicand);
+    var restAfter = s.slice(closeP + 1).trim();
+    if (restAfter && restAfter[0] === "/") {
+      var denom = parseMathNumber(restAfter.slice(1).trim());
+      if (!Number.isFinite(denom) || denom === 0) return NaN;
+      return sign * sqrtVal / denom;
+    }
+    if (restAfter && restAfter[0] === "*") {
+      var multVal2 = parseMathNumber(restAfter.slice(1).trim());
+      if (Number.isFinite(multVal2)) return sign * sqrtVal * multVal2;
+    }
+    if (restAfter && restAfter.trim()) {
+      var afterVal2 = parseMathNumber(restAfter);
+      if (Number.isFinite(afterVal2)) return sign * sqrtVal * afterVal2;
+    }
+    return sign * sqrtVal;
+  }
+  // √ symbol (U+221A) - extract radicand, then handle division
   if (s[0] === "\u221A") {
-    var rest = s.slice(1).trim();
-    var inner = parseMathNumber(rest);
-    if (!Number.isFinite(inner) || inner < 0) return NaN;
-    return sign * Math.sqrt(inner);
+    var radicand, restAfter;
+    if (s[1] === "(") {
+      // √(expr)/...
+      var parenDepth = 1, closeP = -1;
+      for (var pi = 2; pi < s.length; pi++) {
+        if (s[pi] === "(") parenDepth++;
+        else if (s[pi] === ")") { parenDepth--; if (parenDepth === 0) { closeP = pi; break; } }
+      }
+      if (closeP < 0) return NaN;
+      radicand = parseMathNumber(s.slice(2, closeP));
+      restAfter = s.slice(closeP + 1).trim();
+    } else {
+      // √N/... or √N
+      var numMatch = s.slice(1).match(/^(\d+(?:\.\d+)?)(.*)/);
+      if (!numMatch) return NaN;
+      radicand = Number(numMatch[1]);
+      restAfter = numMatch[2].trim();
+    }
+    if (!Number.isFinite(radicand) || radicand < 0) return NaN;
+    var sqrtVal = Math.sqrt(radicand);
+    if (restAfter && restAfter[0] === "/") {
+      // √3/3 → sqrt(3)/3
+      var denom = parseMathNumber(restAfter.slice(1).trim());
+      if (!Number.isFinite(denom) || denom === 0) return NaN;
+      return sign * sqrtVal / denom;
+    }
+    if (restAfter && restAfter[0] === "*") {
+      var multVal = parseMathNumber(restAfter.slice(1).trim());
+      if (Number.isFinite(multVal)) return sign * sqrtVal * multVal;
+    }
+    if (restAfter && restAfter.trim()) {
+      // e.g. √3x - multiply by remaining value
+      var afterVal = parseMathNumber(restAfter);
+      if (Number.isFinite(afterVal)) return sign * sqrtVal * afterVal;
+    }
+    return sign * sqrtVal;
   }
 
-  // Parenthesized expression: (a/b) or (expr)
+  // Parenthesized expression: (a/b) or (expr)/... with division support
   if (s[0] === "(") {
     var parenDepth = 0;
     var closeIdx = -1;
@@ -92,6 +151,7 @@ function parseMathNumber(text) {
       if (s[pi] === "(") parenDepth++;
       else if (s[pi] === ")") { parenDepth--; if (parenDepth === 0) { closeIdx = pi; break; } }
     }
+    if (closeIdx < 0) return NaN;
     if (closeIdx === s.length - 1) {
       var innerExpr = s.slice(1, closeIdx);
       // Check for division
@@ -108,25 +168,34 @@ function parseMathNumber(text) {
       }
       return sign * parseMathNumber(innerExpr);
     }
-    if (closeIdx > 0 && closeIdx < s.length - 1) {
-      var parenContent = s.slice(1, closeIdx);
-      var afterParen = s.slice(closeIdx + 1);
-      var parenVal = parseMathNumber(parenContent);
-      if (!Number.isFinite(parenVal)) return NaN;
-      if (afterParen.trim() === "") return sign * parenVal;
-      var afterVal = parseMathNumber(afterParen);
-      if (Number.isFinite(afterVal)) return sign * parenVal * afterVal;
+    // closeIdx < s.length - 1: expression like (√3)/3 or (expr)*x
+    var parenContent = s.slice(1, closeIdx);
+    var afterParen = s.slice(closeIdx + 1).trim();
+    var parenVal = parseMathNumber(parenContent);
+    if (!Number.isFinite(parenVal)) return NaN;
+    if (!afterParen) return sign * parenVal;
+    // Handle division: (√3)/3
+    if (afterParen[0] === "/") {
+      var denom = parseMathNumber(afterParen.slice(1).trim());
+      if (Number.isFinite(denom) && denom !== 0) return sign * parenVal / denom;
       return NaN;
     }
+    // Handle multiplication
+    var afterVal = parseMathNumber(afterParen);
+    if (Number.isFinite(afterVal)) return sign * parenVal * afterVal;
+    return NaN;
   }
 
-  // Coefficient followed by radical: e.g. "2\u221A3" -> 2 * sqrt(3)
+  // Coefficient followed by radical or sqrt: e.g. "2√3" -> 2*sqrt(3), "2*sqrt(3)/3"
   if (/\d/.test(s[0])) {
     var coeffMatch = s.match(/^(\d+(?:\.\d+)?)(.*)/);
     if (coeffMatch) {
       var coeff = Number(coeffMatch[1]);
       var rest = coeffMatch[2].trim();
       if (rest === "") return sign * coeff;
+      // Strip leading * if present: "2*sqrt(3)" -> rest starts with "*sqrt(3)"
+      if (rest[0] === "*") rest = rest.slice(1).trim();
+      if (!rest) return sign * coeff;
       var restVal = parseMathNumber(rest);
       if (!Number.isFinite(restVal)) return NaN;
       return sign * coeff * restVal;
@@ -209,11 +278,11 @@ function safeReplaceLaTeX(text) {
       if (text[denIdx] !== "{") { result += text[i]; i++; continue; }
       var denBr = readBraceContent(text, denIdx);
       if (!denBr) { result += text[i]; i++; continue; }
-      var numStr = safeReplaceLaTeX(numBr.content);
-      var denStr = safeReplaceLaTeX(denBr.content);
-      var na = Number(numStr), nb = Number(denStr);
-      if (Number.isFinite(na) && Number.isFinite(nb) && nb !== 0) {
-        result += String(na / nb);
+      // Use parseMathNumber for numerator/denominator (handles implicit multiplication)
+      var numVal = parseMathNumber(numBr.content);
+      var denVal = parseMathNumber(denBr.content);
+      if (Number.isFinite(numVal) && Number.isFinite(denVal) && denVal !== 0) {
+        result += String(numVal / denVal);
       } else {
         result += text.slice(i, denBr.end + 1);
       }
@@ -221,10 +290,10 @@ function safeReplaceLaTeX(text) {
     } else if (text.slice(i, i + 5) === "\\sqrt" && text[i + 5] === "{") {
       var sqBr = readBraceContent(text, i + 5);
       if (!sqBr) { result += text[i]; i++; continue; }
-      var inner = safeReplaceLaTeX(sqBr.content);
-      var nv = Number(inner);
-      if (Number.isFinite(nv) && nv >= 0) {
-        result += String(Math.sqrt(nv));
+      // Use parseMathNumber for radicand (handles implicit multiplication like 2√3)
+      var innerVal = parseMathNumber(sqBr.content);
+      if (Number.isFinite(innerVal) && innerVal >= 0) {
+        result += String(Math.sqrt(innerVal));
       } else {
         result += text.slice(i, sqBr.end + 1);
       }
@@ -583,42 +652,60 @@ function buildEquationGraphFromText(questionText) {
 }
 
 // --- Enrich Existing Function Graph Spec ---
-
+// GraphEngine has HIGHEST AUTHORITY for function_graph.
+// ALWAYS override AI-generated curves/points/auxiliaryLines/coordinateSystem with deterministic results.
 function enrichFunctionGraphSpec(spec, fallbackQuestionText) {
   if (!spec || spec.type !== "function_graph") return spec;
   var enriched = JSON.parse(JSON.stringify(spec));
 
-  // If curves is missing or has no samples, try to build from functions or questionText
-  if (!Array.isArray(enriched.curves) || !enriched.curves.length || !enriched.curves.some(function(c) { return Array.isArray(c.samples) && c.samples.length > 1; })) {
-    // Try from functions
-    if (Array.isArray(enriched.functions) && enriched.functions.length > 0) {
-      var funcExpr = enriched.functions[0].expression;
+  var bestGraph = null;
+
+  // Try 1: Build from functions[].expression
+  if (Array.isArray(enriched.functions) && enriched.functions.length > 0) {
+    for (var fi = 0; fi < enriched.functions.length && !bestGraph; fi++) {
+      var funcExpr = enriched.functions[fi].expression;
       if (funcExpr && /[xX]/.test(funcExpr)) {
         var graph = buildFunctionGraphFromExpression(funcExpr);
-        if (graph && graph.curves && graph.curves.length) {
-          enriched.curves = graph.curves;
-          if (!enriched.coordinateSystem) enriched.coordinateSystem = graph.coordinateSystem;
-          if (!enriched.points || !Object.keys(enriched.points || {}).length) enriched.points = graph.points;
-          if (!enriched.auxiliaryLines || !enriched.auxiliaryLines.length) enriched.auxiliaryLines = graph.auxiliaryLines;
+        if (graph && graph.curves && graph.curves.length && graph.curves[0].samples && graph.curves[0].samples.length > 1) {
+          bestGraph = graph;
         }
       }
     }
-    // Fallback to questionText
-    if ((!Array.isArray(enriched.curves) || !enriched.curves.length) && fallbackQuestionText) {
-      var eqGraph = buildEquationGraphFromText(fallbackQuestionText);
-      if (eqGraph && eqGraph.curves && eqGraph.curves.length) {
-        enriched.curves = eqGraph.curves;
-        if (!enriched.coordinateSystem) enriched.coordinateSystem = eqGraph.coordinateSystem;
-        if (!enriched.points || !Object.keys(enriched.points || {}).length) enriched.points = eqGraph.points;
-      } else {
-        var funcGraph = buildFunctionGraphFromText(fallbackQuestionText);
-        if (funcGraph && funcGraph.curves && funcGraph.curves.length) {
-          enriched.curves = funcGraph.curves;
-          if (!enriched.coordinateSystem) enriched.coordinateSystem = funcGraph.coordinateSystem;
-          if (!enriched.points || !Object.keys(enriched.points || {}).length) enriched.points = funcGraph.points;
-          if (!enriched.auxiliaryLines || !enriched.auxiliaryLines.length) enriched.auxiliaryLines = funcGraph.auxiliaryLines;
+  }
+
+  // Try 2: Build from questionText
+  if (!bestGraph && fallbackQuestionText) {
+    bestGraph = buildFunctionGraphFromText(fallbackQuestionText);
+  }
+
+  // If graphEngine produced a valid graph, OVERRIDE AI-generated fields
+  if (bestGraph && bestGraph.curves && bestGraph.curves.length && bestGraph.curves[0].samples && bestGraph.curves[0].samples.length > 1) {
+    enriched.curves = bestGraph.curves;
+    enriched.coordinateSystem = bestGraph.coordinateSystem;
+    // Override points with graphEngine deterministic calculations
+    var enginePointIds = Object.keys(bestGraph.points || {});
+    enriched.points = bestGraph.points || {};
+    // Merge extra AI points not computed by graphEngine
+    if (spec.points && typeof spec.points === "object") {
+      Object.keys(spec.points).forEach(function(k) {
+        if (!enginePointIds.includes(k)) {
+          enriched.points[k] = spec.points[k];
         }
-      }
+      });
+    }
+    enriched.auxiliaryLines = bestGraph.auxiliaryLines || [];
+    // Keep AI auxiliaryLines that graphEngine didn't produce
+    var engineAuxIds = (bestGraph.auxiliaryLines || []).map(function(l) { return l.id; });
+    if (Array.isArray(spec.auxiliaryLines)) {
+      spec.auxiliaryLines.forEach(function(l) {
+        if (l && l.id && !engineAuxIds.includes(l.id)) {
+          enriched.auxiliaryLines.push(l);
+        }
+      });
+    }
+    // Update functions with graphEngine labels/ranges
+    if (bestGraph.functions && bestGraph.functions.length) {
+      enriched.functions = bestGraph.functions;
     }
   }
 

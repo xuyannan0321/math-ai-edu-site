@@ -1189,7 +1189,23 @@
         hasSamples = true;
         if (dbg) console.log("[FunctionGraph] local samples generated:", localSamples.length);
       } else {
-        renderEmpty(container, "函数表达式暂不可解析，请查看文字解析。");
+        // No local samples either - draw coordinate system with warning
+        var xStep2 = Number.isFinite(cs.xStep) ? cs.xStep : niceStep(bounds.maxX - bounds.minX);
+        var yStep2 = Number.isFinite(cs.yStep) ? cs.yStep : niceStep(bounds.maxY - bounds.minY);
+        var mapper2 = createMapper(bounds);
+        var svg2 = createBaseSvg("math-visualization-svg function-svg");
+        if (cs.showGrid !== false) renderGraphGrid(svg2, mapper2, bounds, xStep2, yStep2);
+        renderGraphAxes(svg2, mapper2, bounds);
+        if (cs.showTicks !== false || cs.showAxisNumbers !== false) renderGraphTicks(svg2, mapper2, bounds, xStep2, yStep2, cs.showTicks !== false, cs.showAxisNumbers !== false);
+        var warningText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        warningText.setAttribute("x", (mapper2.width / 2).toFixed(1));
+        warningText.setAttribute("y", (mapper2.height / 2).toFixed(1));
+        warningText.setAttribute("text-anchor", "middle");
+        warningText.setAttribute("class", "mv-empty-warning");
+        warningText.textContent = "后端图形采样数据缺失，请查看文字解析。";
+        svg2.append(warningText);
+        container.append(svg2);
+        if (dbg) console.warn("[FunctionGraph] No renderable data, showing coordinate system with warning");
         return;
       }
     }

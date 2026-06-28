@@ -1,4 +1,4 @@
-const { buildFunctionGraphFromText, buildFunctionGraphFromExpression, buildEquationGraphFromText, enrichFunctionGraphSpec } = require("./graphEngine");
+﻿const { buildFunctionGraphFromText, buildFunctionGraphFromExpression, buildEquationGraphFromText, enrichFunctionGraphSpec } = require("./graphEngine");
 const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
 const VISUALIZATION_TYPES = new Set([
   "equation_balance",
@@ -523,24 +523,14 @@ function normalizeNonGeometrySpec(source, type, confidence, questionText) {
     : [];
 
   // Handle function_graph: preserve functions, auxiliaryLines, points
+  // Handle function_graph: ALWAYS enrich via graphEngine after assembly
   if (type === "function_graph") {
-    // If functions is empty but questionText has y=expression, fill it
-    if ((!Array.isArray(source.functions) || !source.functions.length) && questionText) {
-      var graph = buildFunctionGraphFromText(questionText);
-      if (graph && graph.curves && graph.curves.length) {
-        source.functions = graph.functions;
-        if (!source.points || !Object.keys(source.points || {}).length) source.points = graph.points;
-        if (!source.auxiliaryLines || !source.auxiliaryLines.length) source.auxiliaryLines = graph.auxiliaryLines;
-        if (!source.objects || !source.objects.length) source.objects = graph.objects || [];
-        if (!source.curves || !source.curves.length) source.curves = graph.curves;
-        if (!source.coordinateSystem) source.coordinateSystem = graph.coordinateSystem;
-      }
-    }
-    return {
-      type,
+    // Assemble normalized spec first
+    var normalizedSpec = {
+      type: type,
       title: asString(source.title, "函数图像"),
       description: asString(source.description),
-      confidence,
+      confidence: confidence,
       orientation: normalizeOrientation(source.orientation),
       equation: asString(source.equation || ""),
       coordinateSystem: source.coordinateSystem || null,
@@ -548,10 +538,14 @@ function normalizeNonGeometrySpec(source, type, confidence, questionText) {
       functions: Array.isArray(source.functions) ? source.functions.map(function(f) { return { id: asString(f.id), label: asString(f.label), expression: asString(f.expression), range: Array.isArray(f.range) ? f.range.map(Number).filter(Number.isFinite).slice(0, 2) : [-5, 5], role: asString(f.role, "original") }; }) : [],
       points: collectPoints(source),
       auxiliaryLines: Array.isArray(source.auxiliaryLines) ? source.auxiliaryLines.map(function(l) { return { id: asString(l.id), kind: asString(l.kind || l.type, "line"), label: asString(l.label), from: l.from || {}, to: l.to || {}, style: asString(l.style, "dashed"), role: "auxiliary" }; }) : [],
-      objects,
+      objects: objects,
       views: Array.isArray(source.views) ? source.views.map(function(v, i) { var allIds = new Set(objects.map(function(o) { return o.id; })); Array.isArray(source.functions) && source.functions.forEach(function(f) { if (f.id) allIds.add(f.id); }); if (source.points) Object.keys(source.points).forEach(function(k) { allIds.add(k); }); Array.isArray(source.auxiliaryLines) && source.auxiliaryLines.forEach(function(l) { if (l.id) allIds.add(l.id); }); return normalizeVisualizationView(v, i, allIds); }).filter(Boolean) : [],
-      steps,
+      steps: steps,
     };
+
+    // ALWAYS enrich via graphEngine - GraphEngine has highest authority for function_graph
+    // This overrides AI-generated curves/points/auxiliaryLines/coordinateSystem with deterministic results
+    return enrichFunctionGraphSpec(normalizedSpec, questionText);
   }
 
   if (type !== "number_line" && !objects.length) {
@@ -1124,15 +1118,15 @@ function createFunctionGraphFallback(text) {
     return quadSpec;
   }
 
-  // Fallback: basic function_graph with non-empty functions
-  return {
+  // Fallback: basic function_graph with non-empty functions, enrich via graphEngine
+  var minimalSpec = {
     type: "function_graph",
-    title: "\u51FD\u6570\u56FE\u50CF",
-    description: "\u6839\u636E\u9898\u5E72\u51FD\u6570\u8868\u8FBE\u5F0F\u751F\u6210\u7684\u56FE\u50CF\u3002",
+    title: "函数图像",
+    description: "根据题干函数表达式生成的图像。",
     functions: [
       {
         id: "f",
-        label: expression.replace(/^y=/, ""),
+        label: (expression || "").replace(/^y=/, ""),
         expression: expression,
         range: [-8, 8],
         role: "original",
@@ -1146,6 +1140,7 @@ function createFunctionGraphFallback(text) {
     confidence: "medium",
     orientation: normalizeOrientation(null),
   };
+  return enrichFunctionGraphSpec(minimalSpec, text);
 }
 function createSafeFallbackVisualization(fallback) {
   const questionText = fallback.questionText || "";
