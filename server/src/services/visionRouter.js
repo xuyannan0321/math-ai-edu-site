@@ -75,7 +75,7 @@ async function runImageRecognition({ userId, file, preferredProvider, input }) {
         success: true,
         requestId: providerResult.requestId,
         fallbackFrom,
-        usage: providerResult.usage,
+        usage: providerResult.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         latencyMs,
       });
       const result = normalizeVisionResult(providerResult.parsed, input);

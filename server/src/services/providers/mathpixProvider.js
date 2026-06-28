@@ -1,4 +1,4 @@
-﻿const { env } = require("../../config/env");
+const { env } = require("../../config/env");
 
 function isConfigured() {
   return Boolean(
@@ -99,7 +99,7 @@ async function callRecognize(messages) {
 
   return {
     requestId: data.request_id || null,
-    usage: null,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     parsed: {
       recognizedText: recognizedText.trim(),
       formulaText: latexStyled.trim(),
