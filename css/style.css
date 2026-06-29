@@ -1159,6 +1159,20 @@ select.form-control {
   paint-order: stroke;
 }
 
+.function-svg .mv-label-bg {
+  fill: transparent;
+  stroke: none;
+}
+
+.function-svg .mv-label {
+  fill: #1e293b;
+  font-size: 13px;
+  font-weight: 700;
+  stroke: #ffffff;
+  stroke-width: 2.5px;
+  paint-order: stroke;
+}
+
 .mv-segment,
 .mv-function {
   fill: none;

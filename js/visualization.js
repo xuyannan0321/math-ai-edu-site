@@ -62,6 +62,29 @@
     return element;
   }
 
+  function normalizeVisualizationDisplayTitle(title) {
+    var text = String(title || "").trim();
+    if (!text) return "函数图像示意";
+
+    if (/\\(?:frac|sqrt)|\\\(|\\\[|\^/.test(text)) {
+      if (/二次函数|抛物线/.test(text)) return "二次函数图像示意";
+      if (/一次函数/.test(text)) return "一次函数图像示意";
+      if (/反比例/.test(text)) return "反比例函数图像示意";
+      if (/函数/.test(text)) return "函数图像示意";
+      return "图像示意";
+    }
+
+    return text;
+  }
+
+  function normalizeVisualizationDescription(text) {
+    var value = String(text || "").trim();
+    if (/\\(?:frac|sqrt)|\\\(|\\\[|\^/.test(value)) {
+      return "显示函数图像、关键点和辅助线，用于辅助理解作图过程。";
+    }
+    return value;
+  }
+
   function toNumber(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
@@ -2047,8 +2070,8 @@
         return;
       }
 
-      const title = createHtmlElement("h3", "visualization-title", spec.title || "图示讲解");
-      const description = createHtmlElement("p", "visualization-description", spec.description || "");
+      const title = createHtmlElement("h3", "visualization-title", normalizeVisualizationDisplayTitle(spec.title || "图示讲解"));
+      const description = createHtmlElement("p", "visualization-description", normalizeVisualizationDescription(spec.description || ""));
       const board = createHtmlElement("div", "visualization-board");
       container.append(title, description, board);
 

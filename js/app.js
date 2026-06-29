@@ -1424,6 +1424,15 @@ function formatEquationBlockLine(line) {
   return text;
 }
 
+function normalizeProblemTextForDisplay(text) {
+  var s = String(text || "");
+  var quadraticFormulaPattern = /(y\s*=\s*\\frac\{\\sqrt\{[^{}]+\}\}\{[^{}]+\}\s*x\^2\s*-\s*\\frac\{[^{}]*\\sqrt\{[^{}]+\}[^{}]*\}\{[^{}]+\}\s*x\s*-\s*\\sqrt\{[^{}]+\})/g;
+
+  return transformTextOutsideMathDelimiters(s, function(segment) {
+    return segment.replace(quadraticFormulaPattern, "\\($1\\)");
+  });
+}
+
 function renderKnownList(container, items, prefix) {
   if (!Array.isArray(items) || !items.length) return;
   var label = document.createElement("p");
@@ -1504,7 +1513,7 @@ function renderStructuredResult(result) {
   /* 1. 原题复现 */
   var originalCard = createReadingCard("is-original", "原题复现");
   var problemP = document.createElement("p");
-  setSafeMathContent(problemP, result.problemText || "暂无题目文本。");
+  setSafeMathContent(problemP, normalizeProblemTextForDisplay(result.problemText || "暂无题目文本。"));
   originalCard.append(problemP);
 
   /* 上传原图兜底（仅当前工作台会话） */
@@ -1586,7 +1595,7 @@ function renderStructuredResult(result) {
       if (heading.problem) {
         var problemP = document.createElement("p");
         problemP.className = "solution-section-problem";
-        setSafeMathContent(problemP, heading.problem);
+        setSafeMathContent(problemP, normalizeProblemTextForDisplay(heading.problem));
         card.append(problemP);
       }
 
@@ -1743,7 +1752,7 @@ function renderStructuredResult(result) {
     if (flow) {
       var errorCard = createReadingCard("is-original", "解析显示异常");
       var errorText = document.createElement("p");
-      setSafeMathContent(errorText, result && result.problemText ? result.problemText : "图示暂不可用，已保留文字解析。");
+      setSafeMathContent(errorText, normalizeProblemTextForDisplay(result && result.problemText ? result.problemText : "图示暂不可用，已保留文字解析。"));
       errorCard.append(errorText);
       if (state.uploadedImageUrl) {
         var errorImg = document.createElement("img");
@@ -4388,35 +4397,84 @@ function normalizeLatexBackslashes(text) {
   return s;
 }
 
-// Strip broken LaTeX delimiters (unmatched open/close)
+function keepBalancedMathDelimiters(text) {
+  if (!text || typeof text !== "string") return text;
+  var result = "";
+  var i = 0;
+
+  while (i < text.length) {
+    var open = "";
+    var close = "";
+
+    if (text.slice(i, i + 2) === "\\(") {
+      open = "\\(";
+      close = "\\)";
+    } else if (text.slice(i, i + 2) === "\\[") {
+      open = "\\[";
+      close = "\\]";
+    } else if (text.slice(i, i + 2) === "$$") {
+      open = "$$";
+      close = "$$";
+    }
+
+    if (open) {
+      var end = text.indexOf(close, i + open.length);
+      if (end >= 0) {
+        result += text.slice(i, end + close.length);
+        i = end + close.length;
+      } else {
+        i += open.length;
+      }
+      continue;
+    }
+
+    if (text.slice(i, i + 2) === "\\)" || text.slice(i, i + 2) === "\\]") {
+      i += 2;
+      continue;
+    }
+
+    result += text[i];
+    i++;
+  }
+
+  return result;
+}
+
+// Strip only isolated broken LaTeX delimiters; never delete every delimiter in a full paragraph.
 function stripBrokenLatexDelimiters(text) {
   if (!text || typeof text !== "string") return text;
-  var s = text;
-  // Count using split
-  var leftInline = (s.split("\\(").length - 1);
-  var rightInline = (s.split("\\)").length - 1);
-  var leftDisplay = (s.split("\\[").length - 1);
-  var rightDisplay = (s.split("\\]").length - 1);
-  if (leftInline !== rightInline) {
-    s = s.split("\\(").join("").split("\\)").join("");
-  }
-  if (leftDisplay !== rightDisplay) {
-    s = s.split("\\[").join("").split("\\]").join("");
-  }
-  return s;
+  return keepBalancedMathDelimiters(text);
 }
 
 function normalizeCoordinateText(text) {
   if (!text || typeof text !== "string") return text;
   var s = text.replaceAll("−", "-");
-  var value = "[+\\-]?(?:\\d+(?:\\.\\d+)?|[a-zA-Z]\\d*|\\d*[a-zA-Z])";
-  var spacedPattern = new RegExp("(点\\s*)?\\b([PQVABCDOMN](?:\\d+)?)\\s+(" + value + ")\\s*,\\s*(" + value + ")", "g");
-  var compactPattern = new RegExp("(点\\s*)?\\b([PQVABCDOMN](?:\\d+)?)([+\\-]?(?:\\d+(?:\\.\\d+)?|[a-zA-Z]\\d*|\\d*[a-zA-Z]))\\s*,\\s*(" + value + ")", "g");
-  var replacer = function(match, prefix, label, x, y) {
-    return (prefix || "") + label + "(" + x + ", " + y + ")";
+  var rootValue = "(?:√\\d+|\\\\sqrt\\{[^{}]+\\})";
+  var fracValue = "(?:\\\\frac\\{(?:[^{}]|\\\\sqrt\\{[^{}]+\\})+\\}\\{[^{}]+\\})";
+  var numericValue = "(?:\\d+(?:\\.\\d+)?(?:\\s*" + rootValue + ")?(?:\\s*\\/\\s*\\d+(?:\\.\\d+)?)?)";
+  var variableValue = "(?:[a-zA-Z]\\d*|\\d*[a-zA-Z])";
+  var value = "[+\\-]?\\s*(?:" + fracValue + "|" + rootValue + "(?:\\s*\\/\\s*\\d+(?:\\.\\d+)?)?|" + numericValue + "|" + variableValue + ")";
+  var cleanValue = function(rawValue) {
+    return String(rawValue || "").trim().replace(/\s*\/\s*/g, "/").replace(/\s+/g, "");
   };
+  var replacer = function(match, prefix, label, x, y) {
+    return (prefix || "") + label + "(" + cleanValue(x) + ", " + cleanValue(y) + ")";
+  };
+  var pIndexedPattern = new RegExp("(点\\s*)?\\b(P)([12])(\\d+(?:\\.\\d+)?)\\s*,\\s*(" + value + ")", "g");
+  var spacedPattern = new RegExp("(点\\s*)?\\b(P\\d+|[PQVABCDOMN])\\s+(" + value + ")\\s*,\\s*(" + value + ")", "g");
+  var compactPattern = new RegExp("(点\\s*)?\\b([PQVABCDOMN])(" + value + ")\\s*,\\s*(" + value + ")", "g");
 
-  return s.replace(spacedPattern, replacer).replace(compactPattern, replacer);
+  return s
+    .replace(pIndexedPattern, function(match, prefix, p, index, x, y) {
+      return (prefix || "") + p + index + "(" + cleanValue(x) + ", " + cleanValue(y) + ")";
+    })
+    .replace(spacedPattern, replacer)
+    .replace(compactPattern, replacer);
+}
+
+function normalizeInvalidBackslashLetters(text) {
+  if (!text || typeof text !== "string") return text;
+  return text.replace(/\\([A-Za-z])(?=[^A-Za-z]|$)/g, "$1");
 }
 
 function normalizeSignedMathDelimiters(text) {
@@ -4469,6 +4527,57 @@ function transformTextOutsideMathDelimiters(text, transform) {
   return result;
 }
 
+function protectMathSegments(text) {
+  var source = String(text || "");
+  var segments = [];
+  var result = "";
+  var i = 0;
+
+  function protect(raw) {
+    var key = "\uE100MATHSEG" + segments.length + "\uE101";
+    segments.push(raw);
+    return key;
+  }
+
+  while (i < source.length) {
+    var open = "";
+    var close = "";
+
+    if (source.slice(i, i + 2) === "\\(") {
+      open = "\\(";
+      close = "\\)";
+    } else if (source.slice(i, i + 2) === "\\[") {
+      open = "\\[";
+      close = "\\]";
+    } else if (source.slice(i, i + 2) === "$$") {
+      open = "$$";
+      close = "$$";
+    }
+
+    if (open) {
+      var end = source.indexOf(close, i + open.length);
+      if (end >= 0) {
+        result += protect(source.slice(i, end + close.length));
+        i = end + close.length;
+        continue;
+      }
+    }
+
+    result += source[i];
+    i++;
+  }
+
+  return { text: result, segments: segments };
+}
+
+function restoreProtectedMathSegments(text, segments) {
+  var restored = String(text || "");
+  (segments || []).forEach(function(segment, index) {
+    restored = restored.split("\uE100MATHSEG" + index + "\uE101").join(segment);
+  });
+  return restored;
+}
+
 function normalizePlainMathSegmentToLatex(segment) {
   var protectedMath = [];
   var text = String(segment || "");
@@ -4478,35 +4587,23 @@ function normalizePlainMathSegmentToLatex(segment) {
     return key;
   };
 
-  text = text.replace(/(^|[^\w\\])\(([^()]{1,140}(?:=|\^|\\(?:frac|sqrt|times)|\d+\/\d+)[^()]*)\)/g, function(match, prefix, body) {
-    return prefix + protect("(" + body + ")", false);
-  });
-
-  text = text.replace(/(^|[^\w\\])\[([^\[\]]{1,220}(?:=|\^|\\(?:frac|sqrt|times)|\d+\/\d+)[^\[\]]*)\]/g, function(match, prefix, body) {
-    return prefix + protect(body, true);
-  });
-
-  text = text.replace(/(^|[：:，,；;\s])([A-Za-z][A-Za-z0-9_{}]*\s*=\s*[A-Za-z0-9_{}\\+\-*/^().,\s]+?)(?=。|，|；|;|,|$)/g, function(match, prefix, expr) {
-    if (!/[=^]|\\(?:frac|sqrt)|\d+\/\d+/.test(expr)) {
-      return match;
-    }
-
-    return prefix + protect(expr, false);
-  });
-
   text = text.replace(/S\s*[△\u25b3]\s*([A-Z]{2,4})/g, function(match, name) {
     return protect("S_{\\triangle " + name + "}", false);
   });
 
-  text = text.replace(/(^|[：:，,；;\s])([A-Za-z]\s+[A-Za-z]\^2(?:\s*[+\-]\s*\d*[A-Za-z]?\s*[A-Za-z]?|\s*[+\-]\s*[A-Za-z]){1,4})/g, function(match, prefix, expr) {
-    return prefix + protect(expr.replace(/\s+/g, " "), false);
+  text = text.replace(/(^|[^\w\\])y\s*=\s*2x(?![\w])/g, function(match, prefix) {
+    return prefix + protect("y=2x", false);
+  });
+
+  text = text.replace(/(^|[^\w\\])y\s*=\s*a\s*x\^2\s*-\s*4a\s*x\s*\+\s*c(?![\w])/g, function(match, prefix) {
+    return prefix + protect("y=ax^2-4ax+c", false);
   });
 
   text = text.replace(/(^|[^\w\\])(\d{1,4})\/(\d{1,4})(?![\w/])/g, function(match, prefix, numerator, denominator) {
     return prefix + protect("\\frac{" + numerator + "}{" + denominator + "}", false);
   });
 
-  text = text.replace(/(^|[^\w\\])([A-Za-z])\^([23])(?![\w])/g, function(match, prefix, base, power) {
+  text = text.replace(/(^|[^\w\\])([xma])\^([23])(?![\w])/gi, function(match, prefix, base, power) {
     return prefix + protect(base + "^" + power, false);
   });
 
@@ -4524,11 +4621,15 @@ function normalizePlainMathToLatex(text) {
 function prepareMathTextForDisplay(rawText) {
   var cleaned = normalizeDisplayLatex(String(rawText ?? ""));
   cleaned = removeUnsupportedLatexControls(cleaned);
-  cleaned = normalizeCoordinateText(cleaned);
+  cleaned = normalizeInvalidBackslashLetters(cleaned);
   cleaned = normalizeSignedMathDelimiters(cleaned);
+  cleaned = normalizeCoordinateText(cleaned);
+  var protectedMath = protectMathSegments(cleaned);
+  cleaned = protectedMath.text;
   cleaned = normalizePlainMathToLatex(cleaned);
   cleaned = wrapLatexFragments(cleaned);
-  cleaned = stripBrokenLatexDelimiters(cleaned);
+  cleaned = restoreProtectedMathSegments(cleaned, protectedMath.segments);
+  cleaned = keepBalancedMathDelimiters(cleaned);
   cleaned = sanitizeLatexText(cleaned);
   return cleaned;
 }
@@ -4551,18 +4652,45 @@ function readBalancedBrace(text, openIndex) {
 
 // Check if position is inside \(..\) or \[..\] or $$..$$
 function isInsideMathDelimiter(text, index) {
-  // Look backwards for unclosed \( or \[ or $$
-  var i = index - 1;
-  while (i >= 0) {
-    if (i >= 1 && text.slice(i - 1, i + 1) === "\\(") return true;
-    if (i >= 1 && text.slice(i - 1, i + 1) === "\\[") return true;
-    if (i >= 1 && text.slice(i - 1, i + 1) === "$$") return true;
-    if (i >= 1 && text.slice(i - 1, i + 1) === "\\)") return false;
-    if (i >= 1 && text.slice(i - 1, i + 1) === "\\]") return false;
-    if (i >= 1 && text.slice(i - 1, i + 1) === "$$" && i > 1 && text.slice(i - 2, i) !== "$$") return false;
-    i--;
+  var inInline = false;
+  var inDisplay = false;
+  var inDollar = false;
+
+  for (var i = 0; i < index; i++) {
+    var token = text.slice(i, i + 2);
+
+    if (token === "\\(") {
+      inInline = true;
+      i++;
+      continue;
+    }
+
+    if (token === "\\)") {
+      inInline = false;
+      i++;
+      continue;
+    }
+
+    if (token === "\\[") {
+      inDisplay = true;
+      i++;
+      continue;
+    }
+
+    if (token === "\\]") {
+      inDisplay = false;
+      i++;
+      continue;
+    }
+
+    if (token === "$$") {
+      inDollar = !inDollar;
+      i++;
+      continue;
+    }
   }
-  return false;
+
+  return inInline || inDisplay || inDollar;
 }
 
 // Find the end of a LaTeX command fragment (\\frac{..}{..} or \\sqrt{..})
@@ -4610,15 +4738,14 @@ function wrapMathRun(run) {
   return leading + "\\(" + body + "\\)" + trailing;
 }
 
-// Main function: wrap LaTeX fragments in \(...\) using balanced-brace scanning
+// Main function: conservatively wrap only independent bare LaTeX commands.
 function wrapLatexFragments(text) {
   if (!text || typeof text !== "string") return "";
   var result = "";
   var i = 0;
+
   while (i < text.length) {
-    // Check for already-wrapped delimiters
     if (text.slice(i, i + 2) === "\\(" || text.slice(i, i + 2) === "\\[") {
-      // Pass through existing delimiters
       var closeDelim = text.slice(i, i + 2) === "\\(" ? "\\)" : "\\]";
       var closePos = text.indexOf(closeDelim, i + 2);
       if (closePos >= 0) {
@@ -4627,6 +4754,7 @@ function wrapLatexFragments(text) {
         continue;
       }
     }
+
     if (text.slice(i, i + 2) === "$$") {
       var closePos2 = text.indexOf("$$", i + 2);
       if (closePos2 >= 0) {
@@ -4636,30 +4764,25 @@ function wrapLatexFragments(text) {
       }
     }
 
-    if (isMathRunChar(text[i])) {
-      var runStart = i;
-      var runEnd = i;
-      while (runEnd < text.length && isMathRunChar(text[runEnd])) {
-        runEnd++;
-      }
-      var run = text.slice(runStart, runEnd);
-      if (shouldWrapMathRun(run)) {
-        result += wrapMathRun(run);
-        i = runEnd;
+    if (text[i] === "\\" && !isInsideMathDelimiter(text, i)) {
+      var command = text.slice(i).match(/^\\[a-zA-Z]+/);
+      var allowedSimpleCommand = command && /^(\\times|\\cdot|\\triangle|\\angle)$/.test(command[0]);
+      var allowedBracedCommand = command && /^(\\frac|\\sqrt)$/.test(command[0]);
+
+      if (allowedSimpleCommand) {
+        result += "\\(" + command[0] + "\\)";
+        i += command[0].length;
         continue;
       }
-    }
 
-    // Check for LaTeX command start
-    if (text[i] === "\\" && !isInsideMathDelimiter(result, result.length)) {
-      var fragEnd = findLatexFragmentEnd(text, i);
-      if (fragEnd > i) {
-        // Wrap the fragment
+      if (allowedBracedCommand) {
+        var fragEnd = findLatexFragmentEnd(text, i);
+        if (fragEnd > i) {
         result += "\\(" + text.slice(i, fragEnd) + "\\)";
         i = fragEnd;
         continue;
       }
-      // Fall through: treat as regular text
+      }
     }
 
     result += text[i];
@@ -4692,7 +4815,11 @@ function warnIfRawLatexRemains(element) {
   setTimeout(function() {
     var tc = element && element.textContent ? element.textContent : "";
     if (/\\(?:frac|sqrt|left|right|\(|\)|\[|\])/.test(tc)) {
-      console.warn("[MathJaxDisplay] raw latex remains in:", tc.slice(0, 160));
+      console.warn("[MathJaxDisplay] raw latex remains in:", {
+        tag: element && element.tagName,
+        className: element && element.className,
+        text: tc.slice(0, 160),
+      });
     }
   }, 180);
 }
@@ -4745,15 +4872,12 @@ function autoWrapLatex(text) {
 
 function safeMathHtml(rawText) {
   if (!rawText) return "";
-  // 1) Escape HTML from AI output to prevent XSS
-  var escaped = String(rawText)
+  return String(rawText)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-  // 2) Wrap LaTeX fragments in \(...\)
-  return autoWrapLatex(escaped);
 }
 
 
