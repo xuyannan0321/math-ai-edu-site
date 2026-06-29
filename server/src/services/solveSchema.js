@@ -127,6 +127,24 @@ function isComplexFunctionProblem(questionText = "", source = {}) {
     || (questionSections.length >= 2 && hasRealMultiQuestion);
 }
 
+function isComplexFunctionComprehensiveProblem(questionText = "", source = {}) {
+  const text = asString(questionText || source.problemText);
+  const signals = [
+    /双倍比例点/.test(text),
+    /抛物线/.test(text),
+    /y\s*1|y\s*2|y\s*3/i.test(text),
+    /L\s*1|L\s*2/i.test(text),
+    /中心对称/.test(text),
+    /面积/.test(text),
+    /点\s*P|P\s*[（(]/.test(text),
+    /点\s*Q|Q\s*[（(]/.test(text),
+    /点\s*M|M\s*[（(]/.test(text),
+    hasMultiQuestionMarkers(text),
+  ].filter(Boolean).length;
+
+  return signals >= 3;
+}
+
 function getFunctionCurveCount(spec = {}) {
   const curves = Array.isArray(spec.curves) ? spec.curves.length : 0;
   const functions = Array.isArray(spec.functions) ? spec.functions.length : 0;
@@ -623,6 +641,10 @@ function normalizeNonGeometrySpec(source, type, confidence, questionText) {
       views: Array.isArray(source.views) ? source.views.map(function(v, i) { var allIds = new Set(objects.map(function(o) { return o.id; })); Array.isArray(source.functions) && source.functions.forEach(function(f) { if (f.id) allIds.add(f.id); }); if (source.points) Object.keys(source.points).forEach(function(k) { allIds.add(k); }); Array.isArray(source.auxiliaryLines) && source.auxiliaryLines.forEach(function(l) { if (l.id) allIds.add(l.id); }); return normalizeVisualizationView(v, i, allIds); }).filter(Boolean) : [],
       steps: steps,
     };
+
+    if (isComplexFunctionComprehensiveProblem(questionText, source)) {
+      return createNoneVisualizationSpec("本题为复杂函数综合题，当前暂不自动重绘完整图，避免误导。请以原题图和文字解析为准。");
+    }
 
     if (isComplexFunctionProblem(questionText, source)) {
       if (!isComplexFunctionSpecComplete(normalizedSpec, questionText)) {
@@ -1266,7 +1288,12 @@ function normalizeVisualizationSpec(value, fallback = {}) {
 
   // For y= or f(x)= problems, force function_graph even if AI says none
   var isFuncProblem = /y\s*=|f\s*\(\s*x\s*\)\s*=|一次函数|二次函数|抛物线|函数图像|画出函数/i.test(fallback.questionText || "");
-  if (type === "none" && isFuncProblem && !isComplexFunctionProblem(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })) {
+  if (
+    type === "none"
+    && isFuncProblem
+    && !isComplexFunctionComprehensiveProblem(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })
+    && !isComplexFunctionProblem(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })
+  ) {
     var funcGraph = createFunctionGraphFallback(fallback.questionText || "");
     if (funcGraph) { return enrichFunctionGraphSpec(funcGraph, fallback.questionText || ""); }
   }

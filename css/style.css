@@ -5767,6 +5767,7 @@ body.is-preview-open {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
+  overflow-x: hidden;
 }
 
 .solution-equation-block-title {
@@ -5777,10 +5778,20 @@ body.is-preview-open {
 }
 
 .solution-equation-line {
-  margin: 4px 0;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   font-size: 15px;
   text-align: center;
   font-family: "Cambria Math", serif;
+}
+
+.solution-equation-line mjx-container {
+  max-width: 100%;
 }
 
 /* 宸茬煡 / 杈呭姪绾垮垪琛?*/
@@ -5814,11 +5825,21 @@ body.is-preview-open {
 }
 
 .uploaded-image-fallback {
+  width: 100%;
+  max-width: 920px;
   margin-top: 12px;
+  margin-right: auto;
+  margin-left: auto;
   padding: 8px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
+}
+
+.uploaded-image-fallback.is-solution-original {
+  padding: 12px;
+  background: #ffffff;
+  border-color: #bfdbfe;
 }
 
 .uploaded-image-fallback img {

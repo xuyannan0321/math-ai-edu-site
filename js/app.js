@@ -1320,7 +1320,7 @@ function appendVisualizationForView(container, spec, viewId, fallbackTitle = "�
       ? "当前仍是 OCR 识别草稿阶段，尚未生成正式解析和 visualizationSpec。"
       : getVisualizationReliabilityReason(spec, questionText, state.currentSolveResult);
     board.append(reason);
-    return;
+    return false;
   }
 
   const vizOptions = {
@@ -1333,7 +1333,10 @@ function appendVisualizationForView(container, spec, viewId, fallbackTitle = "�
     window.MathVisualization.render(board, spec, vizOptions);
   } else {
     board.textContent = "暂无可靠图示，可查看文字解析。";
+    return false;
   }
+
+  return true;
 }
 
 function appendStepContent(card, step) {
@@ -1474,6 +1477,7 @@ function renderStructuredResult(result) {
 
   try {
   var originalVisualizationSpec = result.visualizationSpec || null;
+  var isComplexFunctionComprehensive = isComplexFunctionComprehensiveText(result.problemText || "");
   var originalSpecRenderable = hasRenderableVisualizationSpec(originalVisualizationSpec);
   var originalSpecReliable = originalSpecRenderable
     && isVisualizationSpecReliable(originalVisualizationSpec, result.problemText, result);
@@ -1538,6 +1542,13 @@ function renderStructuredResult(result) {
   }
   originalCard.append(tags);
   flow.append(originalCard);
+
+  if (isComplexFunctionComprehensive && state.uploadedImageUrl) {
+    var originalImageCard = createOriginalImageFallbackCard("复杂函数综合题暂以原题图为准，后续可按小问生成专用示意图。");
+    if (originalImageCard) {
+      flow.append(originalImageCard);
+    }
+  }
 
   /* 2. 本题考点 */
   var knowledgeCard = createReadingCard("is-knowledge", "本题考点");
@@ -1641,11 +1652,9 @@ function renderStructuredResult(result) {
         viewId = nonOrigViews[idx] ? nonOrigViews[idx].id : null;
       }
       if (viewId) {
-        appendVisualizationForView(card, visualizationSpec, viewId, "本问图示");
-        visualizationShown = true;
+        visualizationShown = appendVisualizationForView(card, visualizationSpec, viewId, "本问图示") || visualizationShown;
       } else if (window.MathVisualization && visualizationSpec && visualizationSpec.type !== "none") {
-        appendVisualizationForView(card, visualizationSpec, null, "本问图示");
-        visualizationShown = true;
+        visualizationShown = appendVisualizationForView(card, visualizationSpec, null, "本问图示") || visualizationShown;
       }
 
       flow.append(card);
@@ -1660,8 +1669,7 @@ function renderStructuredResult(result) {
 
       var viewId = getStepDiagramViewId(step, views, index);
       if (viewId) {
-        appendVisualizationForView(card, visualizationSpec, viewId, "本步图示");
-        visualizationShown = true;
+        visualizationShown = appendVisualizationForView(card, visualizationSpec, viewId, "本步图示") || visualizationShown;
       }
 
       flow.append(card);
@@ -1728,6 +1736,7 @@ function renderStructuredResult(result) {
   if (window.MathJax && window.MathJax.typesetPromise) {
     window.MathJax.typesetPromise([flow]).catch(function() {});
   }
+  warnRemainingRawLatex(flow);
 
 } catch (renderError) {
     debugLog("renderStructuredResult error:", renderError);
@@ -1749,6 +1758,7 @@ function renderStructuredResult(result) {
       if (window.MathJax && window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise([flow]).catch(function() {});
       }
+      warnRemainingRawLatex(flow);
     }
     showToast("图示暂不可用，已保留文字解析。");
   }
@@ -4468,12 +4478,24 @@ function normalizePlainMathSegmentToLatex(segment) {
     return key;
   };
 
+  text = text.replace(/(^|[^\w\\])\(([^()]{1,140}(?:=|\^|\\(?:frac|sqrt|times)|\d+\/\d+)[^()]*)\)/g, function(match, prefix, body) {
+    return prefix + protect("(" + body + ")", false);
+  });
+
+  text = text.replace(/(^|[^\w\\])\[([^\[\]]{1,220}(?:=|\^|\\(?:frac|sqrt|times)|\d+\/\d+)[^\[\]]*)\]/g, function(match, prefix, body) {
+    return prefix + protect(body, true);
+  });
+
   text = text.replace(/(^|[：:，,；;\s])([A-Za-z][A-Za-z0-9_{}]*\s*=\s*[A-Za-z0-9_{}\\+\-*/^().,\s]+?)(?=。|，|；|;|,|$)/g, function(match, prefix, expr) {
     if (!/[=^]|\\(?:frac|sqrt)|\d+\/\d+/.test(expr)) {
       return match;
     }
 
     return prefix + protect(expr, false);
+  });
+
+  text = text.replace(/S\s*[△\u25b3]\s*([A-Z]{2,4})/g, function(match, name) {
+    return protect("S_{\\triangle " + name + "}", false);
   });
 
   text = text.replace(/(^|[：:，,；;\s])([A-Za-z]\s+[A-Za-z]\^2(?:\s*[+\-]\s*\d*[A-Za-z]?\s*[A-Za-z]?|\s*[+\-]\s*[A-Za-z]){1,4})/g, function(match, prefix, expr) {
@@ -4505,6 +4527,7 @@ function prepareMathTextForDisplay(rawText) {
   cleaned = normalizeCoordinateText(cleaned);
   cleaned = normalizeSignedMathDelimiters(cleaned);
   cleaned = normalizePlainMathToLatex(cleaned);
+  cleaned = wrapLatexFragments(cleaned);
   cleaned = stripBrokenLatexDelimiters(cleaned);
   cleaned = sanitizeLatexText(cleaned);
   return cleaned;
@@ -4672,6 +4695,36 @@ function warnIfRawLatexRemains(element) {
       console.warn("[MathJaxDisplay] raw latex remains in:", tc.slice(0, 160));
     }
   }, 180);
+}
+
+function warnRemainingRawLatex(container) {
+  if (typeof localStorage === "undefined" || localStorage.getItem("mathAiEduDebug") !== "1" || !container) {
+    return;
+  }
+
+  setTimeout(function() {
+    var nodes = Array.from(container.querySelectorAll("*"))
+      .filter(function(element) {
+        return element.tagName !== "TEXTAREA"
+          && !element.closest("textarea")
+          && !element.closest(".ocr-review-card")
+          && !element.closest(".recognized-text-panel");
+      });
+
+    nodes.forEach(function(element) {
+      var text = element.textContent || "";
+      var hasRawCommand = /\\(?:frac|sqrt|times|left|right|\(|\)|\[|\])/.test(text);
+      var hasRawBracketFormula = /(^|[\s，,：:；;])\[[^\]]*(?:=|\^|\\frac|\\sqrt|\\times)[^\]]*\]/.test(text);
+
+      if (hasRawCommand || hasRawBracketFormula) {
+        console.warn("[MathJaxDisplay] remaining raw LaTeX:", {
+          tag: element.tagName,
+          className: element.className,
+          text: text.slice(0, 180),
+        });
+      }
+    });
+  }, 260);
 }
 
 // Unified math text rendering for any element
