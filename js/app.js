@@ -942,6 +942,24 @@ function isComplexFunctionQuestionText(text) {
     || getFunctionDefinitionCount(value) > 1;
 }
 
+function isComplexFunctionComprehensiveText(text) {
+  var value = String(text || "");
+  var signals = [
+    /双倍比例点/.test(value),
+    /抛物线/.test(value),
+    /y\s*1|y\s*2|y\s*3/i.test(value),
+    /L\s*1|L\s*2/i.test(value),
+    /中心对称/.test(value),
+    /面积/.test(value),
+    /点\s*P|P\s*[（(]/.test(value),
+    /点\s*Q|Q\s*[（(]/.test(value),
+    /点\s*M|M\s*[（(]/.test(value),
+    isComplexMultiQuestionText(value),
+  ].filter(Boolean).length;
+
+  return signals >= 3 && !isSingleFunctionGraphText(value);
+}
+
 function getFunctionDefinitionCount(text) {
   var compact = String(text || "").replace(/\s+/g, "");
   var matches = compact.match(/(?:y|f\([xX]\))=/g);
@@ -994,6 +1012,10 @@ function getVisualizationReliabilityReason(spec, questionText, result) {
     return "当前仍是 OCR 识别草稿阶段，尚未生成正式解析和 visualizationSpec。";
   }
 
+  if (isComplexFunctionComprehensiveText(text)) {
+    return "本题为复杂函数综合题，当前暂不自动重绘完整图，避免误导。请以原题图和文字解析为准。";
+  }
+
   if (isComplexFunctionQuestionText(text)) {
     return "本题为复杂多问题，当前图示数据不足，暂不自动重绘完整图。请查看文字解析，或后续按小问生成图示。";
   }
@@ -1021,6 +1043,10 @@ function isVisualizationSpecReliable(spec, questionText, result) {
   var mentionsMultipleCurves = /L\s*1|L\s*2|y\s*1|y\s*2|y\s*3/i.test(text);
   var mentionsPointRelations = /面积|双倍比例点|中心对称/.test(text);
   var complex = isComplexFunctionQuestionText(text);
+
+  if (isComplexFunctionComprehensiveText(text)) {
+    return false;
+  }
 
   if (isSingleFunctionGraphText(text) && hasDenseSampleCurve(spec)) {
     return true;
@@ -1240,6 +1266,23 @@ function createReadingList(items, emptyText) {
   return list;
 }
 
+function createOriginalImageFallbackCard(description) {
+  if (!state.uploadedImageUrl) {
+    return null;
+  }
+
+  var card = createReadingCard("is-original-image", "原题图", description || "复杂题暂以原图为准，后续可按小问生成专用示意图。");
+  var imgWrap = document.createElement("div");
+  imgWrap.className = "uploaded-image-fallback is-solution-original";
+  var img = document.createElement("img");
+  img.src = state.uploadedImageUrl;
+  img.alt = "上传的题目原图";
+  img.className = "problem-original-image";
+  imgWrap.append(img);
+  card.append(imgWrap);
+  return card;
+}
+
 function getVisualizationViews(spec) {
   return Array.isArray(spec?.views) ? spec.views.filter((view) => view && view.id) : [];
 }
@@ -1349,11 +1392,33 @@ function renderEquationBlocks(container, blocks) {
     (block.lines || []).forEach(function(line) {
       var eqLine = document.createElement("p");
       eqLine.className = "solution-equation-line";
-      setSafeMathContent(eqLine, line);
+      setSafeMathContent(eqLine, formatEquationBlockLine(line));
       wrapper.append(eqLine);
     });
     container.append(wrapper);
   });
+}
+
+function formatEquationBlockLine(line) {
+  var text = String(line || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  if (/^\\\[([\s\S]*)\\\]$/.test(text) || /^\$\$([\s\S]*)\$\$$/.test(text)) {
+    return text;
+  }
+
+  if (/^\\\(([\s\S]*)\\\)$/.test(text)) {
+    return "\\[" + text.replace(/^\\\(|\\\)$/g, "") + "\\]";
+  }
+
+  if (/[=^]|\\(?:frac|sqrt)|\d+\/\d+/.test(text) && !/[。？！]/.test(text)) {
+    return "\\[" + text + "\\]";
+  }
+
+  return text;
 }
 
 function renderKnownList(container, items, prefix) {
@@ -4352,11 +4417,94 @@ function normalizeSignedMathDelimiters(text) {
   });
 }
 
+function transformTextOutsideMathDelimiters(text, transform) {
+  var source = String(text || "");
+  var result = "";
+  var i = 0;
+
+  while (i < source.length) {
+    var open = "";
+    var close = "";
+
+    if (source.slice(i, i + 2) === "\\(") {
+      open = "\\(";
+      close = "\\)";
+    } else if (source.slice(i, i + 2) === "\\[") {
+      open = "\\[";
+      close = "\\]";
+    } else if (source.slice(i, i + 2) === "$$") {
+      open = "$$";
+      close = "$$";
+    }
+
+    if (open) {
+      var closeIndex = source.indexOf(close, i + open.length);
+      if (closeIndex >= 0) {
+        result += source.slice(i, closeIndex + close.length);
+        i = closeIndex + close.length;
+        continue;
+      }
+    }
+
+    var nextIndexes = ["\\(", "\\[", "$$"]
+      .map(function(mark) {
+        var index = source.indexOf(mark, i + 1);
+        return index >= 0 ? index : source.length;
+      });
+    var next = Math.min.apply(null, nextIndexes);
+    result += transform(source.slice(i, next));
+    i = next;
+  }
+
+  return result;
+}
+
+function normalizePlainMathSegmentToLatex(segment) {
+  var protectedMath = [];
+  var text = String(segment || "");
+  var protect = function(body, display) {
+    var key = "\uE000MATH" + protectedMath.length + "\uE001";
+    protectedMath.push((display ? "\\[" : "\\(") + body.trim() + (display ? "\\]" : "\\)"));
+    return key;
+  };
+
+  text = text.replace(/(^|[：:，,；;\s])([A-Za-z][A-Za-z0-9_{}]*\s*=\s*[A-Za-z0-9_{}\\+\-*/^().,\s]+?)(?=。|，|；|;|,|$)/g, function(match, prefix, expr) {
+    if (!/[=^]|\\(?:frac|sqrt)|\d+\/\d+/.test(expr)) {
+      return match;
+    }
+
+    return prefix + protect(expr, false);
+  });
+
+  text = text.replace(/(^|[：:，,；;\s])([A-Za-z]\s+[A-Za-z]\^2(?:\s*[+\-]\s*\d*[A-Za-z]?\s*[A-Za-z]?|\s*[+\-]\s*[A-Za-z]){1,4})/g, function(match, prefix, expr) {
+    return prefix + protect(expr.replace(/\s+/g, " "), false);
+  });
+
+  text = text.replace(/(^|[^\w\\])(\d{1,4})\/(\d{1,4})(?![\w/])/g, function(match, prefix, numerator, denominator) {
+    return prefix + protect("\\frac{" + numerator + "}{" + denominator + "}", false);
+  });
+
+  text = text.replace(/(^|[^\w\\])([A-Za-z])\^([23])(?![\w])/g, function(match, prefix, base, power) {
+    return prefix + protect(base + "^" + power, false);
+  });
+
+  protectedMath.forEach(function(value, index) {
+    text = text.split("\uE000MATH" + index + "\uE001").join(value);
+  });
+
+  return text;
+}
+
+function normalizePlainMathToLatex(text) {
+  return transformTextOutsideMathDelimiters(text, normalizePlainMathSegmentToLatex);
+}
+
 function prepareMathTextForDisplay(rawText) {
   var cleaned = normalizeDisplayLatex(String(rawText ?? ""));
   cleaned = removeUnsupportedLatexControls(cleaned);
   cleaned = normalizeCoordinateText(cleaned);
   cleaned = normalizeSignedMathDelimiters(cleaned);
+  cleaned = normalizePlainMathToLatex(cleaned);
   cleaned = stripBrokenLatexDelimiters(cleaned);
   cleaned = sanitizeLatexText(cleaned);
   return cleaned;

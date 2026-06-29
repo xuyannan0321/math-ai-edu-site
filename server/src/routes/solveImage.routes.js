@@ -37,6 +37,68 @@ function validateImageInput(body) {
   };
 }
 
+function normalizeRecognitionText(text) {
+  return asString(text)
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ");
+}
+
+function hasMultiPartMarkers(text) {
+  const normalized = normalizeRecognitionText(text);
+  const compact = normalized.replace(/\s+/g, "");
+  const parenthesizedParts = compact.match(/(?:（\d{1,2}）|\(\d{1,2}\))/g) || [];
+  const explicitQuestions = compact.match(/第[一二三四五六七八九十\d]{1,3}问/g) || [];
+
+  return parenthesizedParts.length >= 2
+    || (explicitQuestions.some((item) => /[一1]/.test(item)) && explicitQuestions.some((item) => /[二2]/.test(item)));
+}
+
+function countIndependentQuestionMarkers(text) {
+  const normalized = normalizeRecognitionText(text);
+  const lineStartMarkers = normalized.match(/(?:^|\n)\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})[\.．、]\s*(?![）)])\S/g) || [];
+  const explicitBigQuestions = normalized.match(/(?:^|\n)\s*第\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s*题/g) || [];
+
+  return lineStartMarkers.length + explicitBigQuestions.length;
+}
+
+function isMultiPartSingleProblem(text) {
+  const normalized = normalizeRecognitionText(text);
+  const independentMarkerCount = countIndependentQuestionMarkers(normalized);
+  const sharedObjectSignal = /拓展思考|抛物线\s*L\s*1|L\s*1|L\s*2|当\s*L\s*1\s*与\s*L\s*2|求\s*t\s*的值|点\s*P|点\s*Q|点\s*M|双倍比例点|中心对称|面积|平行于\s*x\s*轴/i.test(normalized);
+
+  return hasMultiPartMarkers(normalized)
+    && independentMarkerCount < 5
+    && (sharedObjectSignal || normalized.length < 3500);
+}
+
+function isIndependentMultiProblemPage(text) {
+  const normalized = normalizeRecognitionText(text);
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (/共\s*\d{1,2}\s*小题|解答题\s*[（(]\s*共|试卷|满分|考试时间/.test(normalized)) {
+    return true;
+  }
+
+  const independentMarkerCount = countIndependentQuestionMarkers(normalized);
+  const mathCommandCount = (normalized.match(/\\(?:frac|sqrt|angle|triangle|overline|begin)\b/g) || []).length;
+  const lineCount = normalized.split("\n").filter((line) => line.trim().length >= 8).length;
+  const topicSignals = [
+    /函数|抛物线|一次函数|二次函数/,
+    /三角形|圆|相似|全等/,
+    /方程|不等式|代数式/,
+    /概率|统计|频数|平均数/,
+  ].filter((pattern) => pattern.test(normalized)).length;
+
+  if (independentMarkerCount >= 5) {
+    return true;
+  }
+
+  return independentMarkerCount >= 4 && lineCount >= 8 && (mathCommandCount >= 5 || topicSignals >= 3);
+}
+
 function detectMultipleQuestions(text) {
   const normalized = asString(text)
     .replace(/\r/g, "\n")
@@ -45,6 +107,12 @@ function detectMultipleQuestions(text) {
   if (!normalized) {
     return false;
   }
+
+  if (isMultiPartSingleProblem(normalized)) {
+    return false;
+  }
+
+  return isIndependentMultiProblemPage(normalized);
 
   const markers = [
     /(?:^|\n)\s*(?:\d{1,2}|[一二三四五六七八九十]+)[\.．、)]\s*\S/g,
