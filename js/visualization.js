@@ -316,6 +316,90 @@
     return Array.isArray(spec && spec.views) ? spec.views : [];
   }
 
+  function getViewById(spec, viewId) {
+    if (!viewId) {
+      return null;
+    }
+
+    return getViews(spec).find((view) => view && view.id === viewId) || null;
+  }
+
+  function getViewShowSet(view, category) {
+    if (!view || !view.showObjects) {
+      return null;
+    }
+
+    if (Array.isArray(view.showObjects)) {
+      if (!view.showObjects.length) {
+        return null;
+      }
+      return new Set(view.showObjects);
+    }
+
+    if (typeof view.showObjects === "object" && Array.isArray(view.showObjects[category])) {
+      return new Set(view.showObjects[category]);
+    }
+
+    return null;
+  }
+
+  function hasSampledCurves(curves) {
+    return Array.isArray(curves) && curves.some(function(curve) {
+      return curve && Array.isArray(curve.samples) && curve.samples.length > 1;
+    });
+  }
+
+  function filterPointMapBySet(points, allowed) {
+    if (!allowed) {
+      return points || {};
+    }
+
+    const filtered = {};
+    Object.entries(points || {}).forEach(([id, point]) => {
+      if (allowed.has(id)) {
+        filtered[id] = point;
+      }
+    });
+    return filtered;
+  }
+
+  function filterFunctionGraphSpecByView(spec, viewId) {
+    const view = getViewById(spec, viewId);
+
+    if (!viewId || !view || view.type === "notice") {
+      return spec;
+    }
+
+    const curveIds = getViewShowSet(view, "curves");
+    const functionIds = getViewShowSet(view, "functions") || curveIds;
+    const pointIds = getViewShowSet(view, "points");
+    const auxiliaryLineIds = getViewShowSet(view, "auxiliaryLines");
+
+    const filtered = {
+      ...spec,
+      curves: curveIds
+        ? (spec.curves || []).filter((curve) => curve && curveIds.has(curve.id))
+        : (spec.curves || []),
+      functions: functionIds
+        ? (spec.functions || []).filter((fn) => fn && functionIds.has(fn.id))
+        : (spec.functions || []),
+      points: filterPointMapBySet(spec.points, pointIds),
+      auxiliaryLines: auxiliaryLineIds
+        ? (spec.auxiliaryLines || []).filter((line) => line && auxiliaryLineIds.has(line.id))
+        : (spec.auxiliaryLines || []),
+      views: [view],
+    };
+
+    if (spec.type === "function_graph" && hasSampledCurves(spec.curves) && !hasSampledCurves(filtered.curves)) {
+      return {
+        ...spec,
+        views: view ? [view] : spec.views,
+      };
+    }
+
+    return filtered;
+  }
+
   function validateGeometrySpec(spec) {
     if (spec.type === "none" || spec.confidence === "low") {
       return {
@@ -1403,6 +1487,8 @@
     var curves = Array.isArray(spec.curves) ? spec.curves : [];
     var hasSamples = curves.some(function(c) { return Array.isArray(c.samples) && c.samples.length > 1; });
     var size = getGraphSize(spec, container);
+    var hasDrawableObjects = Object.keys(spec.points || {}).length > 0
+      || (Array.isArray(spec.auxiliaryLines) && spec.auxiliaryLines.length > 0);
 
     if (!hasSamples) {
       // Fallback: try local evaluation from functions expressions
@@ -1413,7 +1499,7 @@
         curves = [{ id: "local", kind: "unknown", samples: localSamples }];
         hasSamples = true;
         if (dbg) console.log("[FunctionGraph] local samples generated:", localSamples.length);
-      } else {
+      } else if (!hasDrawableObjects) {
         // No local samples either - draw coordinate system with warning
         var xStep2 = Number.isFinite(cs.xStep) ? cs.xStep : niceStep(bounds.maxX - bounds.minX);
         var yStep2 = Number.isFinite(cs.yStep) ? cs.yStep : niceStep(bounds.maxY - bounds.minY);
@@ -1432,6 +1518,8 @@
         container.append(svg2);
         if (dbg) console.warn("[FunctionGraph] No renderable data, showing coordinate system with warning");
         return;
+      } else if (dbg) {
+        console.log("[FunctionGraph] No curves, drawing point/auxiliary-line template");
       }
     }
 
@@ -1474,8 +1562,12 @@
         }
       });
       if (pathParts.length > 1) {
-        var cls = ci === 0 ? "mv-function" : "mv-function-secondary";
-        svg.append(createSvgElement("path", { d: "M" + pathParts.join("L"), class: cls }));
+        var cls = ci === 0 ? "mv-function" : "mv-function mv-function-secondary";
+        svg.append(createSvgElement("path", {
+          d: "M" + pathParts.join("L"),
+          class: cls,
+          "data-curve-id": curve.id || "",
+        }));
         if (dbg) console.log("[FunctionGraph] curve[" + ci + "] " + (curve.id || "?") + " samples:", curve.samples.length, "path pts:", pathParts.length, "APPENDED");
       } else {
         if (dbg) console.warn("[FunctionGraph] curve[" + ci + "] skipped - no valid projected points");
@@ -2064,19 +2156,32 @@
 
     try {
       const spec = normalizeVisualizationSpec(rawSpec);
+      const activeView = options && options.viewId ? getViewById(spec, options.viewId) : null;
 
       if (!spec || spec.type === "none" || !SAFE_TYPES.has(spec.type)) {
         renderEmpty(container, spec?.description || "暂无可靠图示，可查看文字解析。", options && options.uploadedImageUrl ? options.uploadedImageUrl : null);
         return;
       }
 
-      const title = createHtmlElement("h3", "visualization-title", normalizeVisualizationDisplayTitle(spec.title || "图示讲解"));
-      const description = createHtmlElement("p", "visualization-description", normalizeVisualizationDescription(spec.description || ""));
+      const titleText = activeView?.title || spec.title || "图示讲解";
+      const descriptionText = activeView?.description || spec.description || "";
+      const title = createHtmlElement("h3", "visualization-title", normalizeVisualizationDisplayTitle(titleText));
+      const description = createHtmlElement("p", "visualization-description", normalizeVisualizationDescription(descriptionText));
       const board = createHtmlElement("div", "visualization-board");
       container.append(title, description, board);
 
+      if (options && options.viewId && !activeView) {
+        renderEmpty(board, "当前小问暂无可靠图示数据。", options && options.uploadedImageUrl ? options.uploadedImageUrl : null);
+        return;
+      }
+
+      if (activeView && activeView.type === "notice") {
+        renderEmpty(board, activeView.description || "当前小问暂不自动重绘完整图，请查看文字解析。");
+        return;
+      }
+
       if (spec.type === "function_graph") {
-        renderFunctionGraph(board, spec, options);
+        renderFunctionGraph(board, filterFunctionGraphSpecByView(spec, options && options.viewId), options);
       } else if (spec.type === "geometry") {
         var geomOptions = Object.assign({}, options || {}, { showGrid: false });
         renderGeometry(board, spec, geomOptions);
@@ -2112,6 +2217,7 @@
     renderGeometryView,
     renderEquationBalance,
     renderFunctionGraph,
+    filterFunctionGraphSpecByView,
     renderDynamicPoint,
     getGraphComplexity,
     getGraphSize,

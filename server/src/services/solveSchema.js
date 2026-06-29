@@ -1,4 +1,5 @@
 ﻿const { buildFunctionGraphFromText, buildFunctionGraphFromExpression, buildEquationGraphFromText, enrichFunctionGraphSpec } = require("./graphEngine");
+const { buildGraphTemplateSpec } = require("./graphTemplates");
 const REQUIRED_CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
 const VISUALIZATION_TYPES = new Set([
   "equation_balance",
@@ -200,6 +201,26 @@ function isComplexFunctionSpecComplete(spec = {}, questionText = "") {
   }
 
   return true;
+}
+
+function isRenderableGraphTemplate(spec) {
+  return Boolean(
+    spec
+    && spec.canRender === true
+    && (spec.confidence === "high" || spec.confidence === "medium")
+  );
+}
+
+function buildRenderableGraphTemplate(questionText = "", source = {}) {
+  const templateSpec = buildGraphTemplateSpec(questionText, source);
+  return isRenderableGraphTemplate(templateSpec) ? templateSpec : null;
+}
+
+function shouldUseTemplateBeforeGraphEngine(templateSpec) {
+  return Boolean(
+    templateSpec
+    && templateSpec.templateId !== "quadratic_key_points_v1"
+  );
 }
 
 function normalizeSteps(value) {
@@ -517,13 +538,34 @@ function normalizeVisualizationStep(step, index, objectIds) {
   };
 }
 
+function normalizeCategorizedShowObjects(showObjects) {
+  if (!showObjects || typeof showObjects !== "object" || Array.isArray(showObjects)) {
+    return null;
+  }
+
+  return {
+    curves: asStringArray(showObjects.curves),
+    functions: asStringArray(showObjects.functions),
+    points: asStringArray(showObjects.points),
+    auxiliaryLines: asStringArray(showObjects.auxiliaryLines),
+    objects: asStringArray(showObjects.objects),
+  };
+}
+
 function normalizeVisualizationView(view, index, objectIds) {
   if (!isPlainObject(view)) {
     return null;
   }
 
-  const showObjects = asStringArray(view.showObjects).filter((id) => objectIds.has(id));
-  const highlightObjects = asStringArray(view.highlightObjects).filter((id) => objectIds.has(id));
+  let showObjects;
+
+  if (isPlainObject(view.showObjects)) {
+    showObjects = normalizeCategorizedShowObjects(view.showObjects);
+  } else {
+    showObjects = asStringArray(view.showObjects).filter((id) => objectIds.has(id));
+  }
+
+  const highlightObjects = asStringArray(view.highlightObjects);
 
   return {
     id: asString(view.id, `view-${index + 1}`),
@@ -641,6 +683,11 @@ function normalizeNonGeometrySpec(source, type, confidence, questionText) {
       views: Array.isArray(source.views) ? source.views.map(function(v, i) { var allIds = new Set(objects.map(function(o) { return o.id; })); Array.isArray(source.functions) && source.functions.forEach(function(f) { if (f.id) allIds.add(f.id); }); if (source.points) Object.keys(source.points).forEach(function(k) { allIds.add(k); }); Array.isArray(source.auxiliaryLines) && source.auxiliaryLines.forEach(function(l) { if (l.id) allIds.add(l.id); }); return normalizeVisualizationView(v, i, allIds); }).filter(Boolean) : [],
       steps: steps,
     };
+
+    const templateSpec = buildRenderableGraphTemplate(questionText, { ...source, ...normalizedSpec });
+    if (shouldUseTemplateBeforeGraphEngine(templateSpec)) {
+      return templateSpec;
+    }
 
     if (isComplexFunctionComprehensiveProblem(questionText, source)) {
       return createNoneVisualizationSpec("本题为复杂函数综合题，当前暂不自动重绘完整图，避免误导。请以原题图和文字解析为准。");
@@ -1258,6 +1305,11 @@ function createFunctionGraphFallback(text) {
 }
 function createSafeFallbackVisualization(fallback) {
   const questionText = fallback.questionText || "";
+  const templateSpec = buildRenderableGraphTemplate(questionText, fallback);
+
+  if (shouldUseTemplateBeforeGraphEngine(templateSpec)) {
+    return templateSpec;
+  }
 
   if (GEOMETRY_KEYWORDS.test(questionText) || /几何/.test(fallback.questionType || "")) {
     return createNoneVisualizationSpec("暂无可靠图示，可查看文字解析。");
@@ -1288,6 +1340,13 @@ function normalizeVisualizationSpec(value, fallback = {}) {
 
   // For y= or f(x)= problems, force function_graph even if AI says none
   var isFuncProblem = /y\s*=|f\s*\(\s*x\s*\)\s*=|一次函数|二次函数|抛物线|函数图像|画出函数/i.test(fallback.questionText || "");
+  var noneTypeTemplateSpec = type === "none"
+    ? buildRenderableGraphTemplate(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })
+    : null;
+  if (shouldUseTemplateBeforeGraphEngine(noneTypeTemplateSpec)) {
+    return noneTypeTemplateSpec;
+  }
+
   if (
     type === "none"
     && isFuncProblem
