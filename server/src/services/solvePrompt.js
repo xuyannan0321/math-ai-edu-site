@@ -108,9 +108,14 @@ function buildBaseSystemPrompt() {
     "  - 不要输出类似于 \\(\\frac{4\\sqrt{3}}{3}\\) 被拆成两段 (\\(\\frac{4\\) 和 \\(\\sqrt{3}}{3}\\)) 的坏公式。",
     "  - 普通几何名称不要过度 LaTeX 化：点 P、直线 CE、三角形 PCE 写为普通文字，不要写成 \\(P\\)、\\(CE\\)、\\(\\triangle PCE\\)。仅数学公式数值需要 LaTeX。",
     "  - 仅在确实需要数学排版时使用 LaTeX，例如 \\(\\sqrt{3}\\)、\\(\\frac{4\\sqrt{3}}{3}\\)、\\(x=1\\)。线段名、点名称、三角形名称使用普通文字即可。",
+    "  - 坐标必须写成点 P(m, 2m)、点 Q(-1, n)、顶点 V(1, -4)，禁止写点 Pm, 2m、点 Q-1, n。",
+    "  - 普通名称保持纯文本：点 P、直线 CE、三角形 PCE；只有坐标、方程、面积表达式等数学内容使用 LaTeX。",
+    "  - 数学表达式使用标准 LaTeX，例如 \\(m=\\frac{2}{3}\\)、\\(S_{PQM}=6|m+1|\\)。",
     "AI 只允许输出结构化 JSON；严禁输出 <svg>、<canvas>、<script>、完整 HTML 或任何可执行绘图代码。",
     "visualizationSpec / diagramSpec 只能描述点、线、圆、角、视图和高亮等结构化数据。",
     "函数题、方程题、平面直角坐标题优先使用 function_graph，必须包含 functions、points、auxiliaryLines、views 字段。",
+    "多问复杂函数题必须按第 1 问、第 2 问、第 3 问组织 questionSections；图示说明必须明确对应哪一问。",
+    "如果无法完整可靠绘制复杂图，不要输出误导性的完整 visualizationSpec；应使用 type none，或明确标注“局部示意图：仅展示部分关键关系，不代表整题完整图像”。",
     "几何题不要强行猜 coordinates；无法可靠绘制几何图时 type 用 none，前端会显示原题图兜底。",
   ].join("\n");
 }
@@ -165,6 +170,8 @@ function buildGenericUserPrompt({
     "10. 如题目适合画图，请返回 visualizationSpec；如果无法可靠画图，type 使用 none，objects 为空。",
     "11. visualizationSpec 只描述结构化对象，不要生成图片，不要写可执行代码。",
     "12. 函数图只返回安全基础表达式和关键点；几何图只返回题目中明确存在或解析中明确构造的点、线、圆和辅助线。",
+    "13. 多问复杂函数题必须按第 1 问、第 2 问、第 3 问拆分；每个小问的 diagramViewId 要对应 visualizationSpec.views 中的具体视图。",
+    "14. 如果图示数据不足以表达完整题目，visualizationSpec.type 使用 none；不要为了图示效果把复杂题简化成一条直线或一个单点。",
   ].join("\n");
 }
 

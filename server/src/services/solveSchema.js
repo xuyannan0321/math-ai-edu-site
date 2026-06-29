@@ -103,6 +103,78 @@ function createNoneVisualizationSpec(description = "暂无可靠图示，可查�
   };
 }
 
+function isComplexFunctionProblem(questionText = "", source = {}) {
+  const text = [
+    asString(questionText),
+    asString(source.problemText),
+    asString(source.description),
+  ].filter(Boolean).join("\n");
+  const functions = Array.isArray(source.functions) ? source.functions : [];
+  const questionSections = Array.isArray(source.questionSections) ? source.questionSections : [];
+
+  return /（\s*[123]\s*）|第\s*[一二三123]\s*问|[（(]\s*1\s*[)）].*[（(]\s*2\s*[)）]/.test(text)
+    || /L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|抛物线|中心对称|双倍比例点|面积|平行于\s*x\s*轴/i.test(text)
+    || functions.length > 1
+    || questionSections.length >= 2;
+}
+
+function getFunctionCurveCount(spec = {}) {
+  const curves = Array.isArray(spec.curves) ? spec.curves.length : 0;
+  const functions = Array.isArray(spec.functions) ? spec.functions.length : 0;
+  return Math.max(curves, functions);
+}
+
+function getFunctionPointCount(spec = {}) {
+  const pointMapCount = isPlainObject(spec.points) ? Object.keys(spec.points).length : 0;
+  const objectPointCount = Array.isArray(spec.objects)
+    ? spec.objects.filter((object) => object && object.kind === "point").length
+    : 0;
+  return Math.max(pointMapCount, objectPointCount);
+}
+
+function hasQuadraticFunctionData(spec = {}) {
+  const items = []
+    .concat(Array.isArray(spec.curves) ? spec.curves : [])
+    .concat(Array.isArray(spec.functions) ? spec.functions : []);
+
+  return items.some((item) => {
+    const kind = asString(item.kind || item.type).toLowerCase();
+    const expression = asString(item.expression || item.formula || item.equation);
+    const coefficients = isPlainObject(item.coefficients) ? item.coefficients : {};
+
+    return kind === "quadratic"
+      || kind === "parabola"
+      || expression.includes("^2")
+      || expression.includes("²")
+      || /x\s*\*\s*x/.test(expression)
+      || (isFiniteNumber(coefficients.a) && Math.abs(Number(coefficients.a)) > 1e-9);
+  });
+}
+
+function isComplexFunctionSpecComplete(spec = {}, questionText = "") {
+  const text = asString(questionText);
+  const curveCount = getFunctionCurveCount(spec);
+  const pointCount = getFunctionPointCount(spec);
+
+  if (curveCount <= 1) {
+    return false;
+  }
+
+  if (/抛物线/.test(text) && !hasQuadraticFunctionData(spec)) {
+    return false;
+  }
+
+  if (/L\s*1|L\s*2|y\s*1|y\s*2|y\s*3/i.test(text) && curveCount < 2) {
+    return false;
+  }
+
+  if (/面积|双倍比例点|中心对称/.test(text) && pointCount < 3) {
+    return false;
+  }
+
+  return true;
+}
+
 function normalizeSteps(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -543,8 +615,19 @@ function normalizeNonGeometrySpec(source, type, confidence, questionText) {
       steps: steps,
     };
 
-    // ALWAYS enrich via graphEngine - GraphEngine has highest authority for function_graph
-    // This overrides AI-generated curves/points/auxiliaryLines/coordinateSystem with deterministic results
+    if (isComplexFunctionProblem(questionText, source)) {
+      if (!isComplexFunctionSpecComplete(normalizedSpec, questionText)) {
+        return createNoneVisualizationSpec("复杂多问题图示数据不足，暂不自动重绘完整图。");
+      }
+
+      return {
+        ...normalizedSpec,
+        description: normalizedSpec.description || "局部示意图：仅展示部分关键关系，不代表整题完整图像。",
+        confidence: normalizedSpec.confidence === "high" ? "medium" : normalizedSpec.confidence,
+      };
+    }
+
+    // Simple function problems can still be enriched deterministically by GraphEngine.
     return enrichFunctionGraphSpec(normalizedSpec, questionText);
   }
 
@@ -1174,7 +1257,7 @@ function normalizeVisualizationSpec(value, fallback = {}) {
 
   // For y= or f(x)= problems, force function_graph even if AI says none
   var isFuncProblem = /y\s*=|f\s*\(\s*x\s*\)\s*=|一次函数|二次函数|抛物线|函数图像|画出函数/i.test(fallback.questionText || "");
-  if (type === "none" && isFuncProblem) {
+  if (type === "none" && isFuncProblem && !isComplexFunctionProblem(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })) {
     var funcGraph = createFunctionGraphFallback(fallback.questionText || "");
     if (funcGraph) { return enrichFunctionGraphSpec(funcGraph, fallback.questionText || ""); }
   }
@@ -1343,6 +1426,7 @@ function normalizeSolution(raw, fallback = {}) {
     visualizationSpec: normalizeVisualizationSpec(visualizationSource, {
       questionText: problemText || fallback.questionText,
       questionType: fallback.questionType || source.topic,
+      questionSections: questionSections,
     }),
     qualityCheck: normalizeQualityCheck(source.qualityCheck),
     // hiddenVerification is normalized but NOT returned to frontend

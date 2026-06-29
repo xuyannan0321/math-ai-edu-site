@@ -867,7 +867,7 @@ function hasRenderableVisualizationSpec(spec) {
       if (!f || !f.expression || !(/[xX]/.test(f.expression))) return false;
       var expr = f.expression;
       // Reject complex LaTeX that frontend cannot reliably parse
-      if (expr.indexOf("\\\\frac") !== -1 || expr.indexOf("\\\\sqrt") !== -1 || expr.indexOf("\u221A") !== -1 || expr.indexOf("sqrt(") !== -1 || (expr.indexOf("(") !== -1 && expr.indexOf("/") !== -1)) {
+      if (/\\+frac|\\+sqrt/.test(expr) || expr.indexOf("\u221A") !== -1 || expr.indexOf("sqrt(") !== -1 || (expr.indexOf("(") !== -1 && expr.indexOf("/") !== -1)) {
         if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
           console.warn("[App] function_graph rejected: complex expression without backend samples -", expr.slice(0, 60));
         }
@@ -889,6 +889,144 @@ function hasRenderableVisualizationSpec(spec) {
   }
 
   // All other types pass if type is set
+  return true;
+}
+
+function getVisualizationCurves(spec) {
+  if (!spec || typeof spec !== "object") {
+    return [];
+  }
+
+  var curves = [];
+
+  if (Array.isArray(spec.curves)) {
+    curves = curves.concat(spec.curves);
+  }
+
+  if (Array.isArray(spec.functions)) {
+    curves = curves.concat(spec.functions);
+  }
+
+  return curves;
+}
+
+function getVisualizationPointCount(spec) {
+  if (!spec || typeof spec !== "object") {
+    return 0;
+  }
+
+  var pointMapCount = spec.points && typeof spec.points === "object" && !Array.isArray(spec.points)
+    ? Object.keys(spec.points).length
+    : 0;
+  var objectPointCount = Array.isArray(spec.objects)
+    ? spec.objects.filter(function(object) { return object && object.kind === "point"; }).length
+    : 0;
+  var keyPointCount = Array.isArray(spec.keyPoints) ? spec.keyPoints.length : 0;
+
+  return Math.max(pointMapCount, objectPointCount, keyPointCount);
+}
+
+function isComplexMultiQuestionText(text) {
+  var value = String(text || "");
+  return /（\s*[123]\s*）|第\s*[一二三123]\s*问|[（(]\s*1\s*[)）].*[（(]\s*2\s*[)）]/.test(value);
+}
+
+function isComplexFunctionQuestionText(text) {
+  var value = String(text || "");
+  return isComplexMultiQuestionText(value)
+    || /抛物线|L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|双倍比例点|面积|平行于\s*x\s*轴/i.test(value);
+}
+
+function isQuadraticCurveLike(curve) {
+  if (!curve || typeof curve !== "object") {
+    return false;
+  }
+
+  var kind = String(curve.kind || curve.type || "").toLowerCase();
+  var expression = String(curve.expression || curve.formula || curve.equation || "");
+  var coefficients = curve.coefficients || {};
+
+  return kind === "quadratic"
+    || kind === "parabola"
+    || expression.indexOf("^2") !== -1
+    || expression.indexOf("²") !== -1
+    || /x\s*\*\s*x/.test(expression)
+    || Number.isFinite(Number(coefficients.a)) && Math.abs(Number(coefficients.a)) > 1e-9;
+}
+
+function getResultQuestionText(questionText, result) {
+  return [
+    questionText,
+    result?.problemText,
+    result?.title,
+    result?.topic,
+    result?.analysis,
+  ].filter(Boolean).join("\n");
+}
+
+function getVisualizationReliabilityReason(spec, questionText, result) {
+  var text = getResultQuestionText(questionText, result);
+
+  if (state.ocrDraftActive) {
+    return "当前仍是 OCR 识别草稿阶段，尚未生成正式解析和 visualizationSpec。";
+  }
+
+  if (isComplexFunctionQuestionText(text)) {
+    return "本题为复杂多问题，当前图示数据不足，暂不自动重绘完整图。请查看文字解析，或后续按小问生成图示。";
+  }
+
+  if (!hasRenderableVisualizationSpec(spec)) {
+    return "正式解析已完成，但 visualizationSpec 缺失或不可渲染，暂不自动生成数学图示。";
+  }
+
+  return "正式解析已完成，但图示数据不足，暂不自动重绘完整图。";
+}
+
+function isVisualizationSpecReliable(spec, questionText, result) {
+  if (!hasRenderableVisualizationSpec(spec)) {
+    return false;
+  }
+
+  if (spec.type !== "function_graph") {
+    return true;
+  }
+
+  var text = getResultQuestionText(questionText, result);
+  var curves = getVisualizationCurves(spec);
+  var pointCount = getVisualizationPointCount(spec);
+  var hasParabola = /抛物线/.test(text);
+  var mentionsMultipleCurves = /L\s*1|L\s*2|y\s*1|y\s*2|y\s*3/i.test(text);
+  var mentionsPointRelations = /面积|双倍比例点|中心对称/.test(text);
+  var complex = isComplexFunctionQuestionText(text);
+
+  if (!complex) {
+    return true;
+  }
+
+  if (curves.length <= 1) {
+    return false;
+  }
+
+  if (curves.length === 1 && !isQuadraticCurveLike(curves[0])) {
+    return false;
+  }
+
+  if (hasParabola && !curves.some(isQuadraticCurveLike)) {
+    return false;
+  }
+
+  if (mentionsMultipleCurves && curves.length < 2) {
+    return false;
+  }
+
+  if (mentionsPointRelations && pointCount < 3) {
+    return false;
+  }
+
+  if (isComplexMultiQuestionText(text) && curves.length < 2 && pointCount < 4) {
+    return false;
+  }
+
   return true;
 }
 
@@ -976,6 +1114,10 @@ function createEquationBalanceFallback(text) {
 
 function createFunctionGraphFallback(text) {
   var raw = String(text || '').replace(/\s+/g, ' ');
+  if (!isSimpleSingleFunctionText(raw)) {
+    return null;
+  }
+
   var match = raw.match(/(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+)/i);
   if (!match || match[1].length < 2 || match[1].length > 400) return null;
   return {
@@ -989,13 +1131,39 @@ function createFunctionGraphFallback(text) {
     confidence: 'low',
   };
 }
+
+function isSimpleSingleFunctionText(text) {
+  var raw = String(text || "");
+  var compact = raw.replace(/\s+/g, "");
+  var functionMatches = compact.match(/(?:y|f\([xX]\))=/g) || [];
+
+  if (!functionMatches.length || functionMatches.length > 1) {
+    return false;
+  }
+
+  if (isComplexFunctionQuestionText(raw)) {
+    return false;
+  }
+
+  if (/抛物线|L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|面积|双倍比例点/i.test(raw)) {
+    return false;
+  }
+
+  return true;
+}
+
 function createVisualizationFallback(result) {
+  var text = result.problemText || "";
+
+  if (isComplexFunctionQuestionText(text)) {
+    return null;
+  }
+
   if (result.visualizationSpec && result.visualizationSpec.type === 'function_graph'
     && Array.isArray(result.visualizationSpec.functions) && result.visualizationSpec.functions.length) {
     return result.visualizationSpec;
   }
 
-  var text = result.problemText || '';
   if (/y\s*=|f\s*\(\s*x\s*\)\s*=/.test(text)) {
     return createFunctionGraphFallback(text);
   }
@@ -1074,13 +1242,15 @@ function appendVisualizationForView(container, spec, viewId, fallbackTitle = "�
   panel.append(board);
   container.append(panel);
 
-  if (!hasRenderableVisualizationSpec(spec)) {
+  var questionText = state.currentSolveResult?.problemText || "";
+  if (!hasRenderableVisualizationSpec(spec) || !isVisualizationSpecReliable(spec, questionText, state.currentSolveResult)) {
     const reason = document.createElement("p");
     reason.className = "visualization-stage-note";
     reason.textContent = state.ocrDraftActive
       ? "当前仍是 OCR 识别草稿阶段，尚未生成正式解析和 visualizationSpec。"
-      : "正式解析已完成，但本题没有返回可靠 visualizationSpec，因此暂不生成数学图示。";
-    panel.append(reason);
+      : getVisualizationReliabilityReason(spec, questionText, state.currentSolveResult);
+    board.append(reason);
+    return;
   }
 
   const vizOptions = {
@@ -1211,16 +1381,27 @@ function renderStructuredResult(result) {
 
 
   try {
-  var visualizationSpec = hasRenderableVisualizationSpec(result.visualizationSpec)
-    ? result.visualizationSpec
-    : createVisualizationFallback(result);
+  var originalVisualizationSpec = result.visualizationSpec || null;
+  var originalSpecRenderable = hasRenderableVisualizationSpec(originalVisualizationSpec);
+  var originalSpecReliable = originalSpecRenderable
+    && isVisualizationSpecReliable(originalVisualizationSpec, result.problemText, result);
+  var fallbackVisualizationSpec = originalSpecReliable ? null : createVisualizationFallback(result);
+  var fallbackSpecReliable = hasRenderableVisualizationSpec(fallbackVisualizationSpec)
+    && isVisualizationSpecReliable(fallbackVisualizationSpec, result.problemText, result);
+  var visualizationSpec = originalSpecReliable
+    ? originalVisualizationSpec
+    : (fallbackSpecReliable ? fallbackVisualizationSpec : null);
   var views = getVisualizationViews(visualizationSpec);
   var isGeometric = isGeometryProblemByResult(result);
-  var hasFormalVisualization = hasRenderableVisualizationSpec(visualizationSpec);
+  var hasFormalVisualization = hasRenderableVisualizationSpec(visualizationSpec)
+    && isVisualizationSpecReliable(visualizationSpec, result.problemText, result);
   var visualizationShown = false;
+  var visualizationIssueReason = hasFormalVisualization
+    ? ""
+    : getVisualizationReliabilityReason(originalVisualizationSpec || fallbackVisualizationSpec, result.problemText, result);
 
   debugLog("visualizationSpec.type:", visualizationSpec ? visualizationSpec.type : "none");
-  debugLog("hasReliableVisualization:", hasRenderableVisualizationSpec(result.visualizationSpec));
+  debugLog("hasReliableVisualization:", hasFormalVisualization);
   debugLog("views count:", getVisualizationViews(visualizationSpec).length);
   debugLog("objects count:", visualizationSpec && Array.isArray(visualizationSpec.objects) ? visualizationSpec.objects.length : 0);
 
@@ -1401,7 +1582,7 @@ function renderStructuredResult(result) {
     var missingVizCard = createReadingCard("is-diagram", "图示状态");
     var missingVizP = document.createElement("p");
     missingVizP.className = "visualization-stage-note";
-    missingVizP.textContent = "正式解析已完成，但本题没有返回可靠 visualizationSpec，因此暂不生成数学图示。";
+    missingVizP.textContent = visualizationIssueReason || "正式解析已完成，但图示数据不足，暂不自动重绘完整图。";
     missingVizCard.append(missingVizP);
     if (state.uploadedImageUrl) {
       var originalHint = document.createElement("p");
@@ -4123,6 +4304,28 @@ function stripBrokenLatexDelimiters(text) {
   return s;
 }
 
+function normalizeCoordinateText(text) {
+  if (!text || typeof text !== "string") return text;
+  var s = text.replaceAll("−", "-");
+  var value = "[+\\-]?(?:\\d+(?:\\.\\d+)?|[a-zA-Z]\\d*|\\d*[a-zA-Z])";
+  var spacedPattern = new RegExp("(点\\s*)?\\b([PQVABCDOMN](?:\\d+)?)\\s+(" + value + ")\\s*,\\s*(" + value + ")", "g");
+  var compactPattern = new RegExp("(点\\s*)?\\b([PQVABCDOMN](?:\\d+)?)([+\\-]?(?:\\d+(?:\\.\\d+)?|[a-zA-Z]\\d*|\\d*[a-zA-Z]))\\s*,\\s*(" + value + ")", "g");
+  var replacer = function(match, prefix, label, x, y) {
+    return (prefix || "") + label + "(" + x + ", " + y + ")";
+  };
+
+  return s.replace(spacedPattern, replacer).replace(compactPattern, replacer);
+}
+
+function prepareMathTextForDisplay(rawText) {
+  var cleaned = normalizeDisplayLatex(String(rawText ?? ""));
+  cleaned = removeUnsupportedLatexControls(cleaned);
+  cleaned = normalizeCoordinateText(cleaned);
+  cleaned = stripBrokenLatexDelimiters(cleaned);
+  cleaned = sanitizeLatexText(cleaned);
+  return cleaned;
+}
+
 // --- End Unified Math Text Rendering Pipeline ---
 
 function readBalancedBrace(text, openIndex) {
@@ -4238,30 +4441,32 @@ function queueMathTypeset(element) {
   }
 }
 
+function warnIfRawLatexRemains(element) {
+  if (typeof localStorage === "undefined" || localStorage.getItem("mathAiEduDebug") !== "1") {
+    return;
+  }
+
+  setTimeout(function() {
+    var tc = element && element.textContent ? element.textContent : "";
+    if (/\\(?:frac|sqrt|left|right|\(|\)|\[|\])/.test(tc)) {
+      console.warn("[MathJaxDisplay] raw latex remains in:", tc.slice(0, 160));
+    }
+  }, 180);
+}
+
 // Unified math text rendering for any element
 function renderMathText(element, rawText) {
   if (!element || rawText === undefined || rawText === null) return;
-  var cleaned = normalizeDisplayLatex(rawText);
-  cleaned = removeUnsupportedLatexControls(cleaned);
-  cleaned = stripBrokenLatexDelimiters(cleaned);
+  var cleaned = prepareMathTextForDisplay(rawText);
   var html = safeMathHtml(cleaned);
   element.innerHTML = html;
   queueMathTypeset(element);
-
-  // Debug check
-  if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
-    var tc = element.textContent || "";
-    if (tc.indexOf("\\\\(") !== -1 || tc.indexOf("\\\\)") !== -1 || tc.indexOf("\\\\[") !== -1 || tc.indexOf("\\\\]") !== -1 || tc.indexOf("\\\\frac") !== -1 || tc.indexOf("\\\\sqrt") !== -1 || tc.indexOf("\\\\left") !== -1 || tc.indexOf("\\\\right") !== -1) {
-      console.warn("[MathJaxDisplay] raw latex remains in:", tc.slice(0, 120));
-    }
-  }
+  warnIfRawLatexRemains(element);
 }
 
 function autoWrapLatex(text) {
   if (!text || typeof text !== "string") return "";
-  // If text already has MathJax delimiters, return as-is
-  if (/\\\(|\\\[|\$\$/.test(text)) return text;
-  // Use balanced-brace wrapper
+  // Preserve existing delimiters and wrap bare LaTeX fragments outside them.
   return wrapLatexFragments(text);
 }
 
@@ -4323,24 +4528,15 @@ function sanitizeLatexText(text) {
 function setSafeMathContent(element, rawText, tagName) {
   if (!element) return;
   // Full pipeline: normalize -> remove unsupported -> sanitize -> wrap -> HTML escape
-  var cleaned = normalizeDisplayLatex(rawText);
-  cleaned = removeUnsupportedLatexControls(cleaned);
-  cleaned = stripBrokenLatexDelimiters(cleaned);
-  var sanitized = sanitizeLatexText(cleaned);
-  var html = safeMathHtml(sanitized);
+  var cleaned = prepareMathTextForDisplay(rawText);
+  var html = safeMathHtml(cleaned);
   if (tagName) {
     element.innerHTML = "<" + tagName + ">" + html + "</" + tagName + ">";
   } else {
     element.innerHTML = html;
   }
   queueMathTypeset(element);
-  // Debug check
-  if (typeof localStorage !== "undefined" && localStorage.getItem("mathAiEduDebug") === "1") {
-    var tc = element.textContent || "";
-    if (tc.indexOf("\\\\(") !== -1 || tc.indexOf("\\\\)") !== -1 || tc.indexOf("\\\\[") !== -1 || tc.indexOf("\\\\]") !== -1 || tc.indexOf("\\\\frac") !== -1 || tc.indexOf("\\\\sqrt") !== -1 || tc.indexOf("\\\\left") !== -1 || tc.indexOf("\\\\right") !== -1) {
-      console.warn("[MathJaxDisplay] raw latex remains in:", tc.slice(0, 120));
-    }
-  }
+  warnIfRawLatexRemains(element);
 }
 
 

@@ -956,8 +956,12 @@ select.form-control {
   .math-visualization svg {
     max-height: 320px;
   }
+  .math-visualization-svg {
+    max-height: 360px !important;
+    min-height: 180px;
+  }
   .mv-label {
-    font-size: 12px;
+    font-size: 13px;
   }
   .mv-axis-number {
     font-size: 10px;
@@ -982,6 +986,9 @@ select.form-control {
 }
 
 .visualization-board {
+  display: grid;
+  place-items: center;
+  padding: 8px;
   overflow: hidden;
   background: linear-gradient(180deg, var(--gray-50) 0%, var(--white) 100%);
   border: 1px solid var(--gray-200);
@@ -1017,7 +1024,23 @@ select.form-control {
 .math-visualization-svg {
   display: block;
   width: 100%;
+  max-width: 100%;
+  height: auto;
   min-height: 220px;
+  max-height: 520px;
+  margin: 0 auto;
+}
+
+.math-visualization-svg[data-complexity="simple"] {
+  max-height: 380px;
+}
+
+.math-visualization-svg[data-complexity="medium"] {
+  max-height: 440px;
+}
+
+.math-visualization-svg[data-complexity="complex"] {
+  max-height: 520px;
 }
 
 .mv-axis,
@@ -1084,10 +1107,17 @@ select.form-control {
   pointer-events: none;
 }
 
+.mv-label-bg {
+  fill: rgba(255, 255, 255, 0.88);
+  stroke: rgba(147, 197, 253, 0.72);
+  stroke-width: 1;
+}
+
 .mv-label {
   fill: #334155;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
+  paint-order: stroke;
 }
 
 .mv-segment,
@@ -5565,13 +5595,15 @@ body.is-preview-open {
 
 .solution-card-diagram {
   margin-top: 14px;
-  padding: 14px;
+  padding: 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
 }
 
 .solution-card-diagram-board {
+  display: grid;
+  place-items: center;
   min-width: 0;
 }
 
@@ -5889,9 +5921,7 @@ body.is-preview-open {
   }
 
   .solution-card-diagram-board {
-    min-height: 220px;
-  }
-    padding: 14px;
+    min-height: 0;
   }
 }
 

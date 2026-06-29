@@ -2,8 +2,15 @@
 
 (function initializeMathVisualization(global) {
   const SVG_NS = "http://www.w3.org/2000/svg";
-  const WIDTH = 480;
-  const HEIGHT = 260;
+  const WIDTH = 720;
+  const HEIGHT = 360;
+  const GRAPH_HEIGHTS = {
+    simple: 360,
+    medium: 420,
+    complex: 480,
+  };
+  const MOBILE_MAX_HEIGHT = 360;
+  const DESKTOP_MAX_HEIGHT = 520;
   const SAFE_TYPES = new Set([
     "equation_balance",
     "function_graph",
@@ -58,6 +65,10 @@
   function toNumber(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
   }
 
   function distance(p1, p2) {
@@ -418,13 +429,13 @@
   }
 
   function createMapper(bounds, width = WIDTH, height = HEIGHT) {
-    const spanX = Math.max(1, bounds.maxX - bounds.minX);
-    const spanY = Math.max(1, bounds.maxY - bounds.minY);
-    const padding = 34;
+    const shorterSide = Math.max(240, Math.min(width, height));
+    const padding = clamp(Math.round(shorterSide * 0.1), 34, 52);
 
     return {
       width,
       height,
+      padding,
       project(point) {
         return projectPoint(point, bounds, width, height, padding);
       },
@@ -441,11 +452,78 @@
     };
   }
 
-  function createBaseSvg(className = "math-visualization-svg") {
+  function getSpecPointCount(spec) {
+    if (!spec || typeof spec !== "object") {
+      return 0;
+    }
+
+    const pointMapCount = spec.points && typeof spec.points === "object" && !Array.isArray(spec.points)
+      ? Object.keys(spec.points).length
+      : 0;
+    const objectPointCount = Array.isArray(spec.objects)
+      ? spec.objects.filter((object) => object && object.kind === "point").length
+      : 0;
+    const keyPointCount = Array.isArray(spec.keyPoints) ? spec.keyPoints.length : 0;
+
+    return Math.max(pointMapCount, objectPointCount, keyPointCount);
+  }
+
+  function getSpecCurveCount(spec) {
+    if (!spec || typeof spec !== "object") {
+      return 0;
+    }
+
+    const curves = Array.isArray(spec.curves) ? spec.curves.length : 0;
+    const functions = Array.isArray(spec.functions) ? spec.functions.length : 0;
+    return Math.max(curves, functions);
+  }
+
+  function getGraphComplexity(spec) {
+    const curveCount = getSpecCurveCount(spec);
+    const pointCount = getSpecPointCount(spec);
+    const viewCount = Array.isArray(spec && spec.views) ? spec.views.length : 0;
+
+    if (viewCount > 1 || curveCount > 4 || pointCount > 8) {
+      return "complex";
+    }
+
+    if (curveCount > 2 || pointCount > 4) {
+      return "medium";
+    }
+
+    return "simple";
+  }
+
+  function getGraphSize(spec, container) {
+    const complexity = getGraphComplexity(spec);
+    const viewportWidth = (global && global.innerWidth) || WIDTH;
+    const containerWidth = container && container.getBoundingClientRect
+      ? Math.round(container.getBoundingClientRect().width)
+      : 0;
+    const isMobile = Math.min(viewportWidth, containerWidth || viewportWidth) <= 520;
+    const maxHeight = isMobile ? MOBILE_MAX_HEIGHT : DESKTOP_MAX_HEIGHT;
+    const targetHeight = clamp(GRAPH_HEIGHTS[complexity] || HEIGHT, 340, maxHeight);
+    const width = isMobile ? 640 : WIDTH;
+
+    return {
+      width,
+      height: targetHeight,
+      complexity,
+    };
+  }
+
+  function createBaseSvg(className = "math-visualization-svg", size = {}) {
+    const width = Number.isFinite(size.width) ? size.width : WIDTH;
+    const height = Number.isFinite(size.height) ? size.height : HEIGHT;
+    const complexity = size.complexity || "simple";
+
     return createSvgElement("svg", {
-      viewBox: `0 0 ${WIDTH} ${HEIGHT}`,
+      viewBox: `0 0 ${width} ${height}`,
       role: "img",
       class: className,
+      "data-complexity": complexity,
+      "preserveAspectRatio": "xMidYMid meet",
+      style: `max-height: ${height}px;`,
     });
   }
 
@@ -610,22 +688,142 @@
     );
   }
 
-  function drawLabel(svg, point, label, mapper, options = {}) {
+  function getPreferredLabelDirections(pointId) {
+    const id = String(pointId || "").toUpperCase();
+    const directionsById = {
+      A: [{ x: -1, y: -1 }, { x: 1, y: -1 }, { x: -1, y: 1 }, { x: 1, y: 1 }],
+      B: [{ x: -1, y: 1 }, { x: -1, y: -1 }, { x: 1, y: 1 }, { x: 1, y: -1 }],
+      C: [{ x: 1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: 1 }, { x: -1, y: -1 }],
+      D: [{ x: 1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: -1 }, { x: -1, y: 1 }],
+      O: [{ x: 1, y: 1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: -1 }],
+      V: [{ x: 1, y: -1 }, { x: -1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: 1 }],
+      P: [{ x: 1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: -1 }, { x: -1, y: 1 }],
+      Q: [{ x: -1, y: -1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: 1, y: 1 }],
+    };
+
+    return directionsById[id.replace(/\d+$/, "")] || [
+      { x: 1, y: -1 },
+      { x: 1, y: 1 },
+      { x: -1, y: -1 },
+      { x: -1, y: 1 },
+    ];
+  }
+
+  function getLabelBox(projected, label, direction, mapper, offset = 15) {
+    const text = String(label || "");
+    const width = clamp(text.length * 8 + 12, 20, 110);
+    const height = 20;
+    const centerX = projected.x + direction.x * offset + (direction.x < 0 ? -width / 2 : width / 2);
+    const centerY = projected.y + direction.y * offset;
+    const x = clamp(centerX - width / 2, 4, mapper.width - width - 4);
+    const y = clamp(centerY - height / 2, 4, mapper.height - height - 4);
+
+    return { x, y, width, height, cx: x + width / 2, cy: y + height / 2 };
+  }
+
+  function boxesOverlap(boxA, boxB) {
+    return !(
+      boxA.x + boxA.width < boxB.x ||
+      boxB.x + boxB.width < boxA.x ||
+      boxA.y + boxA.height < boxB.y ||
+      boxB.y + boxB.height < boxA.y
+    );
+  }
+
+  function layoutPointLabels(points, mapper, bounds) {
+    const placements = new Map();
+    const occupied = [];
+    const axisY = bounds && bounds.minY <= 0 && bounds.maxY >= 0
+      ? mapper.project({ x: bounds.minX, y: 0 }).y
+      : null;
+    const axisX = bounds && bounds.minX <= 0 && bounds.maxX >= 0
+      ? mapper.project({ x: 0, y: bounds.minY }).x
+      : null;
+
+    (points || []).forEach((point) => {
+      if (!point || !point.label) {
+        return;
+      }
+
+      const projected = mapper.project(point);
+      const directions = getPreferredLabelDirections(point.id || point.label);
+      let best = null;
+      let bestScore = -Infinity;
+
+      directions.forEach((direction, index) => {
+        const box = getLabelBox(projected, point.label, direction, mapper);
+        let score = 100 - index * 6;
+
+        occupied.forEach((other) => {
+          if (boxesOverlap(box, other)) {
+            score -= 80;
+          }
+        });
+
+        if (axisY !== null && Math.abs(box.cy - axisY) < 16) {
+          score -= 20;
+        }
+
+        if (axisX !== null && Math.abs(box.cx - axisX) < 20) {
+          score -= 16;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = { direction, box };
+        }
+      });
+
+      if (!best) {
+        best = { direction: { x: 1, y: -1 }, box: getLabelBox(projected, point.label, { x: 1, y: -1 }, mapper) };
+      }
+
+      occupied.push(best.box);
+      placements.set(point.id || point.label, best);
+    });
+
+    return placements;
+  }
+
+  function drawLabelWithBackground(svg, point, label, mapper, options = {}) {
     if (!label) {
       return;
     }
 
     const projected = mapper.project(point);
-    const direction = options.direction || { x: 1, y: -1 };
-    const offset = options.offset || 13;
-    const text = createSvgElement("text", {
-      x: projected.x + direction.x * offset,
-      y: projected.y + direction.y * offset,
-      class: options.className || "mv-label",
+    const placement = options.placement || null;
+    const direction = placement?.direction || options.direction || { x: 1, y: -1 };
+    const box = placement?.box || getLabelBox(projected, label, direction, mapper, options.offset || 15);
+    const group = createSvgElement("g", {
+      class: "mv-label-group",
       "data-label-for": point.id || "",
     });
+
+    group.append(
+      createSvgElement("rect", {
+        x: box.x.toFixed(1),
+        y: box.y.toFixed(1),
+        width: box.width.toFixed(1),
+        height: box.height.toFixed(1),
+        rx: 6,
+        class: "mv-label-bg",
+      }),
+    );
+
+    const text = createSvgElement("text", {
+      x: box.cx.toFixed(1),
+      y: box.cy.toFixed(1),
+      class: options.className || "mv-label",
+      "text-anchor": "middle",
+      "dominant-baseline": "central",
+    });
     text.textContent = label;
-    svg.append(text);
+    group.append(text);
+    svg.append(group);
+  }
+
+  function drawLabel(svg, point, label, mapper, options = {}) {
+    drawLabelWithBackground(svg, point, label, mapper, options);
   }
 
   function renderGeometryView(svg, spec, view, mapper, bounds, showGrid) {
@@ -636,6 +834,7 @@
 
     const highlighted = new Set(view?.highlightObjects || []);
     const visibleObjects = getVisibleObjects(spec, view);
+    const pointLabelLayout = layoutPointLabels(Object.values(spec.points || {}), mapper, bounds);
 
     visibleObjects.forEach((object) => {
       if (object.kind === "polygon") {
@@ -721,7 +920,7 @@
       } else if (object.kind === "label") {
         const point = object.at ? getPoint(spec, object.at) : { x: Number(object.x), y: Number(object.y), id: object.id };
         if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
-          drawLabel(svg, point, object.text || object.label, mapper, { className: "mv-label mv-custom-label" });
+          drawLabelWithBackground(svg, point, object.text || object.label, mapper, { className: "mv-label mv-custom-label" });
         }
       }
     });
@@ -737,7 +936,8 @@
 
     Object.values(spec.points).forEach((point) => {
       drawPoint(svg, point, mapper);
-      drawLabel(svg, point, point.label, mapper, {
+      drawLabelWithBackground(svg, point, point.label, mapper, {
+        placement: pointLabelLayout.get(point.id || point.label),
         direction: getLabelOffsetDirection(point, connected.get(point.id) || []),
       });
     });
@@ -764,13 +964,14 @@
     const wrapper = createHtmlElement("div", "geometry-view-list");
     const allPoints = Object.values(spec.points);
     const bounds = getBounds(allPoints, 0.22);
-    const mapper = createMapper(bounds);
+    const size = getGraphSize(spec, container);
+    const mapper = createMapper(bounds, size.width, size.height);
 
     selectedViews.forEach((view) => {
       const viewCard = createHtmlElement("article", "geometry-view-card");
       const viewTitle = createHtmlElement("h4", "", view.title || "图示");
-      const svg = createBaseSvg("math-visualization-svg geometry-svg");
-      renderGeometryView(svg, spec, view, mapper, bounds, options && options.showGrid);
+      const svg = createBaseSvg("math-visualization-svg geometry-svg", size);
+      renderGeometryView(svg, spec, view, mapper, bounds, options && options.showGrid === true);
       viewCard.append(viewTitle, svg);
       wrapper.append(viewCard);
     });
@@ -1178,6 +1379,7 @@
 
     var curves = Array.isArray(spec.curves) ? spec.curves : [];
     var hasSamples = curves.some(function(c) { return Array.isArray(c.samples) && c.samples.length > 1; });
+    var size = getGraphSize(spec, container);
 
     if (!hasSamples) {
       // Fallback: try local evaluation from functions expressions
@@ -1192,8 +1394,8 @@
         // No local samples either - draw coordinate system with warning
         var xStep2 = Number.isFinite(cs.xStep) ? cs.xStep : niceStep(bounds.maxX - bounds.minX);
         var yStep2 = Number.isFinite(cs.yStep) ? cs.yStep : niceStep(bounds.maxY - bounds.minY);
-        var mapper2 = createMapper(bounds);
-        var svg2 = createBaseSvg("math-visualization-svg function-svg");
+        var mapper2 = createMapper(bounds, size.width, size.height);
+        var svg2 = createBaseSvg("math-visualization-svg function-svg", size);
         if (cs.showGrid !== false) renderGraphGrid(svg2, mapper2, bounds, xStep2, yStep2);
         renderGraphAxes(svg2, mapper2, bounds);
         if (cs.showTicks !== false || cs.showAxisNumbers !== false) renderGraphTicks(svg2, mapper2, bounds, xStep2, yStep2, cs.showTicks !== false, cs.showAxisNumbers !== false);
@@ -1216,8 +1418,8 @@
     var showTicks = cs.showTicks !== false;
     var showNumbers = cs.showAxisNumbers !== false;
 
-    var mapper = createMapper(bounds);
-    var svg = createBaseSvg("math-visualization-svg function-svg");
+    var mapper = createMapper(bounds, size.width, size.height);
+    var svg = createBaseSvg("math-visualization-svg function-svg", size);
 
     // --- LAYER 1: Grid ---
     if (showGrid) {
@@ -1259,10 +1461,23 @@
 
     // --- LAYER 5: Points ---
     var allPoints = collectDrawablePoints(spec);
+    var pointLabelLayout = layoutPointLabels(
+      allPoints.map(function(p) { return { x: p.x, y: p.y, id: p.label || "", label: p.label || "" }; }),
+      mapper,
+      bounds,
+    );
     allPoints.forEach(function(p) {
       if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
         drawPoint(svg, { x: p.x, y: p.y, id: p.label || "" }, mapper);
-        if (p.label) drawLabel(svg, { x: p.x, y: p.y, id: p.label, label: p.label }, p.label, mapper);
+        if (p.label) {
+          drawLabelWithBackground(
+            svg,
+            { x: p.x, y: p.y, id: p.label, label: p.label },
+            p.label,
+            mapper,
+            { placement: pointLabelLayout.get(p.label) },
+          );
+        }
       }
     });
     if (dbg) console.log("[FunctionGraph] drawn points:", allPoints.length);
@@ -1596,12 +1811,21 @@
 
     const min = Math.min(...values, -5);
     const max = Math.max(...values, 5);
-    const mapper = createMapper({ minX: min, maxX: max, minY: -1, maxY: 1 });
-    const svg = createBaseSvg("math-visualization-svg number-line-svg");
+    const size = getGraphSize(spec, container);
+    const bounds = { minX: min, maxX: max, minY: -1, maxY: 1 };
+    const mapper = createMapper(bounds, size.width, size.height);
+    const svg = createBaseSvg("math-visualization-svg number-line-svg", size);
     drawSegment(svg, { x: min, y: 0 }, { x: max, y: 0 }, mapper, { className: "mv-axis" });
 
+    const labelLayout = layoutPointLabels(
+      values.map((value) => ({ x: value, y: 0, id: String(value), label: String(value) })),
+      mapper,
+      bounds,
+    );
     values.forEach((value) => {
-      drawPoint(svg, { x: value, y: 0, id: String(value), label: String(value) }, mapper);
+      const point = { x: value, y: 0, id: String(value), label: String(value) };
+      drawPoint(svg, point, mapper);
+      drawLabelWithBackground(svg, point, point.label, mapper, { placement: labelLayout.get(point.id) });
     });
 
     container.append(svg);
@@ -1866,6 +2090,10 @@
     renderEquationBalance,
     renderFunctionGraph,
     renderDynamicPoint,
+    getGraphComplexity,
+    getGraphSize,
+    createBaseSvg,
+    createMapper,
     getBounds,
     projectPoint,
     drawPoint,
@@ -1875,6 +2103,9 @@
     drawAngle,
     drawRightAngle,
     drawLabel,
+    drawLabelWithBackground,
+    layoutPointLabels,
+    getPreferredLabelDirections,
     distance,
     midpoint,
     lineIntersection,
