@@ -103,19 +103,28 @@ function createNoneVisualizationSpec(description = "暂无可靠图示，可查�
   };
 }
 
+function hasMultiQuestionMarkers(text = "") {
+  const compact = asString(text).replace(/\s+/g, "");
+  return (/第[一1]问/.test(compact) && /第[二2]问/.test(compact))
+    || /(?:（1）|\(1\)).{0,600}(?:（2）|\(2\))/.test(compact);
+}
+
+function getFunctionDefinitionCount(text = "") {
+  const matches = asString(text).replace(/\s+/g, "").match(/(?:y|f\([xX]\))=/g);
+  return matches ? matches.length : 0;
+}
+
 function isComplexFunctionProblem(questionText = "", source = {}) {
-  const text = [
-    asString(questionText),
-    asString(source.problemText),
-    asString(source.description),
-  ].filter(Boolean).join("\n");
+  const text = asString(questionText || source.problemText);
   const functions = Array.isArray(source.functions) ? source.functions : [];
   const questionSections = Array.isArray(source.questionSections) ? source.questionSections : [];
+  const hasRealMultiQuestion = hasMultiQuestionMarkers(text);
 
-  return /（\s*[123]\s*）|第\s*[一二三123]\s*问|[（(]\s*1\s*[)）].*[（(]\s*2\s*[)）]/.test(text)
-    || /L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|抛物线|中心对称|双倍比例点|面积|平行于\s*x\s*轴/i.test(text)
+  return hasRealMultiQuestion
+    || /L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|双倍比例点|面积|平行于\s*x\s*轴/i.test(text)
+    || getFunctionDefinitionCount(text) > 1
     || functions.length > 1
-    || questionSections.length >= 2;
+    || (questionSections.length >= 2 && hasRealMultiQuestion);
 }
 
 function getFunctionCurveCount(spec = {}) {

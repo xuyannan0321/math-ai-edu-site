@@ -928,13 +928,39 @@ function getVisualizationPointCount(spec) {
 
 function isComplexMultiQuestionText(text) {
   var value = String(text || "");
-  return /（\s*[123]\s*）|第\s*[一二三123]\s*问|[（(]\s*1\s*[)）].*[（(]\s*2\s*[)）]/.test(value);
+  var compact = value.replace(/\s+/g, "");
+  var hasExplicitQuestionPair = /第[一1]问/.test(compact) && /第[二2]问/.test(compact);
+  var hasParenthesizedQuestionPair = /(?:（1）|\(1\)).{0,600}(?:（2）|\(2\))/.test(compact);
+
+  return hasExplicitQuestionPair || hasParenthesizedQuestionPair;
 }
 
 function isComplexFunctionQuestionText(text) {
   var value = String(text || "");
   return isComplexMultiQuestionText(value)
-    || /抛物线|L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|双倍比例点|面积|平行于\s*x\s*轴/i.test(value);
+    || /L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|双倍比例点|面积|平行于\s*x\s*轴/i.test(value)
+    || getFunctionDefinitionCount(value) > 1;
+}
+
+function getFunctionDefinitionCount(text) {
+  var compact = String(text || "").replace(/\s+/g, "");
+  var matches = compact.match(/(?:y|f\([xX]\))=/g);
+  return matches ? matches.length : 0;
+}
+
+function isSingleFunctionGraphText(text) {
+  var value = String(text || "");
+
+  return /(?:画出|作出|绘制).{0,30}函数.{0,80}图[像象]/.test(value)
+    && getFunctionDefinitionCount(value) <= 1
+    && !isComplexMultiQuestionText(value)
+    && !/L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|双倍比例点|面积|平行于\s*x\s*轴/i.test(value);
+}
+
+function hasDenseSampleCurve(spec) {
+  return Boolean(spec && Array.isArray(spec.curves) && spec.curves.some(function(curve) {
+    return curve && Array.isArray(curve.samples) && curve.samples.length > 50;
+  }));
 }
 
 function isQuadraticCurveLike(curve) {
@@ -958,9 +984,6 @@ function getResultQuestionText(questionText, result) {
   return [
     questionText,
     result?.problemText,
-    result?.title,
-    result?.topic,
-    result?.analysis,
   ].filter(Boolean).join("\n");
 }
 
@@ -998,6 +1021,10 @@ function isVisualizationSpecReliable(spec, questionText, result) {
   var mentionsMultipleCurves = /L\s*1|L\s*2|y\s*1|y\s*2|y\s*3/i.test(text);
   var mentionsPointRelations = /面积|双倍比例点|中心对称/.test(text);
   var complex = isComplexFunctionQuestionText(text);
+
+  if (isSingleFunctionGraphText(text) && hasDenseSampleCurve(spec)) {
+    return true;
+  }
 
   if (!complex) {
     return true;
@@ -1145,7 +1172,7 @@ function isSimpleSingleFunctionText(text) {
     return false;
   }
 
-  if (/抛物线|L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|面积|双倍比例点/i.test(raw)) {
+  if (/L\s*1|L\s*2|y\s*1|y\s*2|y\s*3|中心对称|面积|双倍比例点|平行于\s*x\s*轴/i.test(raw)) {
     return false;
   }
 
@@ -4317,10 +4344,19 @@ function normalizeCoordinateText(text) {
   return s.replace(spacedPattern, replacer).replace(compactPattern, replacer);
 }
 
+function normalizeSignedMathDelimiters(text) {
+  if (!text || typeof text !== "string") return text;
+
+  return text.replace(/(^|[\s=（(，,：:；;、])([+\-])\s*\\\(([\s\S]*?)\\\)/g, function(match, prefix, sign, body) {
+    return prefix + "\\(" + sign + body + "\\)";
+  });
+}
+
 function prepareMathTextForDisplay(rawText) {
   var cleaned = normalizeDisplayLatex(String(rawText ?? ""));
   cleaned = removeUnsupportedLatexControls(cleaned);
   cleaned = normalizeCoordinateText(cleaned);
+  cleaned = normalizeSignedMathDelimiters(cleaned);
   cleaned = stripBrokenLatexDelimiters(cleaned);
   cleaned = sanitizeLatexText(cleaned);
   return cleaned;
@@ -4381,6 +4417,28 @@ function findLatexFragmentEnd(text, startIndex) {
   return -1;
 }
 
+function isMathRunChar(char) {
+  return /[A-Za-z0-9\\{}()[\]+\-*/^_=.,|√\s]/.test(char);
+}
+
+function shouldWrapMathRun(run) {
+  return /\\(?:frac|sqrt)|√/.test(run)
+    && /[A-Za-z0-9}\])]/.test(run)
+    && !/^\\[([]/.test(run.trim());
+}
+
+function wrapMathRun(run) {
+  var leading = run.match(/^\s*/)[0];
+  var trailing = run.match(/\s*$/)[0];
+  var body = run.slice(leading.length, run.length - trailing.length);
+
+  if (!body) {
+    return run;
+  }
+
+  return leading + "\\(" + body + "\\)" + trailing;
+}
+
 // Main function: wrap LaTeX fragments in \(...\) using balanced-brace scanning
 function wrapLatexFragments(text) {
   if (!text || typeof text !== "string") return "";
@@ -4403,6 +4461,20 @@ function wrapLatexFragments(text) {
       if (closePos2 >= 0) {
         result += text.slice(i, closePos2 + 2);
         i = closePos2 + 2;
+        continue;
+      }
+    }
+
+    if (isMathRunChar(text[i])) {
+      var runStart = i;
+      var runEnd = i;
+      while (runEnd < text.length && isMathRunChar(text[runEnd])) {
+        runEnd++;
+      }
+      var run = text.slice(runStart, runEnd);
+      if (shouldWrapMathRun(run)) {
+        result += wrapMathRun(run);
+        i = runEnd;
         continue;
       }
     }

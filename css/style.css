@@ -32,9 +32,11 @@
 
 html,
 body {
+  max-width: 100%;
   min-width: 320px;
   min-height: 100%;
   margin: 0;
+  overflow-x: hidden;
 }
 
 body {
@@ -47,6 +49,31 @@ select,
 textarea,
 input {
   font: inherit;
+}
+
+pre,
+code,
+kbd,
+samp,
+mjx-container,
+.solution-reading-card *,
+.solution-card-diagram * {
+  max-width: 100%;
+}
+
+pre,
+code,
+.solution-reading-card p,
+.solution-reading-card li,
+.solution-equation-line,
+mjx-container {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+mjx-container {
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 button,
@@ -936,8 +963,9 @@ select.form-control {
 }
 
 .math-visualization {
-  max-width: 980px;
-  margin: 12px auto 0;
+  width: 100%;
+  max-width: 920px;
+  margin: 12px auto;
   border-radius: 16px;
   overflow: hidden;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
@@ -946,7 +974,10 @@ select.form-control {
 .math-visualization svg {
   display: block;
   width: 100%;
+  max-width: 100%;
+  height: auto;
   max-height: 460px;
+  margin: 0 auto;
 }
 
 @media (max-width: 640px) {
@@ -988,6 +1019,9 @@ select.form-control {
 .visualization-board {
   display: grid;
   place-items: center;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
   padding: 8px;
   overflow: hidden;
   background: linear-gradient(180deg, var(--gray-50) 0%, var(--white) 100%);
@@ -1005,9 +1039,14 @@ select.form-control {
 .geometry-view-list {
   display: grid;
   gap: 12px;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
 }
 
 .geometry-view-card {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   padding: 10px;
   background: var(--white);
@@ -5542,6 +5581,7 @@ body.is-preview-open {
   gap: 16px;
   width: 100%;
   max-width: 100%;
+  overflow-x: hidden;
 }
 
 .solution-reading-flow .solution-reading-card.is-original,
@@ -5550,6 +5590,8 @@ body.is-preview-open {
 }
 
 .solution-reading-card {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   padding: 18px;
   color: #334155;
@@ -5557,6 +5599,8 @@ body.is-preview-open {
   border: 1px solid #dbeafe;
   border-radius: 18px;
   box-shadow: 0 14px 38px rgba(37, 99, 235, 0.08);
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
 }
 
 .solution-reading-card.is-original,
@@ -5594,17 +5638,26 @@ body.is-preview-open {
 }
 
 .solution-card-diagram {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   margin-top: 14px;
   padding: 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
+  overflow-x: hidden;
 }
 
 .solution-card-diagram-board {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  overflow-x: hidden;
 }
 
 /* 鏂版爣鍑嗗寲灞曠ず鏍峰紡 */
