@@ -227,9 +227,35 @@ function makeLine(id, label, from, to, style = "dashed", role = "auxiliary", opt
   };
 }
 
-function shouldShowDiagramLabel(text) {
+const NON_MINIMAL_DIAGRAM_LABEL_PATTERNS = [
+  /定理|三线合一/,
+  /勾股|全等|相似|角平分线|垂直平分线/,
+  /^(?:SSS|SAS|ASA|AAS|HL)(?:全等|相似)?$/i,
+  /^△[A-Z]{3}[≌∽]△[A-Z]{3}$/,
+  /斜边/,
+];
+
+function isMinimalDiagramLabel(text, options = {}) {
   const value = asText(text).replace(/\s+/g, "");
-  return Boolean(value && value.length <= 14);
+  const maxLength = options.maxLength || 12;
+
+  if (!value || value.length > maxLength) {
+    return false;
+  }
+
+  if (value.includes("/") && value.includes("=")) {
+    return false;
+  }
+
+  if ((value.match(/=/g) || []).length > 1) {
+    return false;
+  }
+
+  return !NON_MINIMAL_DIAGRAM_LABEL_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function shouldShowDiagramLabel(text) {
+  return isMinimalDiagramLabel(text);
 }
 
 function makeDiagramLabel(id, text, x, y, role = "highlight") {
@@ -422,8 +448,8 @@ function buildCoordinateAreaTemplate(questionText, source = {}) {
   const points = {
     Q: { x: -1, y: -2, label: "Q(-1,-2)" },
     M: { x: 5, y: -2, label: "M(5,-2)" },
-    P1: { x: 2 / 3, y: 4 / 3, label: "P1(2/3,4/3)" },
-    P2: { x: -8 / 3, y: -16 / 3, label: "P2(-8/3,-16/3)" },
+    P1: { x: 2 / 3, y: 4 / 3, label: "P1" },
+    P2: { x: -8 / 3, y: -16 / 3, label: "P2" },
   };
   const auxiliaryLines = [
     {
@@ -483,7 +509,7 @@ function buildCoordinateAreaTemplate(questionText, source = {}) {
     {
       id: "height_P1_to_y_negative_2",
       kind: "segment",
-      label: "P1 到 y=-2 的距离",
+      label: "高",
       from: "P1",
       to: { x: 2 / 3, y: -2 },
       style: "dashed",
@@ -492,7 +518,7 @@ function buildCoordinateAreaTemplate(questionText, source = {}) {
     {
       id: "height_P2_to_y_negative_2",
       kind: "segment",
-      label: "P2 到 y=-2 的距离",
+      label: "高",
       from: "P2",
       to: { x: -8 / 3, y: -2 },
       style: "dashed",
@@ -505,7 +531,7 @@ function buildCoordinateAreaTemplate(questionText, source = {}) {
     ...baseTemplateMeta("coordinate_area_v1", "coordinate_area"),
     confidence: "high",
     title: "坐标系面积关系示意图",
-    description: "本图展示面积方程中的底 QM、高以及两个候选三角形 PQM。P1、P2 对应 m 的两个不同取值情形，并不表示两个点同时属于同一个确定图形。",
+    description: "本图保留底 QM、直线 y=-2、两条高和候选点 P 的位置关系。",
     coordinateSystem: {
       xMin: -4,
       xMax: 6.5,
@@ -568,16 +594,14 @@ function buildCoordinateDistanceTemplate(questionText, source = {}) {
 
   const [a, b] = pair;
   const footId = "H";
-  const foot = createPoint(footId, b.x, a.y);
+  const foot = createPoint(footId, b.x, a.y, footId);
   const points = pointMapFromList([a, b, foot]);
   const segmentId = `segment_${a.id}${b.id}`;
-  const dx = Math.abs(round4(b.x - a.x));
-  const dy = Math.abs(round4(b.y - a.y));
 
   const auxiliaryLines = [
     makeSegment(segmentId, `${a.id}${b.id}`, a.id, b.id, "solid", "original", { showLabel: true }),
-    makeSegment(`segment_${a.id}H`, `Δx=${formatCoordinateValue(dx)}`, a.id, footId, "dashed", "auxiliary", { showLabel: true }),
-    makeSegment(`segment_${b.id}H`, `Δy=${formatCoordinateValue(dy)}`, b.id, footId, "dashed", "auxiliary", { showLabel: true }),
+    makeSegment(`segment_${a.id}H`, `${a.id}H`, a.id, footId, "dashed", "auxiliary"),
+    makeSegment(`segment_${b.id}H`, `${b.id}H`, b.id, footId, "dashed", "auxiliary"),
   ];
 
   return buildFunctionGraphTemplate({
@@ -605,7 +629,7 @@ function buildCoordinateMidpointTemplate(questionText, source = {}) {
   }
 
   const [a, b] = pair;
-  const midpoint = createPoint("M", (a.x + b.x) / 2, (a.y + b.y) / 2);
+  const midpoint = createPoint("M", (a.x + b.x) / 2, (a.y + b.y) / 2, "M");
   const points = pointMapFromList([a, b, midpoint]);
   const segmentId = `segment_${a.id}${b.id}`;
 
@@ -647,7 +671,7 @@ function buildPointToLineDistanceTemplate(questionText, source = {}) {
   if (horizontal) {
     const y = Number(horizontal[1]);
     const lineLabel = `y=${formatCoordinateValue(y)}`;
-    foot = createPoint("H", point.x, y);
+    foot = createPoint("H", point.x, y, "H");
     points.H = foot;
     line = makeLine(
       `line_y_${formatIdNumber(y)}`,
@@ -661,7 +685,7 @@ function buildPointToLineDistanceTemplate(questionText, source = {}) {
   } else {
     const x = Number(vertical[1]);
     const lineLabel = `x=${formatCoordinateValue(x)}`;
-    foot = createPoint("H", x, point.y);
+    foot = createPoint("H", x, point.y, "H");
     points.H = foot;
     line = makeLine(
       `line_x_${formatIdNumber(x)}`,
@@ -709,7 +733,7 @@ function pickTrianglePoints(pointsList) {
 
 function buildTriangleHeightAuxiliary(a, b, c) {
   if (Math.abs(a.y - b.y) < 1e-8) {
-    const foot = createPoint("H", c.x, a.y);
+    const foot = createPoint("H", c.x, a.y, "H");
     return {
       foot,
       lines: [
@@ -721,7 +745,7 @@ function buildTriangleHeightAuxiliary(a, b, c) {
   }
 
   if (Math.abs(a.x - b.x) < 1e-8) {
-    const foot = createPoint("H", a.x, c.y);
+    const foot = createPoint("H", a.x, c.y, "H");
     return {
       foot,
       lines: [
@@ -883,10 +907,8 @@ function buildIsoscelesTriangleTemplate(questionText, source = {}) {
       points: ["B", "D", "A"],
       role: "highlight",
     },
-    makeDiagramLabel("label_equal_sides_left", "AB=AC", -1.5, 1.55),
-    makeDiagramLabel("label_equal_sides_right", "AB=AC", 1.5, 1.55),
+    makeDiagramLabel("label_equal_sides", "AB=AC", -1.58, 1.55),
     makeDiagramLabel("label_midpoint", "BD=CD", 0, -0.44),
-    makeDiagramLabel("label_perpendicular", "AD ⊥ BC", 0.7, 0.62),
   ];
 
   return {
@@ -902,7 +924,7 @@ function buildIsoscelesTriangleTemplate(questionText, source = {}) {
         id: "main",
         title: "等腰三角形三线合一示意图",
         showObjects: objects.map((object) => object.id),
-        highlightObjects: ["segment_AD", "right_angle_AD_BC", "label_perpendicular"],
+        highlightObjects: ["segment_AD", "right_angle_AD_BC"],
       },
     ],
     steps: [],
@@ -974,7 +996,6 @@ function buildMidpointMidlineTemplate(questionText, source = {}) {
     },
     makeDiagramLabel("label_midpoint_ab", "AM=MB", -1.72, 1.08),
     makeDiagramLabel("label_midpoint_ac", "AN=NC", 1.72, 1.08),
-    makeDiagramLabel("label_midline_parallel", "MN ∥ BC", 0, 2.05),
   ];
 
   return {
@@ -990,7 +1011,7 @@ function buildMidpointMidlineTemplate(questionText, source = {}) {
         id: "main",
         title: "三角形中位线示意图",
         showObjects: objects.map((object) => object.id),
-        highlightObjects: ["segment_MN", "label_midline_parallel"],
+        highlightObjects: ["segment_MN"],
       },
     ],
     steps: [],
@@ -1038,12 +1059,12 @@ function buildParallelAngleTemplate(questionText, source = {}) {
   }
 
   const points = {
-    A: { x: -2.8, y: 2.2, label: "A" },
-    E: { x: -0.6, y: 2.2, label: "E" },
-    B: { x: 2.4, y: 2.2, label: "B" },
-    C: { x: -2.4, y: 0, label: "C" },
-    F: { x: 0.6, y: 0, label: "F" },
-    D: { x: 2.8, y: 0, label: "D" },
+    A: { x: -3.2, y: 2.2, label: "A" },
+    E: { x: -0.8, y: 2.2, label: "E" },
+    B: { x: 2.8, y: 2.2, label: "B" },
+    C: { x: -2.8, y: 0, label: "C" },
+    F: { x: 0.8, y: 0, label: "F" },
+    D: { x: 3.2, y: 0, label: "D" },
   };
   const objects = [
     {
@@ -1087,26 +1108,25 @@ function buildParallelAngleTemplate(questionText, source = {}) {
       points: ["E", "F", "D"],
       role: "highlight",
     },
-    makeDiagramLabel("label_parallel", "AB ∥ CD", -2.15, 1.12),
-    makeDiagramLabel("label_angle_aef", "∠1", -1.05, 1.66),
-    makeDiagramLabel("label_angle_efd", "∠2", 1.1, 0.58),
-    makeDiagramLabel("label_equal_angles", "∠1=∠2", 0.2, 1.22),
+    makeDiagramLabel("label_angle_aef", "∠AEF", -1.52, 1.36),
+    makeDiagramLabel("label_angle_efd", "∠EFD", 1.18, 0.58),
+    makeDiagramLabel("label_parallel", "AB∥CD", 1.72, 1.36),
   ];
 
   return {
     type: "geometry",
     ...baseTemplateMeta("parallel_angle_v1", "geometry"),
     confidence: "high",
-    title: "平行线内错角示意图",
-    description: "本图展示两直线平行时，内错角相等的关系。",
+    title: "平行线角关系示意图",
+    description: "本图保留两条平行线、截线和题目中的两个目标角。",
     points,
     objects,
     views: [
       {
         id: "main",
-        title: "平行线内错角示意图",
+        title: "平行线角关系示意图",
         showObjects: objects.map((object) => object.id),
-        highlightObjects: ["angle_AEF", "angle_EFD", "label_parallel", "label_equal_angles"],
+        highlightObjects: ["angle_AEF", "angle_EFD", "label_parallel"],
       },
     ],
     steps: [],
@@ -1267,8 +1287,8 @@ function buildCongruentTriangleSssTemplate(questionText, source = {}) {
 
   return buildCongruentTriangleTemplateBase({
     templateId: "congruent_triangle_sss_v1",
-    title: "三角形全等 SSS 示意图",
-    description: "本图展示三边对应相等时，两个三角形全等的关系。",
+    title: "两个三角形结构示意图",
+    description: "本图保留两个三角形和对应顶点，条件关系留在解析文字中。",
     theoremName: "SSS（三边对应相等）",
     diagramLabel: "SSS 全等",
     scopeNote: "仅用于 AB=DE、AC=DF、BC=EF，求证 △ABC≌△DEF 的稳定结构。",
@@ -1648,8 +1668,8 @@ function buildSimilarTriangleSssTemplate(questionText, source = {}) {
 
   return buildSimilarTriangleTemplateBase({
     templateId: "similar_triangle_sss_v1",
-    title: "三角形 SSS 相似示意图",
-    description: "本图展示三边对应成比例时，两个三角形相似的关系。",
+    title: "两个三角形形状关系示意图",
+    description: "本图保留两个大小不同的三角形和对应顶点，比例关系留在解析文字中。",
     theoremName: "SSS（三边对应成比例）",
     diagramLabel: "SSS 相似",
     scopeNote: "仅用于 AB/DE=AC/DF=BC/EF，求证 △ABC∽△DEF 的稳定结构。",
@@ -1729,8 +1749,6 @@ function buildAngleBisectorTemplate(questionText, source = {}) {
       points: ["D", "A", "C"],
       role: "highlight",
     },
-    makeShortTheoremLabel("角平分线", 0.78, 1.7, "label_angle_bisector"),
-    makeConclusionLabel("∠BAD=∠DAC", 0, -0.48, "label_angle_bisector_conclusion"),
   ].filter(Boolean);
 
   return {
@@ -1746,7 +1764,7 @@ function buildAngleBisectorTemplate(questionText, source = {}) {
         id: "main",
         title: "角平分线性质示意图",
         showObjects: objects.map((object) => object.id),
-        highlightObjects: ["segment_AD", "angle_BAD", "angle_DAC", "label_angle_bisector", "label_angle_bisector_conclusion"],
+        highlightObjects: ["segment_AD", "angle_BAD", "angle_DAC"],
       },
     ],
     steps: [],
@@ -1800,24 +1818,23 @@ function buildPerpendicularBisectorTemplate(questionText, source = {}) {
       role: "highlight",
     },
     makeDiagramLabel("label_line_l", "l", 0.28, 2.58),
-    makeShortTheoremLabel("垂直平分线", 1.0, 1.18, "label_perpendicular_bisector"),
-    makeConclusionLabel("PA=PB", 0, -0.48, "label_perpendicular_bisector_conclusion"),
+    makeDiagramLabel("label_equal_distances", "PA=PB", 0, -0.48),
   ].filter(Boolean);
 
   return {
     type: "geometry",
     ...baseTemplateMeta("perpendicular_bisector_v1", "geometry"),
     confidence: "high",
-    title: "垂直平分线性质示意图",
-    description: "本图展示线段垂直平分线上的点到线段两端距离相等的关系。",
+    title: "线段垂线关系示意图",
+    description: "本图保留线段 AB、中点 M、直线 l、点 P 以及 PA、PB。",
     points,
     objects,
     views: [
       {
         id: "main",
-        title: "垂直平分线性质示意图",
+        title: "线段垂线关系示意图",
         showObjects: objects.map((object) => object.id),
-        highlightObjects: ["line_l", "segment_PA", "segment_PB", "right_angle_l_AB", "label_perpendicular_bisector", "label_perpendicular_bisector_conclusion"],
+        highlightObjects: ["line_l", "segment_PA", "segment_PB", "right_angle_l_AB", "label_equal_distances"],
       },
     ],
     steps: [],
@@ -1903,27 +1920,25 @@ function buildPythagoreanRightTriangleTemplate(questionText, source = {}) {
       points: ["A", "C", "B"],
       role: "highlight",
     },
-    makeShortTheoremLabel("勾股定理", scaledBC * 0.55, scaledAC + 0.42, "label_pythagorean_theorem"),
     makeDiagramLabel("label_ac", `AC=${formatCoordinateValue(acLength)}`, -0.48, scaledAC * 0.5),
     makeDiagramLabel("label_bc", `BC=${formatCoordinateValue(bcLength)}`, scaledBC * 0.5, -0.38),
-    makeDiagramLabel("label_hypotenuse", "斜边 AB", scaledBC * 0.5 + 0.38, scaledAC * 0.5 + 0.28),
-    makeConclusionLabel(`AB=${abText}`, scaledBC * 0.5, -0.82, "label_pythagorean_conclusion"),
+    makeDiagramLabel("label_ab_unknown", "AB=?", scaledBC * 0.52 + 0.22, scaledAC * 0.5 + 0.18),
   ].filter(Boolean);
 
   return {
     type: "geometry",
     ...baseTemplateMeta("pythagorean_right_triangle_v1", "geometry"),
     confidence: "high",
-    title: "勾股定理示意图",
-    description: "本图展示直角三角形中，两条直角边与斜边之间的勾股关系。",
+    title: "直角三角形边长示意图",
+    description: "本图保留直角三角形的已知边和未知边。",
     points,
     objects,
     views: [
       {
         id: "main",
-        title: "勾股定理示意图",
+        title: "直角三角形边长示意图",
         showObjects: objects.map((object) => object.id),
-        highlightObjects: ["right_angle_C", "label_pythagorean_theorem", "label_pythagorean_conclusion"],
+        highlightObjects: ["right_angle_C", "label_ac", "label_bc", "label_ab_unknown"],
       },
     ],
     steps: [],
