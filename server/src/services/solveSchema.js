@@ -242,6 +242,9 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "similar_triangle_aa_v1",
   "similar_triangle_sas_v1",
   "similar_triangle_sss_v1",
+  "angle_bisector_v1",
+  "perpendicular_bisector_v1",
+  "pythagorean_right_triangle_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {

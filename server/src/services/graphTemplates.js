@@ -1659,6 +1659,282 @@ function buildSimilarTriangleSssTemplate(questionText, source = {}) {
   });
 }
 
+function getGeometryPropertySignalContext(text) {
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|⊙|旋转|折叠|动点|最值|相似|∽|全等|≌|切线|弧|⌒|半径|直径/.test(compact)) {
+    return null;
+  }
+
+  return { normalizedText, compact };
+}
+
+function hasAngleBisectorSignals(text) {
+  const context = getGeometryPropertySignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasTriangleABC = /△ABC|\\TRIANGLEABC/.test(compact);
+  const hasBisector = /AD(?:是|为)?∠BAC的角平分线/.test(compact)
+    || /AD平分∠BAC/.test(compact);
+  const hasPointDOnBC = /(?:点)?D在(?:线段)?BC上/.test(compact)
+    || /D.{0,6}BC上/.test(compact);
+  const hasAngleGoal = hasCongruentEqualPair(compact, "∠BAD", "∠DAC");
+  const hasProofIntent = /(求证|证明|证)/.test(compact);
+
+  return hasTriangleABC && hasBisector && hasPointDOnBC && hasAngleGoal && hasProofIntent;
+}
+
+function buildAngleBisectorTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasAngleBisectorSignals(text)) {
+    return null;
+  }
+
+  const points = {
+    A: { x: 0, y: 3.2, label: "A" },
+    B: { x: -2.6, y: 0, label: "B" },
+    C: { x: 2.6, y: 0, label: "C" },
+    D: { x: 0, y: 0, label: "D" },
+  };
+  const objects = [
+    {
+      kind: "polygon",
+      id: "triangle_ABC",
+      label: "△ABC",
+      points: ["A", "B", "C"],
+      role: "original",
+      style: "solid",
+    },
+    makeSegment("segment_AD", "AD", "A", "D", "solid", "highlight"),
+    {
+      kind: "angle",
+      id: "angle_BAD",
+      label: "∠BAD",
+      points: ["B", "A", "D"],
+      role: "highlight",
+    },
+    {
+      kind: "angle",
+      id: "angle_DAC",
+      label: "∠DAC",
+      points: ["D", "A", "C"],
+      role: "highlight",
+    },
+    makeShortTheoremLabel("角平分线", 0.78, 1.7, "label_angle_bisector"),
+    makeConclusionLabel("∠BAD=∠DAC", 0, -0.48, "label_angle_bisector_conclusion"),
+  ].filter(Boolean);
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta("angle_bisector_v1", "geometry"),
+    confidence: "high",
+    title: "角平分线性质示意图",
+    description: "本图展示角平分线把一个角分成两个相等角的关系。",
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: "角平分线性质示意图",
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: ["segment_AD", "angle_BAD", "angle_DAC", "label_angle_bisector", "label_angle_bisector_conclusion"],
+      },
+    ],
+    steps: [],
+    notes: [
+      "仅用于 AD 是 ∠BAC 的角平分线、点 D 在 BC 上、求证 ∠BAD=∠DAC 的稳定结构。",
+      "使用初中角平分线定义，不使用坐标、向量或高中方法。",
+    ],
+  };
+}
+
+function hasPerpendicularBisectorSignals(text) {
+  const context = getGeometryPropertySignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasSegmentAB = /线段AB|AB/.test(compact);
+  const hasPerpendicularBisector = /(?:直线)?L(?:是|为)(?:线段)?AB的垂直平分线/.test(compact)
+    || /(?:直线)?L垂直平分(?:线段)?AB/.test(compact);
+  const hasPointPOnLine = /(?:点)?P在(?:直线)?L上/.test(compact);
+  const hasDistanceGoal = hasCongruentEqualPair(compact, "PA", "PB");
+  const hasProofIntent = /(求证|证明|证)/.test(compact);
+
+  return hasSegmentAB && hasPerpendicularBisector && hasPointPOnLine && hasDistanceGoal && hasProofIntent;
+}
+
+function buildPerpendicularBisectorTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasPerpendicularBisectorSignals(text)) {
+    return null;
+  }
+
+  const points = {
+    A: { x: -2.2, y: 0, label: "A" },
+    M: { x: 0, y: 0, label: "M" },
+    B: { x: 2.2, y: 0, label: "B" },
+    P: { x: 0, y: 2.4, label: "P" },
+  };
+  const objects = [
+    makeSegment("segment_AB", "AB", "A", "B", "solid", "original"),
+    makeLine("line_l", "l", "M", "P", "solid", "highlight"),
+    makeSegment("segment_PA", "PA", "P", "A", "solid", "highlight"),
+    makeSegment("segment_PB", "PB", "P", "B", "solid", "highlight"),
+    {
+      kind: "rightAngle",
+      id: "right_angle_l_AB",
+      label: "l ⊥ AB",
+      points: ["A", "M", "P"],
+      role: "highlight",
+    },
+    makeDiagramLabel("label_line_l", "l", 0.28, 2.58),
+    makeShortTheoremLabel("垂直平分线", 1.0, 1.18, "label_perpendicular_bisector"),
+    makeConclusionLabel("PA=PB", 0, -0.48, "label_perpendicular_bisector_conclusion"),
+  ].filter(Boolean);
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta("perpendicular_bisector_v1", "geometry"),
+    confidence: "high",
+    title: "垂直平分线性质示意图",
+    description: "本图展示线段垂直平分线上的点到线段两端距离相等的关系。",
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: "垂直平分线性质示意图",
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: ["line_l", "segment_PA", "segment_PB", "right_angle_l_AB", "label_perpendicular_bisector", "label_perpendicular_bisector_conclusion"],
+      },
+    ],
+    steps: [],
+    notes: [
+      "仅用于 l 是线段 AB 的垂直平分线、点 P 在 l 上、求证 PA=PB 的稳定结构。",
+      "使用初中垂直平分线性质，不使用坐标、向量或高中方法。",
+    ],
+  };
+}
+
+function parsePositiveLength(compact, segment) {
+  const match = compact.match(new RegExp(`${segment}=([0-9]+(?:\\.[0-9]+)?)`));
+  if (!match) {
+    return null;
+  }
+
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function getPythagoreanSignalContext(text) {
+  const context = getGeometryPropertySignalContext(text);
+  if (!context) {
+    return null;
+  }
+
+  const { compact } = context;
+  const acLength = parsePositiveLength(compact, "AC");
+  const bcLength = parsePositiveLength(compact, "BC");
+  const hasRightTriangle = /RT△ABC/.test(compact) || /直角△ABC/.test(compact);
+  const hasRightAngleC = /∠C=90(?:°|度)?/.test(compact)
+    || /∠ACB=90(?:°|度)?/.test(compact)
+    || /∠BCA=90(?:°|度)?/.test(compact);
+  const asksAB = /求AB|求出AB|AB的长|求斜边AB/.test(compact);
+
+  if (!hasRightTriangle || !hasRightAngleC || !acLength || !bcLength || !asksAB) {
+    return null;
+  }
+
+  return {
+    ...context,
+    acLength,
+    bcLength,
+    abLength: Math.sqrt(acLength * acLength + bcLength * bcLength),
+  };
+}
+
+function hasPythagoreanRightTriangleSignals(text) {
+  return Boolean(getPythagoreanSignalContext(text));
+}
+
+function buildPythagoreanRightTriangleTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+  const context = getPythagoreanSignalContext(text);
+
+  if (!context) {
+    return null;
+  }
+
+  const { acLength, bcLength, abLength } = context;
+  const scale = 3.2 / Math.max(acLength, bcLength, 1);
+  const scaledAC = acLength * scale;
+  const scaledBC = bcLength * scale;
+  const abText = formatCoordinateValue(abLength);
+  const points = {
+    A: { x: 0, y: scaledAC, label: "A" },
+    C: { x: 0, y: 0, label: "C" },
+    B: { x: scaledBC, y: 0, label: "B" },
+  };
+  const objects = [
+    {
+      kind: "polygon",
+      id: "triangle_ABC",
+      label: "Rt△ABC",
+      points: ["A", "C", "B"],
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "rightAngle",
+      id: "right_angle_C",
+      label: "∠C=90°",
+      points: ["A", "C", "B"],
+      role: "highlight",
+    },
+    makeShortTheoremLabel("勾股定理", scaledBC * 0.55, scaledAC + 0.42, "label_pythagorean_theorem"),
+    makeDiagramLabel("label_ac", `AC=${formatCoordinateValue(acLength)}`, -0.48, scaledAC * 0.5),
+    makeDiagramLabel("label_bc", `BC=${formatCoordinateValue(bcLength)}`, scaledBC * 0.5, -0.38),
+    makeDiagramLabel("label_hypotenuse", "斜边 AB", scaledBC * 0.5 + 0.38, scaledAC * 0.5 + 0.28),
+    makeConclusionLabel(`AB=${abText}`, scaledBC * 0.5, -0.82, "label_pythagorean_conclusion"),
+  ].filter(Boolean);
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta("pythagorean_right_triangle_v1", "geometry"),
+    confidence: "high",
+    title: "勾股定理示意图",
+    description: "本图展示直角三角形中，两条直角边与斜边之间的勾股关系。",
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: "勾股定理示意图",
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: ["right_angle_C", "label_pythagorean_theorem", "label_pythagorean_conclusion"],
+      },
+    ],
+    steps: [],
+    notes: [
+      `仅用于 Rt△ABC 中，∠C=90°，AC=${formatCoordinateValue(acLength)}，BC=${formatCoordinateValue(bcLength)}，求 AB 的稳定结构。`,
+      `使用勾股定理：AB²=AC²+BC²，可得 AB=${abText}。`,
+      "不使用坐标、向量或高中方法。",
+    ],
+  };
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -1747,6 +2023,9 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildSimilarTriangleAaTemplate(questionText, source)
     || buildSimilarTriangleSasTemplate(questionText, source)
     || buildSimilarTriangleSssTemplate(questionText, source)
+    || buildAngleBisectorTemplate(questionText, source)
+    || buildPerpendicularBisectorTemplate(questionText, source)
+    || buildPythagoreanRightTriangleTemplate(questionText, source)
     || null;
 }
 
@@ -1771,5 +2050,8 @@ module.exports = {
   buildSimilarTriangleAaTemplate,
   buildSimilarTriangleSasTemplate,
   buildSimilarTriangleSssTemplate,
+  buildAngleBisectorTemplate,
+  buildPerpendicularBisectorTemplate,
+  buildPythagoreanRightTriangleTemplate,
   buildGraphTemplateSpec,
 };
