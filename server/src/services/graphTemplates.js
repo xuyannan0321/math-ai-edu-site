@@ -899,6 +899,114 @@ function buildIsoscelesTriangleTemplate(questionText, source = {}) {
   };
 }
 
+function hasMidpointMidlineSignals(text) {
+  const compact = compactTemplateText(text).toUpperCase();
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return false;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|旋转|折叠|动点|最值|相似|切线|弧|半径|直径/.test(compact)) {
+    return false;
+  }
+
+  const hasTriangleABC = /三角形ABC|△ABC|\\TRIANGLEABC/.test(compact);
+  const hasMidpointM = /M.{0,10}(是|为).{0,10}AB.{0,6}中点/.test(compact)
+    || /AB.{0,10}中点.{0,10}M/.test(compact);
+  const hasMidpointN = /N.{0,10}(是|为).{0,10}AC.{0,6}中点/.test(compact)
+    || /AC.{0,10}中点.{0,10}N/.test(compact);
+  const hasParallelGoal = /MN.{0,8}(平行|∥|\/\/|\\PARALLEL).{0,8}BC/.test(compact)
+    || /求证.{0,20}MN.{0,8}(平行|∥|\/\/|\\PARALLEL).{0,8}BC/.test(compact);
+
+  return hasTriangleABC && hasMidpointM && hasMidpointN && hasParallelGoal;
+}
+
+function buildMidpointMidlineTemplate(questionText, source = {}) {
+  const text = [
+    questionText,
+    source.problemText,
+    source.title,
+  ].map(asText).join("\n");
+
+  if (!hasMidpointMidlineSignals(text)) {
+    return null;
+  }
+
+  const points = {
+    A: { x: 0, y: 3.2, label: "A" },
+    B: { x: -2.4, y: 0, label: "B" },
+    C: { x: 2.4, y: 0, label: "C" },
+    M: { x: -1.2, y: 1.6, label: "M" },
+    N: { x: 1.2, y: 1.6, label: "N" },
+  };
+  const objects = [
+    {
+      kind: "polygon",
+      id: "triangle_ABC",
+      label: "△ABC",
+      points: ["A", "B", "C"],
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "segment",
+      id: "segment_MN",
+      label: "MN",
+      from: "M",
+      to: "N",
+      role: "highlight",
+      style: "solid",
+    },
+    {
+      kind: "label",
+      id: "label_midpoint_ab",
+      text: "AM=MB",
+      x: -1.55,
+      y: 1.18,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_midpoint_ac",
+      text: "AN=NC",
+      x: 1.55,
+      y: 1.18,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_midline_parallel",
+      text: "MN ∥ BC",
+      x: 0,
+      y: 1.95,
+      role: "highlight",
+    },
+  ];
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta("midpoint_midline_v1", "geometry"),
+    confidence: "high",
+    title: "三角形中位线示意图",
+    description: "本图展示三角形两边中点连线平行于第三边的关系。",
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: "三角形中位线示意图",
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: ["segment_MN", "label_midline_parallel"],
+      },
+    ],
+    steps: [],
+    notes: [
+      "仅用于 M 是 AB 中点、N 是 AC 中点、求证 MN 平行 BC 的稳定结构。",
+      "使用初中三角形中位线定理，不使用坐标、向量或高级方法。",
+    ],
+  };
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -977,6 +1085,7 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildTriangleAreaCoordinateTemplate(questionText, source)
     || buildParallelPerpendicularTemplate(questionText, source)
     || buildIsoscelesTriangleTemplate(questionText, source)
+    || buildMidpointMidlineTemplate(questionText, source)
     || null;
 }
 
@@ -991,5 +1100,6 @@ module.exports = {
   buildTriangleAreaCoordinateTemplate,
   buildParallelPerpendicularTemplate,
   buildIsoscelesTriangleTemplate,
+  buildMidpointMidlineTemplate,
   buildGraphTemplateSpec,
 };

@@ -144,6 +144,9 @@ function buildBaseSystemPrompt() {
     "几何题不要强行猜 coordinates；无法可靠绘制几何图时 type 用 none，前端会显示原题图兜底。",
     "等腰三角形三线合一题（例如 AB=AC，D 是 BC 的中点，求证 AD 垂直 BC）必须使用初中几何方法：先写 BD=CD，再证 △ABD ≌ △ACD，推出 ∠ADB=∠ADC，再由 B、D、C 共线得两角和为 180°，因此各为 90°，最后得到 AD 垂直 BC。",
     "等腰三角形三线合一题禁止使用坐标法、向量法、高中三角或解析几何；图示只描述点、线段、直角标记和标签。",
+    "三角形中位线题（例如 M 是 AB 的中点，N 是 AC 的中点，求证 MN 平行 BC）必须使用初中几何方法：写清 AM=MB、AN=NC，在三角形 ABC 中连接两边中点 M、N，根据三角形中位线定理可得 MN 平行 BC；需要时可补充 MN 等于 BC 的一半。",
+    "三角形中位线题禁止使用坐标法、斜率、特殊坐标验证、向量法、高中三角或解析几何；学生端解析和学生可见验算都必须是中文自然语言，不输出 SVG、Canvas、HTML 或绘图代码。",
+    "三角形中位线题的学生可见 verification / 结果检查只能写“两个中点条件满足，因此中位线定理适用，结论 MN∥BC 与要证一致”这类几何复核；严禁出现 A(0,0)、B(4,0)、坐标、斜率、代数验证、后端校验等字样。",
   ].join("\n");
 }
 
@@ -255,6 +258,9 @@ function buildGeometryUserPrompt({
     "10. 不要输出 HTML、SVG、Canvas、script 或绘图代码。",
     "10a. 对“AB=AC，D 是 BC 的中点，求证 AD 垂直 BC”这类等腰三角形三线合一题，解析必须包含：已知 AB=AC 和 BD=CD；在 △ABD 与 △ACD 中列 AB=AC、BD=CD、AD=AD；推出 △ABD≌△ACD；推出 ∠ADB=∠ADC；再由 B、D、C 共线得两角相加为 180°，所以每个角为 90°，最终得到 AD⊥BC。",
     "10b. 等腰三角形三线合一题不要使用坐标、向量、高中三角；学生端只展示全等三角形或三线合一的初中证明。",
+    "10c. 对“M 是 AB 的中点，N 是 AC 的中点，求证 MN 平行 BC”这类三角形中位线题，解析必须包含：已知 M 是 AB 的中点、N 是 AC 的中点；所以 AM=MB、AN=NC；在三角形 ABC 中，连接两边中点 M、N；根据三角形中位线定理，可得 MN∥BC；因此结论成立。",
+    "10d. 三角形中位线题不要使用坐标、斜率、特殊坐标验证、向量、高中三角；学生端只展示三角形中位线定理的初中证明和几何复核，并使用中文自然语言。",
+    "10e. 三角形中位线题的 verification / 结果检查不得写坐标点例子、斜率计算、代数验证或“后端校验”；只用几何语言复核中点条件和中位线定理适用性。",
     "11. 函数题/平面直角坐标题必须输出 visualizationSpec.type = \"function_graph\"，至少包含 functions、points、auxiliaryLines、views。无法可靠解析时 type 使用 none。",
     "11a. 当前函数模板只是图示增强；几何压轴题、圆综合题、相似题、旋转题后续通过 geometry / circle / similarity / rotation 模板扩展。遇到这些题时仍以原图兜底和文字解析为主，不要强行编图。",
     "11. reasoningLines 每条需填写 type：because（因为/已知）、therefore（所以/推出）、normal（普通叙述）、calculation（代数计算）、conclusion（阶段性结论）。",
