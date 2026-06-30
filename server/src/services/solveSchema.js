@@ -234,6 +234,11 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "isosceles_triangle_v1",
   "midpoint_midline_v1",
   "parallel_angle_v1",
+  "congruent_triangle_sss_v1",
+  "congruent_triangle_sas_v1",
+  "congruent_triangle_asa_v1",
+  "congruent_triangle_aas_v1",
+  "congruent_triangle_hl_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {
@@ -1515,7 +1520,14 @@ function normalizeQuestionSections(rawSections, problemText, steps) {
 
 function normalizeSolution(raw, fallback = {}) {
   const source = isPlainObject(raw) ? raw : {};
-  const problemText = asString(source.problemText, fallback.questionText || "");
+  const originalQuestionText = asString(fallback.questionText || "");
+  const problemText = asString(source.problemText, originalQuestionText);
+  const templateQuestionText = [
+    originalQuestionText,
+    problemText,
+    source.analysis,
+    source.finalAnswer,
+  ].map(asString).filter(Boolean).join("\n");
   const steps = normalizeSteps(source.steps);
   const knowledgePoints = asStringArray(source.knowledgePoints);
   const commonMistakes = asStringArray(source.commonMistakes);
@@ -1548,7 +1560,8 @@ function normalizeSolution(raw, fallback = {}) {
     commonMistakes: commonMistakes.length ? commonMistakes : ["不要只抄最终答案，要核对每一步依据。"],
     verification: asString(source.verification, "请将答案代回原题条件进行检查。"),
     visualizationSpec: normalizeVisualizationSpec(visualizationSource, {
-      questionText: problemText || fallback.questionText,
+      questionText: templateQuestionText,
+      problemText: problemText,
       questionType: fallback.questionType || source.topic,
       questionSections: questionSections,
     }),

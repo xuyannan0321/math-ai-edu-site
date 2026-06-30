@@ -1154,6 +1154,332 @@ function buildParallelAngleTemplate(questionText, source = {}) {
   };
 }
 
+function getCongruentTriangleSignalContext(text) {
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|⊙|旋转|折叠|动点|最值|相似|∽|切线|弧|⌒|半径|直径/.test(compact)) {
+    return null;
+  }
+
+  const hasTriangleABC = /△ABC|\\TRIANGLEABC/.test(compact);
+  const hasTriangleDEF = /△DEF|\\TRIANGLEDEF/.test(compact);
+  const hasCongruentRelation = /△ABC≌△DEF|△DEF≌△ABC/.test(compact);
+  const hasProofIntent = /(求证|证明|证|可得|推出|得到)/.test(compact);
+  const hasCongruentGoal = hasCongruentRelation && hasProofIntent;
+
+  if (!hasTriangleABC || !hasTriangleDEF || !hasCongruentGoal) {
+    return null;
+  }
+
+  return { normalizedText, compact };
+}
+
+function hasCongruentEqualPair(compact, first, second) {
+  return compact.includes(`${first}=${second}`) || compact.includes(`${second}=${first}`);
+}
+
+function buildCongruentTriangleTemplateBase(options) {
+  const points = options.rightTriangle
+    ? {
+        A: { x: -3.4, y: 2.4, label: "A" },
+        B: { x: -5.4, y: 0, label: "B" },
+        C: { x: -3.4, y: 0, label: "C" },
+        D: { x: 2.2, y: 2.4, label: "D" },
+        E: { x: 0.2, y: 0, label: "E" },
+        F: { x: 2.2, y: 0, label: "F" },
+      }
+    : {
+        A: { x: -4.4, y: 2.4, label: "A" },
+        B: { x: -5.8, y: 0, label: "B" },
+        C: { x: -3.0, y: 0, label: "C" },
+        D: { x: 1.4, y: 2.4, label: "D" },
+        E: { x: 0.0, y: 0, label: "E" },
+        F: { x: 2.8, y: 0, label: "F" },
+      };
+  const angleObjects = (options.angleObjects || []).map((angle) => ({
+    kind: "angle",
+    id: angle.id,
+    label: angle.label,
+    points: angle.points,
+    role: "highlight",
+  }));
+  const rightAngleObjects = (options.rightAngleObjects || []).map((angle) => ({
+    kind: "rightAngle",
+    id: angle.id,
+    label: angle.label,
+    points: angle.points,
+    role: "highlight",
+  }));
+  const conditionLabels = (options.conditionLabels || []).map((label, index) => ({
+    kind: "label",
+    id: `label_congruent_condition_${index + 1}`,
+    text: label.text,
+    x: label.x,
+    y: label.y,
+    role: "highlight",
+  }));
+  const conclusionLabel = {
+    kind: "label",
+    id: "label_congruent_conclusion",
+    text: "△ABC≌△DEF",
+    x: -1.45,
+    y: -0.48,
+    role: "highlight",
+  };
+  const objects = [
+    {
+      kind: "polygon",
+      id: "triangle_ABC",
+      label: "△ABC",
+      points: ["A", "B", "C"],
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "polygon",
+      id: "triangle_DEF",
+      label: "△DEF",
+      points: ["D", "E", "F"],
+      role: "original",
+      style: "solid",
+    },
+    ...angleObjects,
+    ...rightAngleObjects,
+    ...conditionLabels,
+    conclusionLabel,
+  ];
+  const highlightObjects = objects
+    .filter((object) => object.role === "highlight")
+    .map((object) => object.id);
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta(options.templateId, "geometry"),
+    confidence: "high",
+    title: options.title,
+    description: options.description,
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: options.title,
+        showObjects: objects.map((object) => object.id),
+        highlightObjects,
+      },
+    ],
+    steps: [],
+    notes: [
+      options.scopeNote,
+      `使用初中三角形全等判定：${options.theoremName}。`,
+      "不使用坐标、向量、高中三角或复杂综合方法。",
+    ].filter(Boolean),
+  };
+}
+
+function hasCongruentTriangleSssSignals(text) {
+  const context = getCongruentTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  return hasCongruentEqualPair(compact, "AB", "DE")
+    && hasCongruentEqualPair(compact, "AC", "DF")
+    && hasCongruentEqualPair(compact, "BC", "EF");
+}
+
+function buildCongruentTriangleSssTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasCongruentTriangleSssSignals(text)) {
+    return null;
+  }
+
+  return buildCongruentTriangleTemplateBase({
+    templateId: "congruent_triangle_sss_v1",
+    title: "三角形全等 SSS 示意图",
+    description: "本图展示三边对应相等时，两个三角形全等的关系。",
+    theoremName: "SSS（三边对应相等）",
+    scopeNote: "仅用于 AB=DE、AC=DF、BC=EF，求证 △ABC≌△DEF 的稳定结构。",
+    conditionLabels: [
+      { text: "AB=DE", x: -1.45, y: 2.35 },
+      { text: "AC=DF", x: -1.45, y: 1.95 },
+      { text: "BC=EF", x: -1.45, y: 1.55 },
+    ],
+  });
+}
+
+function hasCongruentTriangleSasSignals(text) {
+  const context = getCongruentTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  return hasCongruentEqualPair(compact, "AB", "DE")
+    && hasCongruentEqualPair(compact, "AC", "DF")
+    && hasCongruentEqualPair(compact, "∠BAC", "∠EDF");
+}
+
+function buildCongruentTriangleSasTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasCongruentTriangleSasSignals(text)) {
+    return null;
+  }
+
+  return buildCongruentTriangleTemplateBase({
+    templateId: "congruent_triangle_sas_v1",
+    title: "三角形全等 SAS 示意图",
+    description: "本图展示两边及夹角对应相等时，两个三角形全等的关系。",
+    theoremName: "SAS（两边及夹角对应相等）",
+    scopeNote: "仅用于 AB=DE、AC=DF、∠BAC=∠EDF，求证 △ABC≌△DEF 的稳定结构。",
+    angleObjects: [
+      { id: "angle_BAC", label: "∠BAC", points: ["B", "A", "C"] },
+      { id: "angle_EDF", label: "∠EDF", points: ["E", "D", "F"] },
+    ],
+    conditionLabels: [
+      { text: "AB=DE", x: -1.45, y: 2.35 },
+      { text: "AC=DF", x: -1.45, y: 1.95 },
+      { text: "∠BAC=∠EDF", x: -1.45, y: 1.55 },
+    ],
+  });
+}
+
+function hasCongruentTriangleAsaSignals(text) {
+  const context = getCongruentTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const simpleAsa = hasCongruentEqualPair(compact, "∠A", "∠D")
+    && hasCongruentEqualPair(compact, "AB", "DE")
+    && hasCongruentEqualPair(compact, "∠B", "∠E");
+  const fullAsa = hasCongruentEqualPair(compact, "∠CAB", "∠FDE")
+    && hasCongruentEqualPair(compact, "AB", "DE")
+    && hasCongruentEqualPair(compact, "∠CBA", "∠FED");
+
+  return simpleAsa || fullAsa;
+}
+
+function buildCongruentTriangleAsaTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasCongruentTriangleAsaSignals(text)) {
+    return null;
+  }
+
+  return buildCongruentTriangleTemplateBase({
+    templateId: "congruent_triangle_asa_v1",
+    title: "三角形全等 ASA 示意图",
+    description: "本图展示两角及夹边对应相等时，两个三角形全等的关系。",
+    theoremName: "ASA（两角及夹边对应相等）",
+    scopeNote: "仅用于 ∠A=∠D、AB=DE、∠B=∠E，求证 △ABC≌△DEF 的稳定结构。",
+    angleObjects: [
+      { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
+      { id: "angle_D", label: "∠D", points: ["E", "D", "F"] },
+      { id: "angle_B", label: "∠B", points: ["A", "B", "C"] },
+      { id: "angle_E", label: "∠E", points: ["D", "E", "F"] },
+    ],
+    conditionLabels: [
+      { text: "∠A=∠D", x: -1.45, y: 2.35 },
+      { text: "AB=DE", x: -1.45, y: 1.95 },
+      { text: "∠B=∠E", x: -1.45, y: 1.55 },
+    ],
+  });
+}
+
+function hasCongruentTriangleAasSignals(text) {
+  const context = getCongruentTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  return hasCongruentEqualPair(compact, "∠A", "∠D")
+    && hasCongruentEqualPair(compact, "∠B", "∠E")
+    && hasCongruentEqualPair(compact, "AC", "DF");
+}
+
+function buildCongruentTriangleAasTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasCongruentTriangleAasSignals(text)) {
+    return null;
+  }
+
+  return buildCongruentTriangleTemplateBase({
+    templateId: "congruent_triangle_aas_v1",
+    title: "三角形全等 AAS 示意图",
+    description: "本图展示两角及其中一角的对边对应相等时，两个三角形全等的关系。",
+    theoremName: "AAS（两角及其中一角的对边对应相等）",
+    scopeNote: "仅用于 ∠A=∠D、∠B=∠E、AC=DF，求证 △ABC≌△DEF 的稳定结构。",
+    angleObjects: [
+      { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
+      { id: "angle_D", label: "∠D", points: ["E", "D", "F"] },
+      { id: "angle_B", label: "∠B", points: ["A", "B", "C"] },
+      { id: "angle_E", label: "∠E", points: ["D", "E", "F"] },
+    ],
+    conditionLabels: [
+      { text: "∠A=∠D", x: -1.45, y: 2.35 },
+      { text: "∠B=∠E", x: -1.45, y: 1.95 },
+      { text: "AC=DF", x: -1.45, y: 1.55 },
+    ],
+  });
+}
+
+function hasCongruentTriangleHlSignals(text) {
+  const context = getCongruentTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasRightTriangles = /RT△ABC/.test(compact) && /RT△DEF/.test(compact);
+  const hasSharedRightAngle = /∠C=∠F=90(?:°|度)?/.test(compact)
+    || /∠F=∠C=90(?:°|度)?/.test(compact);
+  const hasSeparateRightAngles = /∠C=90(?:°|度)?/.test(compact)
+    && /∠F=90(?:°|度)?/.test(compact);
+
+  return hasRightTriangles
+    && (hasSharedRightAngle || hasSeparateRightAngles)
+    && hasCongruentEqualPair(compact, "AB", "DE")
+    && hasCongruentEqualPair(compact, "AC", "DF");
+}
+
+function buildCongruentTriangleHlTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasCongruentTriangleHlSignals(text)) {
+    return null;
+  }
+
+  return buildCongruentTriangleTemplateBase({
+    templateId: "congruent_triangle_hl_v1",
+    title: "直角三角形全等 HL 示意图",
+    description: "本图展示斜边和一条直角边对应相等时，两个直角三角形全等的关系。",
+    theoremName: "HL（斜边和一条直角边对应相等）",
+    scopeNote: "仅用于 Rt△ABC 和 Rt△DEF 中，∠C=∠F=90°、AB=DE、AC=DF，求证 △ABC≌△DEF 的稳定结构。",
+    rightTriangle: true,
+    rightAngleObjects: [
+      { id: "right_angle_C", label: "∠C=90°", points: ["A", "C", "B"] },
+      { id: "right_angle_F", label: "∠F=90°", points: ["D", "F", "E"] },
+    ],
+    conditionLabels: [
+      { text: "∠C=∠F=90°", x: -1.45, y: 2.35 },
+      { text: "AB=DE", x: -1.45, y: 1.95 },
+      { text: "AC=DF", x: -1.45, y: 1.55 },
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -1234,6 +1560,11 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildIsoscelesTriangleTemplate(questionText, source)
     || buildMidpointMidlineTemplate(questionText, source)
     || buildParallelAngleTemplate(questionText, source)
+    || buildCongruentTriangleSssTemplate(questionText, source)
+    || buildCongruentTriangleSasTemplate(questionText, source)
+    || buildCongruentTriangleAsaTemplate(questionText, source)
+    || buildCongruentTriangleAasTemplate(questionText, source)
+    || buildCongruentTriangleHlTemplate(questionText, source)
     || null;
 }
 
@@ -1250,5 +1581,10 @@ module.exports = {
   buildIsoscelesTriangleTemplate,
   buildMidpointMidlineTemplate,
   buildParallelAngleTemplate,
+  buildCongruentTriangleSssTemplate,
+  buildCongruentTriangleSasTemplate,
+  buildCongruentTriangleAsaTemplate,
+  buildCongruentTriangleAasTemplate,
+  buildCongruentTriangleHlTemplate,
   buildGraphTemplateSpec,
 };

@@ -3,6 +3,7 @@ const { env } = require("../config/env");
 const { truncateForLog } = require("../utils/json");
 const { buildSolveMessages } = require("./solvePrompt");
 const { normalizeSolution } = require("./solveSchema");
+const { buildGraphTemplateSpec } = require("./graphTemplates");
 const dashscopeProvider = require("./providers/dashscopeProvider");
 const deepseekProvider = require("./providers/deepseekProvider");
 const openaiProvider = require("./providers/openaiProvider");
@@ -78,6 +79,14 @@ async function insertModelCallLog({
   return result.insertId;
 }
 
+function isRenderableTemplateSpec(spec) {
+  return Boolean(
+    spec
+    && spec.canRender === true
+    && (spec.confidence === "high" || spec.confidence === "medium")
+  );
+}
+
 async function attachRecordToModelCall(modelCallId, recordId) {
   if (!modelCallId || !recordId) {
     return;
@@ -127,7 +136,23 @@ async function runSolve({ userId, preferredProvider, input }) {
         usage: providerResult.usage,
         latencyMs,
       });
-      const result = normalizeSolution(providerResult.parsed, input);
+      const result = normalizeSolution(providerResult.parsed, {
+        questionText: input.questionText,
+        questionType: input.questionType,
+        gradeLevel: input.gradeLevel,
+        subject: input.subject,
+      });
+      const deterministicTemplateSpec = buildGraphTemplateSpec(input.questionText, {
+        problemText: result.problemText,
+        title: result.title,
+        analysis: result.analysis,
+        finalAnswer: result.finalAnswer,
+        questionSections: result.questionSections,
+      });
+
+      if (isRenderableTemplateSpec(deterministicTemplateSpec)) {
+        result.visualizationSpec = deterministicTemplateSpec;
+      }
 
       return {
         provider: provider.name,

@@ -7,6 +7,7 @@ function asText(value) {
 function normalizeBasicPunctuation(text) {
   return asText(text)
     .replace(/\u2212/g, "-")
+    .replace(/≅/g, "≌")
     .replace(/＝/g, "=")
     .replace(/（/g, "(")
     .replace(/）/g, ")")
@@ -15,8 +16,9 @@ function normalizeBasicPunctuation(text) {
 
 function normalizeTriangleSymbols(text) {
   return text
+    .replace(/\\triangle\s*([A-Z]{3})/gi, "△$1")
     .replace(/(?:三角形|triangle)\s*([A-Z]{3})/gi, "△$1")
-    .replace(/△\s*([A-Z]{3})/g, "△$1");
+    .replace(/[△▵▲∆Δ]\s*([A-Z]{3})/g, "△$1");
 }
 
 function normalizeAngleSymbols(text) {
@@ -56,7 +58,7 @@ function normalizeCircleAndArcSymbols(text) {
 
 function normalizeTriangleRelations(text) {
   return text
-    .replace(/(△[A-Z]{3})\s*(?:全等于?|≌)\s*(△[A-Z]{3})/g, "$1≌$2")
+    .replace(/(△[A-Z]{3})\s*(?:全等于?|≌|≅|\\cong)\s*(△[A-Z]{3})/g, "$1≌$2")
     .replace(/(△[A-Z]{3})\s*(?:相似于?|∽)\s*(△[A-Z]{3})/g, "$1∽$2");
 }
 
