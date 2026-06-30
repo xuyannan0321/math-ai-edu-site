@@ -1,74 +1,100 @@
 @echo off
-chcp 65001 >nul
 setlocal
 
-set "ROOT=%~dp0"
-set "SERVER_DIR=%ROOT%server"
-set "FRONTEND_PORT=5500"
+cd /d "%~dp0"
 
-title 原题真解 Pro - 一键启动
-
-echo.
-echo ============================================
-echo  原题真解 Pro - 本地开发一键启动
-echo ============================================
+echo ========================================
+echo Math Website Dev Launcher
+echo ========================================
 echo.
 
-if not exist "%SERVER_DIR%\package.json" (
-  echo [错误] 未找到 server\package.json，请确认脚本放在项目根目录。
-  echo 项目根目录应为：C:\Users\admins\Desktop\math-website
+where node >nul 2>nul
+if errorlevel 1 (
+  echo ERROR: Node.js was not found in PATH.
+  echo Please install Node.js or fix PATH first.
   pause
   exit /b 1
 )
 
-if not exist "%SERVER_DIR%\.env" (
-  echo [提醒] 未找到 server\.env。
-  echo 如果需要真实 AI、数据库和登录功能，请先根据 server\.env.example 配置 server\.env。
-  echo.
+if not exist "%~dp0tools\static-server.js" (
+  echo ERROR: tools\static-server.js was not found.
+  pause
+  exit /b 1
 )
 
-if not exist "%SERVER_DIR%\node_modules" (
-  echo [首次启动] 正在安装后端依赖，这一步只使用 server\package.json 中已有依赖。
-  pushd "%SERVER_DIR%"
-  call npm.cmd install
-  if errorlevel 1 (
-    echo [错误] 后端依赖安装失败，请检查 Node.js 和 npm 是否可用。
-    popd
-    pause
-    exit /b 1
+echo Starting frontend on http://127.0.0.1:8000/ ...
+start "Math Website Frontend" /D "%~dp0" cmd /k "node tools\static-server.js"
+
+echo Waiting for frontend server...
+
+set FRONTEND_OK=0
+for /L %%i in (1,1,20) do (
+  powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/' -UseBasicParsing -TimeoutSec 1; exit 0 } catch { exit 1 }" >nul 2>nul
+  if not errorlevel 1 (
+    set FRONTEND_OK=1
+    goto frontend_ready
   )
-  popd
+  timeout /t 1 /nobreak >nul
 )
 
-echo [1/3] 启动后端 API：http://localhost:3001
-start "原题真解 Pro 后端 API" /D "%SERVER_DIR%" cmd /k "npm.cmd start"
-
-echo [2/3] 启动前端静态页面：http://localhost:%FRONTEND_PORT%
-where py >nul 2>nul
-if %errorlevel%==0 (
-  start "原题真解 Pro 前端页面" /D "%ROOT%" cmd /k "py -3 -m http.server %FRONTEND_PORT%"
-  goto OPEN_BROWSER
+:frontend_ready
+if "%FRONTEND_OK%"=="0" (
+  echo.
+  echo ERROR: Frontend did not become ready at http://127.0.0.1:8000/
+  echo Please check the separate window named:
+  echo Math Website Frontend
+  echo.
+  pause
+  exit /b 1
 )
 
-where python >nul 2>nul
-if %errorlevel%==0 (
-  start "原题真解 Pro 前端页面" /D "%ROOT%" cmd /k "python -m http.server %FRONTEND_PORT%"
-  goto OPEN_BROWSER
-)
+echo Frontend is ready.
+echo Opening browser...
+explorer.exe "http://127.0.0.1:8000/"
 
-echo [提醒] 没检测到 Python，无法自动启动 http://localhost:%FRONTEND_PORT%。
-echo 将改为直接打开 index.html。真实 AI 接口仍依赖后端窗口正常运行。
-start "" "%ROOT%index.html"
-goto DONE
-
-:OPEN_BROWSER
-timeout /t 3 >nul
-echo [3/3] 打开浏览器
-start "" "http://localhost:%FRONTEND_PORT%"
-
-:DONE
 echo.
-echo 已启动。请保留弹出的后端窗口；关闭窗口即停止服务。
-echo 如果页面显示旧效果，请在浏览器按 Ctrl + F5 强制刷新。
+echo Starting backend on http://127.0.0.1:3001 ...
+
+if exist "%~dp0server\package.json" (
+  start "Math Website Backend" /D "%~dp0server" cmd /k "npm.cmd start"
+) else (
+  echo WARNING: server\package.json not found. Backend was not started.
+)
+
+echo Waiting for backend health check...
+
+set BACKEND_OK=0
+for /L %%i in (1,1,45) do (
+  powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:3001/api/health' -UseBasicParsing -TimeoutSec 1; exit 0 } catch { exit 1 }" >nul 2>nul
+  if not errorlevel 1 (
+    set BACKEND_OK=1
+    goto backend_ready
+  )
+  timeout /t 1 /nobreak >nul
+)
+
+:backend_ready
+echo.
+echo ========================================
+echo Dev server status
+echo ========================================
+echo Frontend: READY  http://127.0.0.1:8000/
+
+if "%BACKEND_OK%"=="1" (
+  echo Backend:  READY  http://127.0.0.1:3001
+) else (
+  echo Backend:  FAILED http://127.0.0.1:3001
+  echo.
+  echo The page is open, but AI solving may not work.
+  echo Please check the separate window named:
+  echo Math Website Backend
+)
+
+echo.
+echo Keep Backend and Frontend windows open.
+echo If the page is blank, refresh the browser.
+echo If AI solving fails, check the Backend window.
 echo.
 pause
+
+endlocal
