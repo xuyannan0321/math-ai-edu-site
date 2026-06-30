@@ -4,6 +4,7 @@ const {
   buildFunctionGraphFromText,
   buildCoordinateSystem,
 } = require("./graphEngine");
+const { normalizeMathQuestionText } = require("./mathTextNormalize");
 
 const FUTURE_TEMPLATE_TYPES = [
   "geometry",
@@ -783,17 +784,18 @@ function buildParallelPerpendicularTemplate(questionText, source = {}) {
 }
 
 function hasIsoscelesTriangleSignals(text) {
-  const compact = compactTemplateText(text).toUpperCase();
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
 
   if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
     return false;
   }
 
-  if (/圆|旋转|折叠|动点|最值|相似|切线|弧|半径|直径/.test(text)) {
+  if (/圆|⊙|旋转|折叠|动点|最值|相似|∽|切线|弧|⌒|半径|直径/.test(normalizedText)) {
     return false;
   }
 
-  const hasTriangleABC = /三角形ABC|△ABC|\\TRIANGLEABC/.test(compact);
+  const hasTriangleABC = /△ABC|\\TRIANGLEABC/.test(compact);
   const hasEqualSides = /AB=AC|AC=AB/.test(compact);
   const hasMidpoint = /D.{0,10}(是|为).{0,10}BC.{0,6}中点/.test(compact)
     || /BC.{0,10}中点.{0,10}D/.test(compact);
@@ -900,17 +902,18 @@ function buildIsoscelesTriangleTemplate(questionText, source = {}) {
 }
 
 function hasMidpointMidlineSignals(text) {
-  const compact = compactTemplateText(text).toUpperCase();
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
 
   if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
     return false;
   }
 
-  if (/坐标|直角坐标|X轴|Y轴|函数|圆|旋转|折叠|动点|最值|相似|切线|弧|半径|直径/.test(compact)) {
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|⊙|旋转|折叠|动点|最值|相似|∽|切线|弧|⌒|半径|直径/.test(compact)) {
     return false;
   }
 
-  const hasTriangleABC = /三角形ABC|△ABC|\\TRIANGLEABC/.test(compact);
+  const hasTriangleABC = /△ABC|\\TRIANGLEABC/.test(compact);
   const hasMidpointM = /M.{0,10}(是|为).{0,10}AB.{0,6}中点/.test(compact)
     || /AB.{0,10}中点.{0,10}M/.test(compact);
   const hasMidpointN = /N.{0,10}(是|为).{0,10}AC.{0,6}中点/.test(compact)
@@ -1007,6 +1010,150 @@ function buildMidpointMidlineTemplate(questionText, source = {}) {
   };
 }
 
+function hasParallelAngleSignals(text) {
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return false;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|⊙|旋转|折叠|动点|最值|相似|∽|切线|弧|⌒|半径|直径|角度|度数|多少度|计算/.test(compact)) {
+    return false;
+  }
+
+  const hasParallelABCD = /AB.{0,4}(∥|\/\/|\|\||平行|\\PARALLEL).{0,4}CD/.test(compact)
+    || /CD.{0,4}(∥|\/\/|\|\||平行|\\PARALLEL).{0,4}AB/.test(compact);
+  const hasLineEF = /直线EF|截线EF|EF.{0,4}(是|为).{0,4}截线/.test(compact);
+  const hasIntersectionEF = /EF.{0,12}(分别)?(交|相交).{0,8}AB.{0,8}CD.{0,12}(点)?E.{0,4}F/.test(compact);
+  const hasAngleGoal = /(?:∠|\\ANGLE)AEF={1,2}(?:∠|\\ANGLE)EFD/.test(compact)
+    || /角AEF=角EFD/.test(compact)
+    || /角AEF等于角EFD/.test(compact)
+    || /(?:∠|\\ANGLE)AEF.{0,4}(与|和).{0,4}(?:∠|\\ANGLE)EFD.{0,4}相等/.test(compact)
+    || (/(求证|证明)/.test(compact) && /内错角.{0,4}相等/.test(compact));
+
+  return hasParallelABCD && hasLineEF && hasIntersectionEF && hasAngleGoal;
+}
+
+function buildParallelAngleTemplate(questionText, source = {}) {
+  const text = [
+    questionText,
+    source.problemText,
+    source.title,
+  ].map(asText).join("\n");
+
+  if (!hasParallelAngleSignals(text)) {
+    return null;
+  }
+
+  const points = {
+    A: { x: -2.8, y: 2.2, label: "A" },
+    E: { x: -0.6, y: 2.2, label: "E" },
+    B: { x: 2.4, y: 2.2, label: "B" },
+    C: { x: -2.4, y: 0, label: "C" },
+    F: { x: 0.6, y: 0, label: "F" },
+    D: { x: 2.8, y: 0, label: "D" },
+  };
+  const objects = [
+    {
+      kind: "segment",
+      id: "segment_AB",
+      label: "AB",
+      from: "A",
+      to: "B",
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "segment",
+      id: "segment_CD",
+      label: "CD",
+      from: "C",
+      to: "D",
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "segment",
+      id: "segment_EF",
+      label: "EF",
+      from: "E",
+      to: "F",
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "angle",
+      id: "angle_AEF",
+      label: "∠AEF",
+      points: ["A", "E", "F"],
+      role: "highlight",
+    },
+    {
+      kind: "angle",
+      id: "angle_EFD",
+      label: "∠EFD",
+      points: ["E", "F", "D"],
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_parallel",
+      text: "AB ∥ CD",
+      x: -2.15,
+      y: 1.1,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_angle_aef",
+      text: "∠AEF",
+      x: -1.08,
+      y: 1.67,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_angle_efd",
+      text: "∠EFD",
+      x: 1.18,
+      y: 0.58,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_equal_angles",
+      text: "∠AEF = ∠EFD",
+      x: 0.18,
+      y: 1.18,
+      role: "highlight",
+    },
+  ];
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta("parallel_angle_v1", "geometry"),
+    confidence: "high",
+    title: "平行线内错角示意图",
+    description: "本图展示两直线平行时，内错角相等的关系。",
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: "平行线内错角示意图",
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: ["angle_AEF", "angle_EFD", "label_parallel", "label_equal_angles"],
+      },
+    ],
+    steps: [],
+    notes: [
+      "仅用于 AB 平行 CD、直线 EF 分别交 AB 和 CD 于 E、F、求证 ∠AEF = ∠EFD 的稳定结构。",
+      "使用初中平行线性质：两直线平行，内错角相等；不使用坐标、斜率、向量或高级方法。",
+    ],
+  };
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -1086,6 +1233,7 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildParallelPerpendicularTemplate(questionText, source)
     || buildIsoscelesTriangleTemplate(questionText, source)
     || buildMidpointMidlineTemplate(questionText, source)
+    || buildParallelAngleTemplate(questionText, source)
     || null;
 }
 
@@ -1101,5 +1249,6 @@ module.exports = {
   buildParallelPerpendicularTemplate,
   buildIsoscelesTriangleTemplate,
   buildMidpointMidlineTemplate,
+  buildParallelAngleTemplate,
   buildGraphTemplateSpec,
 };

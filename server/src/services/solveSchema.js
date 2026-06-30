@@ -233,6 +233,7 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "function_intersection_v1",
   "isosceles_triangle_v1",
   "midpoint_midline_v1",
+  "parallel_angle_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {
