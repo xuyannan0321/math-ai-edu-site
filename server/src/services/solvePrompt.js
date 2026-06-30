@@ -142,6 +142,8 @@ function buildBaseSystemPrompt() {
     "多问复杂函数题必须按第 1 问、第 2 问、第 3 问组织 questionSections；图示说明必须明确对应哪一问。",
     "如果无法完整可靠绘制复杂图，不要输出误导性的完整 visualizationSpec；应使用 type none，或明确标注“局部示意图：仅展示部分关键关系，不代表整题完整图像”。",
     "几何题不要强行猜 coordinates；无法可靠绘制几何图时 type 用 none，前端会显示原题图兜底。",
+    "等腰三角形三线合一题（例如 AB=AC，D 是 BC 的中点，求证 AD 垂直 BC）必须使用初中几何方法：先写 BD=CD，再证 △ABD ≌ △ACD，推出 ∠ADB=∠ADC，再由 B、D、C 共线得两角和为 180°，因此各为 90°，最后得到 AD 垂直 BC。",
+    "等腰三角形三线合一题禁止使用坐标法、向量法、高中三角或解析几何；图示只描述点、线段、直角标记和标签。",
   ].join("\n");
 }
 
@@ -251,6 +253,8 @@ function buildGeometryUserPrompt({
     "8. 几何 views 至少包含 original；有辅助线时按 q1、q2 等分问输出视图。questionSections 每个 section 的 diagramViewId 与 views 的 id 对应。",
     "9. 如果原题信息不足以画图，visualizationSpec.type 使用 none，description 写“暂无可靠图示，可查看文字解析”。",
     "10. 不要输出 HTML、SVG、Canvas、script 或绘图代码。",
+    "10a. 对“AB=AC，D 是 BC 的中点，求证 AD 垂直 BC”这类等腰三角形三线合一题，解析必须包含：已知 AB=AC 和 BD=CD；在 △ABD 与 △ACD 中列 AB=AC、BD=CD、AD=AD；推出 △ABD≌△ACD；推出 ∠ADB=∠ADC；再由 B、D、C 共线得两角相加为 180°，所以每个角为 90°，最终得到 AD⊥BC。",
+    "10b. 等腰三角形三线合一题不要使用坐标、向量、高中三角；学生端只展示全等三角形或三线合一的初中证明。",
     "11. 函数题/平面直角坐标题必须输出 visualizationSpec.type = \"function_graph\"，至少包含 functions、points、auxiliaryLines、views。无法可靠解析时 type 使用 none。",
     "11a. 当前函数模板只是图示增强；几何压轴题、圆综合题、相似题、旋转题后续通过 geometry / circle / similarity / rotation 模板扩展。遇到这些题时仍以原图兜底和文字解析为主，不要强行编图。",
     "11. reasoningLines 每条需填写 type：because（因为/已知）、therefore（所以/推出）、normal（普通叙述）、calculation（代数计算）、conclusion（阶段性结论）。",

@@ -782,6 +782,123 @@ function buildParallelPerpendicularTemplate(questionText, source = {}) {
   });
 }
 
+function hasIsoscelesTriangleSignals(text) {
+  const compact = compactTemplateText(text).toUpperCase();
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return false;
+  }
+
+  if (/圆|旋转|折叠|动点|最值|相似|切线|弧|半径|直径/.test(text)) {
+    return false;
+  }
+
+  const hasTriangleABC = /三角形ABC|△ABC|\\TRIANGLEABC/.test(compact);
+  const hasEqualSides = /AB=AC|AC=AB/.test(compact);
+  const hasMidpoint = /D.{0,10}(是|为).{0,10}BC.{0,6}中点/.test(compact)
+    || /BC.{0,10}中点.{0,10}D/.test(compact);
+  const hasPerpendicularGoal = /AD.{0,8}(垂直|⊥|\\PERP).{0,8}BC/.test(compact)
+    || /求证.{0,20}AD.{0,8}(垂直|⊥|\\PERP).{0,8}BC/.test(compact);
+
+  return hasTriangleABC && hasEqualSides && hasMidpoint && hasPerpendicularGoal;
+}
+
+function buildIsoscelesTriangleTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasIsoscelesTriangleSignals(text)) {
+    return null;
+  }
+
+  const points = {
+    A: { x: 0, y: 3.2, label: "A" },
+    B: { x: -2.4, y: 0, label: "B" },
+    C: { x: 2.4, y: 0, label: "C" },
+    D: { x: 0, y: 0, label: "D" },
+  };
+  const objects = [
+    {
+      kind: "polygon",
+      id: "triangle_ABC",
+      label: "△ABC",
+      points: ["A", "B", "C"],
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "segment",
+      id: "segment_AD",
+      label: "AD",
+      from: "A",
+      to: "D",
+      role: "auxiliary",
+      style: "dashed",
+    },
+    {
+      kind: "rightAngle",
+      id: "right_angle_AD_BC",
+      label: "AD ⟂ BC",
+      points: ["B", "D", "A"],
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_equal_sides_left",
+      text: "AB=AC",
+      x: -1.15,
+      y: 1.75,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_equal_sides_right",
+      text: "AB=AC",
+      x: 1.15,
+      y: 1.75,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_midpoint",
+      text: "BD=CD",
+      x: 0,
+      y: -0.38,
+      role: "highlight",
+    },
+    {
+      kind: "label",
+      id: "label_perpendicular",
+      text: "AD ⟂ BC",
+      x: 0.66,
+      y: 0.62,
+      role: "highlight",
+    },
+  ];
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta("isosceles_triangle_v1", "geometry"),
+    confidence: "high",
+    title: "等腰三角形三线合一示意图",
+    description: "本图展示等腰三角形中，底边中线与高线重合的关系。",
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: "等腰三角形三线合一示意图",
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: ["segment_AD", "right_angle_AD_BC", "label_perpendicular"],
+      },
+    ],
+    steps: [],
+    notes: [
+      "仅用于 AB=AC、D 是 BC 中点、求证 AD 垂直 BC 的稳定结构。",
+      "使用初中全等三角形与三线合一关系，不使用坐标、向量或高级方法。",
+    ],
+  };
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -859,6 +976,7 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildPointToLineDistanceTemplate(questionText, source)
     || buildTriangleAreaCoordinateTemplate(questionText, source)
     || buildParallelPerpendicularTemplate(questionText, source)
+    || buildIsoscelesTriangleTemplate(questionText, source)
     || null;
 }
 
@@ -872,5 +990,6 @@ module.exports = {
   buildPointToLineDistanceTemplate,
   buildTriangleAreaCoordinateTemplate,
   buildParallelPerpendicularTemplate,
+  buildIsoscelesTriangleTemplate,
   buildGraphTemplateSpec,
 };
