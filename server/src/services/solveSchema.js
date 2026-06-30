@@ -239,6 +239,9 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "congruent_triangle_asa_v1",
   "congruent_triangle_aas_v1",
   "congruent_triangle_hl_v1",
+  "similar_triangle_aa_v1",
+  "similar_triangle_sas_v1",
+  "similar_triangle_sss_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {

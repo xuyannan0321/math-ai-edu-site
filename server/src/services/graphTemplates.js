@@ -1480,6 +1480,224 @@ function buildCongruentTriangleHlTemplate(questionText, source = {}) {
   });
 }
 
+function getSimilarTriangleSignalContext(text) {
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|⊙|旋转|折叠|动点|最值|全等|≌|切线|弧|⌒|半径|直径/.test(compact)) {
+    return null;
+  }
+
+  const hasTriangleABC = /△ABC|\\TRIANGLEABC/.test(compact);
+  const hasTriangleDEF = /△DEF|\\TRIANGLEDEF/.test(compact);
+  const hasSimilarRelation = /△ABC∽△DEF|△DEF∽△ABC/.test(compact);
+  const hasProofIntent = /(求证|证明|证|可得|推出|得到)/.test(compact);
+  const hasSimilarGoal = hasSimilarRelation && hasProofIntent;
+
+  if (!hasTriangleABC || !hasTriangleDEF || !hasSimilarGoal) {
+    return null;
+  }
+
+  return { normalizedText, compact };
+}
+
+function hasSimilarRatioPair(compact) {
+  return /AB\/DE=AC\/DF|AC\/DF=AB\/DE/.test(compact)
+    || /AB:DE=AC:DF|AC:DF=AB:DE/.test(compact);
+}
+
+function hasSimilarRatioTriple(compact) {
+  return /AB\/DE=AC\/DF=BC\/EF/.test(compact)
+    || /AB:DE=AC:DF=BC:EF/.test(compact);
+}
+
+function buildSimilarTriangleTemplateBase(options) {
+  const points = {
+    A: { x: -4.4, y: 2.4, label: "A" },
+    B: { x: -5.8, y: 0, label: "B" },
+    C: { x: -3.0, y: 0, label: "C" },
+    D: { x: 1.4, y: 2.0, label: "D" },
+    E: { x: 0.2, y: 0, label: "E" },
+    F: { x: 2.4, y: 0, label: "F" },
+  };
+  const angleObjects = (options.angleObjects || []).map((angle) => ({
+    kind: "angle",
+    id: angle.id,
+    label: angle.label,
+    points: angle.points,
+    role: "highlight",
+  }));
+  const conditionLabels = (options.conditionLabels || []).map((label, index) => ({
+    kind: "label",
+    id: `label_similar_condition_${index + 1}`,
+    text: label.text,
+    x: label.x,
+    y: label.y,
+    role: "highlight",
+  }));
+  const conclusionLabel = {
+    kind: "label",
+    id: "label_similar_conclusion",
+    text: "△ABC∽△DEF",
+    x: -1.45,
+    y: -0.48,
+    role: "highlight",
+  };
+  const objects = [
+    {
+      kind: "polygon",
+      id: "triangle_ABC",
+      label: "△ABC",
+      points: ["A", "B", "C"],
+      role: "original",
+      style: "solid",
+    },
+    {
+      kind: "polygon",
+      id: "triangle_DEF",
+      label: "△DEF",
+      points: ["D", "E", "F"],
+      role: "original",
+      style: "solid",
+    },
+    ...angleObjects,
+    ...conditionLabels,
+    conclusionLabel,
+  ];
+  const highlightObjects = objects
+    .filter((object) => object.role === "highlight")
+    .map((object) => object.id);
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta(options.templateId, "geometry"),
+    confidence: "high",
+    title: options.title,
+    description: options.description,
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: options.title,
+        showObjects: objects.map((object) => object.id),
+        highlightObjects,
+      },
+    ],
+    steps: [],
+    notes: [
+      options.scopeNote,
+      `使用初中三角形相似判定：${options.theoremName}。`,
+      "不使用坐标、向量、高中方法，不自动推导题干没有给出的隐藏比例。",
+    ].filter(Boolean),
+  };
+}
+
+function hasSimilarTriangleAaSignals(text) {
+  const context = getSimilarTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  return hasCongruentEqualPair(compact, "∠A", "∠D")
+    && hasCongruentEqualPair(compact, "∠B", "∠E");
+}
+
+function buildSimilarTriangleAaTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasSimilarTriangleAaSignals(text)) {
+    return null;
+  }
+
+  return buildSimilarTriangleTemplateBase({
+    templateId: "similar_triangle_aa_v1",
+    title: "三角形 AA 相似示意图",
+    description: "本图展示两角对应相等时，两个三角形相似的关系。",
+    theoremName: "AA（两角对应相等）",
+    scopeNote: "仅用于 ∠A=∠D、∠B=∠E，求证 △ABC∽△DEF 的稳定结构。",
+    angleObjects: [
+      { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
+      { id: "angle_D", label: "∠D", points: ["E", "D", "F"] },
+      { id: "angle_B", label: "∠B", points: ["A", "B", "C"] },
+      { id: "angle_E", label: "∠E", points: ["D", "E", "F"] },
+    ],
+    conditionLabels: [
+      { text: "∠A=∠D", x: -1.45, y: 2.35 },
+      { text: "∠B=∠E", x: -1.45, y: 1.95 },
+    ],
+  });
+}
+
+function hasSimilarTriangleSasSignals(text) {
+  const context = getSimilarTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  return hasSimilarRatioPair(compact)
+    && hasCongruentEqualPair(compact, "∠A", "∠D");
+}
+
+function buildSimilarTriangleSasTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasSimilarTriangleSasSignals(text)) {
+    return null;
+  }
+
+  return buildSimilarTriangleTemplateBase({
+    templateId: "similar_triangle_sas_v1",
+    title: "三角形 SAS 相似示意图",
+    description: "本图展示两边对应成比例且夹角相等时，两个三角形相似的关系。",
+    theoremName: "SAS（两边对应成比例且夹角相等）",
+    scopeNote: "仅用于 AB/DE=AC/DF、∠A=∠D，求证 △ABC∽△DEF 的稳定结构。",
+    angleObjects: [
+      { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
+      { id: "angle_D", label: "∠D", points: ["E", "D", "F"] },
+    ],
+    conditionLabels: [
+      { text: "AB/DE=AC/DF", x: -1.45, y: 2.35 },
+      { text: "∠A=∠D", x: -1.45, y: 1.95 },
+    ],
+  });
+}
+
+function hasSimilarTriangleSssSignals(text) {
+  const context = getSimilarTriangleSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  return hasSimilarRatioTriple(compact);
+}
+
+function buildSimilarTriangleSssTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasSimilarTriangleSssSignals(text)) {
+    return null;
+  }
+
+  return buildSimilarTriangleTemplateBase({
+    templateId: "similar_triangle_sss_v1",
+    title: "三角形 SSS 相似示意图",
+    description: "本图展示三边对应成比例时，两个三角形相似的关系。",
+    theoremName: "SSS（三边对应成比例）",
+    scopeNote: "仅用于 AB/DE=AC/DF=BC/EF，求证 △ABC∽△DEF 的稳定结构。",
+    conditionLabels: [
+      { text: "AB/DE=AC/DF=BC/EF", x: -1.45, y: 2.35 },
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -1565,6 +1783,9 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildCongruentTriangleAsaTemplate(questionText, source)
     || buildCongruentTriangleAasTemplate(questionText, source)
     || buildCongruentTriangleHlTemplate(questionText, source)
+    || buildSimilarTriangleAaTemplate(questionText, source)
+    || buildSimilarTriangleSasTemplate(questionText, source)
+    || buildSimilarTriangleSssTemplate(questionText, source)
     || null;
 }
 
@@ -1586,5 +1807,8 @@ module.exports = {
   buildCongruentTriangleAsaTemplate,
   buildCongruentTriangleAasTemplate,
   buildCongruentTriangleHlTemplate,
+  buildSimilarTriangleAaTemplate,
+  buildSimilarTriangleSasTemplate,
+  buildSimilarTriangleSssTemplate,
   buildGraphTemplateSpec,
 };

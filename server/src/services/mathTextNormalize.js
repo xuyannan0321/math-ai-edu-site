@@ -59,7 +59,7 @@ function normalizeCircleAndArcSymbols(text) {
 function normalizeTriangleRelations(text) {
   return text
     .replace(/(△[A-Z]{3})\s*(?:全等于?|≌|≅|\\cong)\s*(△[A-Z]{3})/g, "$1≌$2")
-    .replace(/(△[A-Z]{3})\s*(?:相似于?|∽)\s*(△[A-Z]{3})/g, "$1∽$2");
+    .replace(/(△[A-Z]{3})\s*(?:相似于?|∽|~)\s*(△[A-Z]{3})/g, "$1∽$2");
 }
 
 function normalizeBisectorsAndMidpoints(text) {
