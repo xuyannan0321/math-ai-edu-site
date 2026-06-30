@@ -4,6 +4,52 @@
 
 ---
 
+## 后端修改后的强制重启流程
+
+只要修改以下文件，必须重启后端：
+
+- server/.env
+- server/src/config/env.js
+- server/src/services/modelRouter.js
+- server/src/services/graphTemplates.js
+- server/src/services/solveSchema.js
+- server/src/services/solvePrompt.js
+- server/src/services/mathTextNormalize.js
+- server/src/services/visionRouter.js
+- server/src/server.js
+
+重启步骤：
+
+1. 关闭 Math Website Backend 黑色窗口；
+2. 关闭 Math Website Frontend 黑色窗口；
+3. 关闭 Math Website Dev Launcher 黑色窗口；
+4. 如果端口 3001 被占用，执行：
+
+```powershell
+taskkill /F /IM node.exe
+```
+
+5. 重新双击 start-dev.bat；
+6. 浏览器按 Ctrl + F5；
+7. 再重新测试。
+
+常见错误：
+
+```text
+Error: listen EADDRINUSE: address already in use :::3001
+```
+
+解释：
+
+3001 端口已经被旧 Node 后端占用，需要关闭旧进程后再启动。
+
+验收标准：
+
+- 修改 server/.env 后，必须重启后端才会生效；
+- 修改 graphTemplates.js 后，必须重启后端才会加载新模板；
+- 浏览器刷新不能代替后端重启；
+- Network 里必须点 solve-text 的 Response，不要点 visualization.js、app.js、style.css。
+
 ## 一、测试前准备
 
 ### 1. 启动后端
