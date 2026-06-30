@@ -98,6 +98,41 @@
     return Math.hypot(p1.x - p2.x, p1.y - p2.y);
   }
 
+  function normalizeAngle(angle) {
+    const twoPi = Math.PI * 2;
+    let value = angle % twoPi;
+    if (value < 0) {
+      value += twoPi;
+    }
+    return value;
+  }
+
+  function getMinorArcAngles(a1, a2, forceLargeArc = false) {
+    let start = normalizeAngle(a1);
+    let end = normalizeAngle(a2);
+    let delta = end - start;
+
+    if (delta < 0) {
+      delta += Math.PI * 2;
+    }
+
+    if (!forceLargeArc && delta > Math.PI) {
+      const temp = start;
+      start = end;
+      end = temp;
+      delta = Math.PI * 2 - delta;
+    }
+
+    if (forceLargeArc && delta < Math.PI) {
+      const temp = start;
+      start = end;
+      end = temp;
+      delta = Math.PI * 2 - delta;
+    }
+
+    return { start, end, delta };
+  }
+
   function midpoint(p1, p2) {
     return {
       x: (p1.x + p2.x) / 2,
@@ -805,42 +840,130 @@
     );
   }
 
-  function drawAngle(svg, vertex, p1, p2, mapper, options = {}) {
-    const radius = options.radius || Math.max(0.28, Math.min(distance(vertex, p1), distance(vertex, p2)) * 0.22);
-    const a1 = Math.atan2(p1.y - vertex.y, p1.x - vertex.x);
-    const a2 = Math.atan2(p2.y - vertex.y, p2.x - vertex.x);
-    const start = mapper.project({
-      x: vertex.x + Math.cos(a1) * radius,
-      y: vertex.y + Math.sin(a1) * radius,
-    });
-    const end = mapper.project({
-      x: vertex.x + Math.cos(a2) * radius,
-      y: vertex.y + Math.sin(a2) * radius,
-    });
-    const center = mapper.project(vertex);
-    const projectedRadius = Math.max(8, Math.hypot(start.x - center.x, start.y - center.y));
-    const delta = Math.abs(a2 - a1);
-    const largeArc = delta > Math.PI ? 1 : 0;
+  function getProjectedDistance(mapper, p1, p2) {
+    const projectedP1 = mapper.project(p1);
+    const projectedP2 = mapper.project(p2);
+    return Math.hypot(projectedP1.x - projectedP2.x, projectedP1.y - projectedP2.y);
+  }
 
-    svg.append(
-      createSvgElement("path", {
-        d: `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${projectedRadius.toFixed(2)} ${projectedRadius.toFixed(2)} 0 ${largeArc} 0 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`,
-        class: options.className || "mv-angle",
-        "data-object-id": options.id || "",
-      }),
-    );
+  function drawAngleLabel(svg, vertex, arc, radius, mapper, label) {
+    if (!label) {
+      return;
+    }
+
+    const labelRadius = radius + 16;
+    const mid = arc.start + arc.delta / 2;
+    const projectedVertex = mapper.project(vertex);
+    const text = createSvgElement("text", {
+      x: (projectedVertex.x + labelRadius * Math.cos(mid)).toFixed(2),
+      y: (projectedVertex.y + labelRadius * Math.sin(mid)).toFixed(2),
+      "text-anchor": "middle",
+      "dominant-baseline": "middle",
+      class: "mv-label mv-angle-label",
+    });
+    text.textContent = label;
+    svg.append(text);
+  }
+
+  function drawAngleArc(svg, vertex, p1, p2, mapper, options = {}) {
+    if (!vertex || !p1 || !p2) {
+      return;
+    }
+
+    const len1 = getProjectedDistance(mapper, vertex, p1);
+    const len2 = getProjectedDistance(mapper, vertex, p2);
+    const minLen = Math.min(len1, len2);
+
+    if (!Number.isFinite(minLen) || minLen < 20) {
+      return;
+    }
+
+    const projectedVertex = mapper.project(vertex);
+    const projectedP1 = mapper.project(p1);
+    const projectedP2 = mapper.project(p2);
+    const a1 = Math.atan2(projectedP1.y - projectedVertex.y, projectedP1.x - projectedVertex.x);
+    const a2 = Math.atan2(projectedP2.y - projectedVertex.y, projectedP2.x - projectedVertex.x);
+    const arc = getMinorArcAngles(a1, a2, options.forceLargeArc === true);
+    const degree = (arc.delta * 180) / Math.PI;
+
+    if (options.allowFlatAngle !== true && (degree < 10 || degree > 170)) {
+      return;
+    }
+
+    const arcLevel = Math.max(1, Number(options.arcLevel) || 1);
+    const baseRadius = Math.min(28, Math.max(14, minLen * 0.18));
+    const radius = Math.min(baseRadius + (arcLevel - 1) * 7, minLen * 0.3);
+    const start = {
+      x: projectedVertex.x + radius * Math.cos(arc.start),
+      y: projectedVertex.y + radius * Math.sin(arc.start),
+    };
+    const end = {
+      x: projectedVertex.x + radius * Math.cos(arc.end),
+      y: projectedVertex.y + radius * Math.sin(arc.end),
+    };
+
+    const largeArcFlag = arc.delta > Math.PI ? 1 : 0;
+    const sweepFlag = 1;
+
+    const attributes = {
+      d: `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${radius.toFixed(2)} ${radius.toFixed(2)} 0 ${largeArcFlag} ${sweepFlag} ${end.x.toFixed(2)} ${end.y.toFixed(2)}`,
+      fill: "none",
+      class: options.className || "mv-angle",
+      "data-object-id": options.id || "",
+      "stroke-linecap": "round",
+    };
+
+    if (options.color) {
+      attributes.stroke = options.color;
+    }
+
+    if (options.strokeWidth) {
+      attributes["stroke-width"] = options.strokeWidth;
+    }
+
+    svg.append(createSvgElement("path", attributes));
+
+    if (options.showLabel === true) {
+      drawAngleLabel(svg, vertex, arc, radius, mapper, options.label);
+    }
+  }
+
+  function drawAngle(svg, vertex, p1, p2, mapper, options = {}) {
+    drawAngleArc(svg, vertex, p1, p2, mapper, options);
   }
 
   function drawRightAngle(svg, vertex, p1, p2, mapper, options = {}) {
-    const size = options.size || Math.max(0.22, Math.min(distance(vertex, p1), distance(vertex, p2)) * 0.16);
-    const v1 = normalizeVector({ x: p1.x - vertex.x, y: p1.y - vertex.y });
-    const v2 = normalizeVector({ x: p2.x - vertex.x, y: p2.y - vertex.y });
-    const a = { x: vertex.x + v1.x * size, y: vertex.y + v1.y * size };
-    const b = { x: a.x + v2.x * size, y: a.y + v2.y * size };
-    const c = { x: vertex.x + v2.x * size, y: vertex.y + v2.y * size };
-    const pa = mapper.project(a);
-    const pb = mapper.project(b);
-    const pc = mapper.project(c);
+    if (!vertex || !p1 || !p2) {
+      return;
+    }
+
+    const projectedVertex = mapper.project(vertex);
+    const projectedP1 = mapper.project(p1);
+    const projectedP2 = mapper.project(p2);
+    const v1 = normalizeVector({ x: projectedP1.x - projectedVertex.x, y: projectedP1.y - projectedVertex.y });
+    const v2 = normalizeVector({ x: projectedP2.x - projectedVertex.x, y: projectedP2.y - projectedVertex.y });
+    const minLen = Math.min(
+      Math.hypot(projectedP1.x - projectedVertex.x, projectedP1.y - projectedVertex.y),
+      Math.hypot(projectedP2.x - projectedVertex.x, projectedP2.y - projectedVertex.y),
+    );
+    const size = Number(options.size) || Math.min(16, Math.max(10, minLen * 0.18), minLen * 0.25);
+
+    if ((!v1.x && !v1.y) || (!v2.x && !v2.y) || !Number.isFinite(size) || size <= 0) {
+      return;
+    }
+
+    const pa = {
+      x: projectedVertex.x + v1.x * size,
+      y: projectedVertex.y + v1.y * size,
+    };
+    const pb = {
+      x: projectedVertex.x + (v1.x + v2.x) * size,
+      y: projectedVertex.y + (v1.y + v2.y) * size,
+    };
+    const pc = {
+      x: projectedVertex.x + v2.x * size,
+      y: projectedVertex.y + v2.y * size,
+    };
 
     svg.append(
       createSvgElement("path", {
@@ -1072,11 +1195,20 @@
         if (object.kind === "rightAngle") {
           drawRightAngle(svg, vertex, p1, p2, mapper, {
             id: object.id,
+            size: object.size,
             className: getObjectClass(object, highlighted.has(object.id) ? "mv-highlight" : "mv-right-angle"),
           });
         } else {
           drawAngle(svg, vertex, p1, p2, mapper, {
             id: object.id,
+            label: object.label,
+            showLabel: object.showLabel,
+            arcLevel: object.arcLevel,
+            equalMarkGroup: object.equalMarkGroup,
+            forceLargeArc: object.forceLargeArc,
+            allowFlatAngle: object.allowFlatAngle,
+            color: object.color,
+            strokeWidth: object.strokeWidth,
             className: getObjectClass(object, highlighted.has(object.id) ? "mv-highlight" : "mv-angle"),
           });
         }
