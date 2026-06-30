@@ -227,6 +227,46 @@ function makeLine(id, label, from, to, style = "dashed", role = "auxiliary", opt
   };
 }
 
+function shouldShowDiagramLabel(text) {
+  const value = asText(text).replace(/\s+/g, "");
+  return Boolean(value && value.length <= 14);
+}
+
+function makeDiagramLabel(id, text, x, y, role = "highlight") {
+  return {
+    kind: "label",
+    id,
+    text,
+    x,
+    y,
+    role,
+  };
+}
+
+function makeShortTheoremLabel(text, x, y, id = "label_theorem") {
+  return shouldShowDiagramLabel(text)
+    ? makeDiagramLabel(id, text, x, y, "highlight")
+    : null;
+}
+
+function makeConclusionLabel(text, x, y, id = "label_conclusion") {
+  return shouldShowDiagramLabel(text)
+    ? makeDiagramLabel(id, text, x, y, "highlight")
+    : null;
+}
+
+function createCleanConditionLabels(labels, idPrefix) {
+  return (labels || [])
+    .filter((label) => shouldShowDiagramLabel(label.text))
+    .map((label, index) => makeDiagramLabel(
+      `${idPrefix}_${index + 1}`,
+      label.text,
+      label.x,
+      label.y,
+      "highlight",
+    ));
+}
+
 function baseTemplateMeta(templateId, templateType) {
   return {
     templateId,
@@ -843,38 +883,10 @@ function buildIsoscelesTriangleTemplate(questionText, source = {}) {
       points: ["B", "D", "A"],
       role: "highlight",
     },
-    {
-      kind: "label",
-      id: "label_equal_sides_left",
-      text: "AB=AC",
-      x: -1.15,
-      y: 1.75,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_equal_sides_right",
-      text: "AB=AC",
-      x: 1.15,
-      y: 1.75,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_midpoint",
-      text: "BD=CD",
-      x: 0,
-      y: -0.38,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_perpendicular",
-      text: "AD ⟂ BC",
-      x: 0.66,
-      y: 0.62,
-      role: "highlight",
-    },
+    makeDiagramLabel("label_equal_sides_left", "AB=AC", -1.5, 1.55),
+    makeDiagramLabel("label_equal_sides_right", "AB=AC", 1.5, 1.55),
+    makeDiagramLabel("label_midpoint", "BD=CD", 0, -0.44),
+    makeDiagramLabel("label_perpendicular", "AD ⊥ BC", 0.7, 0.62),
   ];
 
   return {
@@ -960,30 +972,9 @@ function buildMidpointMidlineTemplate(questionText, source = {}) {
       role: "highlight",
       style: "solid",
     },
-    {
-      kind: "label",
-      id: "label_midpoint_ab",
-      text: "AM=MB",
-      x: -1.55,
-      y: 1.18,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_midpoint_ac",
-      text: "AN=NC",
-      x: 1.55,
-      y: 1.18,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_midline_parallel",
-      text: "MN ∥ BC",
-      x: 0,
-      y: 1.95,
-      role: "highlight",
-    },
+    makeDiagramLabel("label_midpoint_ab", "AM=MB", -1.72, 1.08),
+    makeDiagramLabel("label_midpoint_ac", "AN=NC", 1.72, 1.08),
+    makeDiagramLabel("label_midline_parallel", "MN ∥ BC", 0, 2.05),
   ];
 
   return {
@@ -1096,38 +1087,10 @@ function buildParallelAngleTemplate(questionText, source = {}) {
       points: ["E", "F", "D"],
       role: "highlight",
     },
-    {
-      kind: "label",
-      id: "label_parallel",
-      text: "AB ∥ CD",
-      x: -2.15,
-      y: 1.1,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_angle_aef",
-      text: "∠AEF",
-      x: -1.08,
-      y: 1.67,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_angle_efd",
-      text: "∠EFD",
-      x: 1.18,
-      y: 0.58,
-      role: "highlight",
-    },
-    {
-      kind: "label",
-      id: "label_equal_angles",
-      text: "∠AEF = ∠EFD",
-      x: 0.18,
-      y: 1.18,
-      role: "highlight",
-    },
+    makeDiagramLabel("label_parallel", "AB ∥ CD", -2.15, 1.12),
+    makeDiagramLabel("label_angle_aef", "∠1", -1.05, 1.66),
+    makeDiagramLabel("label_angle_efd", "∠2", 1.1, 0.58),
+    makeDiagramLabel("label_equal_angles", "∠1=∠2", 0.2, 1.22),
   ];
 
   return {
@@ -1215,22 +1178,21 @@ function buildCongruentTriangleTemplateBase(options) {
     points: angle.points,
     role: "highlight",
   }));
-  const conditionLabels = (options.conditionLabels || []).map((label, index) => ({
-    kind: "label",
-    id: `label_congruent_condition_${index + 1}`,
-    text: label.text,
-    x: label.x,
-    y: label.y,
-    role: "highlight",
-  }));
-  const conclusionLabel = {
-    kind: "label",
-    id: "label_congruent_conclusion",
-    text: "△ABC≌△DEF",
-    x: -1.45,
-    y: -0.48,
-    role: "highlight",
-  };
+  const conditionLabels = options.showConditionLabels === true
+    ? createCleanConditionLabels(options.conditionLabels, "label_congruent_condition")
+    : [];
+  const theoremLabel = makeShortTheoremLabel(
+    options.diagramLabel,
+    -1.45,
+    2.92,
+    "label_congruent_theorem",
+  );
+  const conclusionLabel = makeConclusionLabel(
+    "△ABC≌△DEF",
+    -1.45,
+    -0.52,
+    "label_congruent_conclusion",
+  );
   const objects = [
     {
       kind: "polygon",
@@ -1250,9 +1212,10 @@ function buildCongruentTriangleTemplateBase(options) {
     },
     ...angleObjects,
     ...rightAngleObjects,
+    theoremLabel,
     ...conditionLabels,
     conclusionLabel,
-  ];
+  ].filter(Boolean);
   const highlightObjects = objects
     .filter((object) => object.role === "highlight")
     .map((object) => object.id);
@@ -1277,6 +1240,7 @@ function buildCongruentTriangleTemplateBase(options) {
     notes: [
       options.scopeNote,
       `使用初中三角形全等判定：${options.theoremName}。`,
+      ...(options.conditionNotes || []),
       "不使用坐标、向量、高中三角或复杂综合方法。",
     ].filter(Boolean),
   };
@@ -1306,11 +1270,10 @@ function buildCongruentTriangleSssTemplate(questionText, source = {}) {
     title: "三角形全等 SSS 示意图",
     description: "本图展示三边对应相等时，两个三角形全等的关系。",
     theoremName: "SSS（三边对应相等）",
+    diagramLabel: "SSS 全等",
     scopeNote: "仅用于 AB=DE、AC=DF、BC=EF，求证 △ABC≌△DEF 的稳定结构。",
-    conditionLabels: [
-      { text: "AB=DE", x: -1.45, y: 2.35 },
-      { text: "AC=DF", x: -1.45, y: 1.95 },
-      { text: "BC=EF", x: -1.45, y: 1.55 },
+    conditionNotes: [
+      "已知条件：AB=DE、AC=DF、BC=EF。",
     ],
   });
 }
@@ -1339,15 +1302,14 @@ function buildCongruentTriangleSasTemplate(questionText, source = {}) {
     title: "三角形全等 SAS 示意图",
     description: "本图展示两边及夹角对应相等时，两个三角形全等的关系。",
     theoremName: "SAS（两边及夹角对应相等）",
+    diagramLabel: "SAS 全等",
     scopeNote: "仅用于 AB=DE、AC=DF、∠BAC=∠EDF，求证 △ABC≌△DEF 的稳定结构。",
     angleObjects: [
       { id: "angle_BAC", label: "∠BAC", points: ["B", "A", "C"] },
       { id: "angle_EDF", label: "∠EDF", points: ["E", "D", "F"] },
     ],
-    conditionLabels: [
-      { text: "AB=DE", x: -1.45, y: 2.35 },
-      { text: "AC=DF", x: -1.45, y: 1.95 },
-      { text: "∠BAC=∠EDF", x: -1.45, y: 1.55 },
+    conditionNotes: [
+      "已知条件：AB=DE、AC=DF、∠BAC=∠EDF。",
     ],
   });
 }
@@ -1381,6 +1343,7 @@ function buildCongruentTriangleAsaTemplate(questionText, source = {}) {
     title: "三角形全等 ASA 示意图",
     description: "本图展示两角及夹边对应相等时，两个三角形全等的关系。",
     theoremName: "ASA（两角及夹边对应相等）",
+    diagramLabel: "ASA 全等",
     scopeNote: "仅用于 ∠A=∠D、AB=DE、∠B=∠E，求证 △ABC≌△DEF 的稳定结构。",
     angleObjects: [
       { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
@@ -1388,10 +1351,8 @@ function buildCongruentTriangleAsaTemplate(questionText, source = {}) {
       { id: "angle_B", label: "∠B", points: ["A", "B", "C"] },
       { id: "angle_E", label: "∠E", points: ["D", "E", "F"] },
     ],
-    conditionLabels: [
-      { text: "∠A=∠D", x: -1.45, y: 2.35 },
-      { text: "AB=DE", x: -1.45, y: 1.95 },
-      { text: "∠B=∠E", x: -1.45, y: 1.55 },
+    conditionNotes: [
+      "已知条件：∠A=∠D、AB=DE、∠B=∠E。",
     ],
   });
 }
@@ -1420,6 +1381,7 @@ function buildCongruentTriangleAasTemplate(questionText, source = {}) {
     title: "三角形全等 AAS 示意图",
     description: "本图展示两角及其中一角的对边对应相等时，两个三角形全等的关系。",
     theoremName: "AAS（两角及其中一角的对边对应相等）",
+    diagramLabel: "AAS 全等",
     scopeNote: "仅用于 ∠A=∠D、∠B=∠E、AC=DF，求证 △ABC≌△DEF 的稳定结构。",
     angleObjects: [
       { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
@@ -1427,10 +1389,8 @@ function buildCongruentTriangleAasTemplate(questionText, source = {}) {
       { id: "angle_B", label: "∠B", points: ["A", "B", "C"] },
       { id: "angle_E", label: "∠E", points: ["D", "E", "F"] },
     ],
-    conditionLabels: [
-      { text: "∠A=∠D", x: -1.45, y: 2.35 },
-      { text: "∠B=∠E", x: -1.45, y: 1.95 },
-      { text: "AC=DF", x: -1.45, y: 1.55 },
+    conditionNotes: [
+      "已知条件：∠A=∠D、∠B=∠E、AC=DF。",
     ],
   });
 }
@@ -1466,16 +1426,15 @@ function buildCongruentTriangleHlTemplate(questionText, source = {}) {
     title: "直角三角形全等 HL 示意图",
     description: "本图展示斜边和一条直角边对应相等时，两个直角三角形全等的关系。",
     theoremName: "HL（斜边和一条直角边对应相等）",
+    diagramLabel: "HL 全等",
     scopeNote: "仅用于 Rt△ABC 和 Rt△DEF 中，∠C=∠F=90°、AB=DE、AC=DF，求证 △ABC≌△DEF 的稳定结构。",
     rightTriangle: true,
     rightAngleObjects: [
       { id: "right_angle_C", label: "∠C=90°", points: ["A", "C", "B"] },
       { id: "right_angle_F", label: "∠F=90°", points: ["D", "F", "E"] },
     ],
-    conditionLabels: [
-      { text: "∠C=∠F=90°", x: -1.45, y: 2.35 },
-      { text: "AB=DE", x: -1.45, y: 1.95 },
-      { text: "AC=DF", x: -1.45, y: 1.55 },
+    conditionNotes: [
+      "已知条件：∠C=∠F=90°、AB=DE、AC=DF。",
     ],
   });
 }
@@ -1531,22 +1490,21 @@ function buildSimilarTriangleTemplateBase(options) {
     points: angle.points,
     role: "highlight",
   }));
-  const conditionLabels = (options.conditionLabels || []).map((label, index) => ({
-    kind: "label",
-    id: `label_similar_condition_${index + 1}`,
-    text: label.text,
-    x: label.x,
-    y: label.y,
-    role: "highlight",
-  }));
-  const conclusionLabel = {
-    kind: "label",
-    id: "label_similar_conclusion",
-    text: "△ABC∽△DEF",
-    x: -1.45,
-    y: -0.48,
-    role: "highlight",
-  };
+  const conditionLabels = options.showConditionLabels === true
+    ? createCleanConditionLabels(options.conditionLabels, "label_similar_condition")
+    : [];
+  const theoremLabel = makeShortTheoremLabel(
+    options.diagramLabel,
+    -1.45,
+    2.72,
+    "label_similar_theorem",
+  );
+  const conclusionLabel = makeConclusionLabel(
+    "△ABC∽△DEF",
+    -1.45,
+    -0.52,
+    "label_similar_conclusion",
+  );
   const objects = [
     {
       kind: "polygon",
@@ -1565,9 +1523,10 @@ function buildSimilarTriangleTemplateBase(options) {
       style: "solid",
     },
     ...angleObjects,
+    theoremLabel,
     ...conditionLabels,
     conclusionLabel,
-  ];
+  ].filter(Boolean);
   const highlightObjects = objects
     .filter((object) => object.role === "highlight")
     .map((object) => object.id);
@@ -1592,6 +1551,7 @@ function buildSimilarTriangleTemplateBase(options) {
     notes: [
       options.scopeNote,
       `使用初中三角形相似判定：${options.theoremName}。`,
+      ...(options.conditionNotes || []),
       "不使用坐标、向量、高中方法，不自动推导题干没有给出的隐藏比例。",
     ].filter(Boolean),
   };
@@ -1620,6 +1580,7 @@ function buildSimilarTriangleAaTemplate(questionText, source = {}) {
     title: "三角形 AA 相似示意图",
     description: "本图展示两角对应相等时，两个三角形相似的关系。",
     theoremName: "AA（两角对应相等）",
+    diagramLabel: "AA 相似",
     scopeNote: "仅用于 ∠A=∠D、∠B=∠E，求证 △ABC∽△DEF 的稳定结构。",
     angleObjects: [
       { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
@@ -1627,9 +1588,8 @@ function buildSimilarTriangleAaTemplate(questionText, source = {}) {
       { id: "angle_B", label: "∠B", points: ["A", "B", "C"] },
       { id: "angle_E", label: "∠E", points: ["D", "E", "F"] },
     ],
-    conditionLabels: [
-      { text: "∠A=∠D", x: -1.45, y: 2.35 },
-      { text: "∠B=∠E", x: -1.45, y: 1.95 },
+    conditionNotes: [
+      "已知条件：∠A=∠D、∠B=∠E。",
     ],
   });
 }
@@ -1657,14 +1617,14 @@ function buildSimilarTriangleSasTemplate(questionText, source = {}) {
     title: "三角形 SAS 相似示意图",
     description: "本图展示两边对应成比例且夹角相等时，两个三角形相似的关系。",
     theoremName: "SAS（两边对应成比例且夹角相等）",
+    diagramLabel: "SAS 相似",
     scopeNote: "仅用于 AB/DE=AC/DF、∠A=∠D，求证 △ABC∽△DEF 的稳定结构。",
     angleObjects: [
       { id: "angle_A", label: "∠A", points: ["B", "A", "C"] },
       { id: "angle_D", label: "∠D", points: ["E", "D", "F"] },
     ],
-    conditionLabels: [
-      { text: "AB/DE=AC/DF", x: -1.45, y: 2.35 },
-      { text: "∠A=∠D", x: -1.45, y: 1.95 },
+    conditionNotes: [
+      "已知条件：AB/DE=AC/DF、∠A=∠D。",
     ],
   });
 }
@@ -1691,9 +1651,10 @@ function buildSimilarTriangleSssTemplate(questionText, source = {}) {
     title: "三角形 SSS 相似示意图",
     description: "本图展示三边对应成比例时，两个三角形相似的关系。",
     theoremName: "SSS（三边对应成比例）",
+    diagramLabel: "SSS 相似",
     scopeNote: "仅用于 AB/DE=AC/DF=BC/EF，求证 △ABC∽△DEF 的稳定结构。",
-    conditionLabels: [
-      { text: "AB/DE=AC/DF=BC/EF", x: -1.45, y: 2.35 },
+    conditionNotes: [
+      "已知条件：AB/DE=AC/DF=BC/EF。",
     ],
   });
 }
