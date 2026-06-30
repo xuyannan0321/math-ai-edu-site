@@ -664,15 +664,27 @@
   function drawSegment(svg, p1, p2, mapper, options = {}) {
     const start = mapper.project(p1);
     const end = mapper.project(p2);
+    const attrs = {
+      x1: start.x,
+      y1: start.y,
+      x2: end.x,
+      y2: end.y,
+      class: options.className || "mv-segment",
+      "data-object-id": options.id || "",
+    };
+
+    if (options.stroke) {
+      attrs.stroke = options.stroke;
+    }
+    if (options.strokeWidth) {
+      attrs["stroke-width"] = options.strokeWidth;
+    }
+    if (options.strokeDasharray) {
+      attrs["stroke-dasharray"] = options.strokeDasharray;
+    }
+
     svg.append(
-      createSvgElement("line", {
-        x1: start.x,
-        y1: start.y,
-        x2: end.x,
-        y2: end.y,
-        class: options.className || "mv-segment",
-        "data-object-id": options.id || "",
-      }),
+      createSvgElement("line", attrs),
     );
   }
 
@@ -691,6 +703,50 @@
       mapper,
       options,
     );
+  }
+
+  function drawAuxiliaryLineLabel(svg, line, p1, p2, mapper) {
+    if (!line || line.showLabel !== true || !line.label) {
+      return;
+    }
+
+    const isReference = line.style === "reference" || line.style === "referenceStrong";
+    const isStrongReference = line.style === "referenceStrong";
+    let labelPoint = {
+      x: (p1.x + p2.x) / 2,
+      y: (p1.y + p2.y) / 2,
+      id: line.id || "",
+      label: line.label,
+    };
+    let direction = line.orientation === "vertical"
+      ? { x: 1, y: 0 }
+      : { x: 0, y: -1 };
+
+    if (isReference && line.orientation === "horizontal") {
+      labelPoint = {
+        x: p2.x,
+        y: p2.y,
+        id: line.id || "",
+        label: line.label,
+      };
+      direction = { x: -1, y: -1 };
+    }
+
+    if (isReference && line.orientation === "vertical") {
+      labelPoint = {
+        x: p2.x,
+        y: p2.y,
+        id: line.id || "",
+        label: line.label,
+      };
+      direction = { x: 1, y: 1 };
+    }
+
+    drawLabelWithBackground(svg, labelPoint, line.label, mapper, {
+      direction,
+      offset: isStrongReference ? 18 : (isReference ? 16 : 13),
+      className: "mv-label mv-line-label",
+    });
   }
 
   function drawRay(svg, p1, p2, mapper, bounds, options = {}) {
@@ -1604,10 +1660,20 @@
       var from = resolveGraphPoint(l.from, spec.points || {});
       var to = resolveGraphPoint(l.to, spec.points || {});
       if (!from || !to) { auxSkipped++; return; }
+      var reference = l.style === "reference" || l.style === "referenceStrong";
+      var strongReference = l.style === "referenceStrong";
       var dashed = l.style === "dashed" || l.kind === "auxiliaryLine";
-      var opts = { className: dashed ? "mv-auxiliary-line" : "mv-segment", dashed: dashed };
+      var opts = {
+        id: l.id || "",
+        className: reference ? "mv-auxiliary-line mv-reference-line" : (dashed ? "mv-auxiliary-line" : "mv-segment"),
+        dashed: dashed,
+        stroke: strongReference ? "#f59e0b" : (reference ? "#64748b" : ""),
+        strokeWidth: strongReference ? 3 : (reference ? 2.3 : ""),
+        strokeDasharray: strongReference ? "10 4" : (reference ? "8 4" : ""),
+      };
       if (l.kind === "segment") { drawSegment(svg, from, to, mapper, opts); }
       else { drawLine(svg, from, to, mapper, bounds, opts); }
+      drawAuxiliaryLineLabel(svg, l, from, to, mapper);
     });
     if (dbg && auxSkipped > 0) console.warn("[FunctionGraph] skipped " + auxSkipped + " invalid auxiliary lines");
 

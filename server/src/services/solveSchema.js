@@ -223,6 +223,23 @@ function shouldUseTemplateBeforeGraphEngine(templateSpec) {
   );
 }
 
+const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
+  "coordinate_distance_v1",
+  "coordinate_midpoint_v1",
+  "point_to_line_distance_v1",
+  "triangle_area_coordinate_v1",
+  "parallel_perpendicular_v1",
+  "coordinate_area_v1",
+  "function_intersection_v1",
+]);
+
+function shouldStableTemplateOverrideSource(templateSpec) {
+  return Boolean(
+    isRenderableGraphTemplate(templateSpec)
+    && STABLE_TEMPLATE_OVERRIDE_IDS.has(templateSpec.templateId)
+  );
+}
+
 function normalizeSteps(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -1323,6 +1340,15 @@ function createSafeFallbackVisualization(fallback) {
 
 function normalizeVisualizationSpec(value, fallback = {}) {
   const source = isPlainObject(value) ? value : null;
+  const questionText = fallback.questionText || fallback.problemText || "";
+  const stableTemplateSpec = buildRenderableGraphTemplate(questionText, {
+    ...(source || {}),
+    ...fallback,
+  });
+
+  if (shouldStableTemplateOverrideSource(stableTemplateSpec)) {
+    return stableTemplateSpec;
+  }
 
   if (!source) {
     return createSafeFallbackVisualization(fallback);
@@ -1339,9 +1365,9 @@ function normalizeVisualizationSpec(value, fallback = {}) {
     : "medium";
 
   // For y= or f(x)= problems, force function_graph even if AI says none
-  var isFuncProblem = /y\s*=|f\s*\(\s*x\s*\)\s*=|一次函数|二次函数|抛物线|函数图像|画出函数/i.test(fallback.questionText || "");
+  var isFuncProblem = /y\s*=|f\s*\(\s*x\s*\)\s*=|一次函数|二次函数|抛物线|函数图像|画出函数/i.test(questionText);
   var noneTypeTemplateSpec = type === "none"
-    ? buildRenderableGraphTemplate(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })
+    ? buildRenderableGraphTemplate(questionText, { ...source, questionSections: fallback.questionSections })
     : null;
   if (shouldUseTemplateBeforeGraphEngine(noneTypeTemplateSpec)) {
     return noneTypeTemplateSpec;
@@ -1350,11 +1376,11 @@ function normalizeVisualizationSpec(value, fallback = {}) {
   if (
     type === "none"
     && isFuncProblem
-    && !isComplexFunctionComprehensiveProblem(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })
-    && !isComplexFunctionProblem(fallback.questionText || "", { ...source, questionSections: fallback.questionSections })
+    && !isComplexFunctionComprehensiveProblem(questionText, { ...source, questionSections: fallback.questionSections })
+    && !isComplexFunctionProblem(questionText, { ...source, questionSections: fallback.questionSections })
   ) {
-    var funcGraph = createFunctionGraphFallback(fallback.questionText || "");
-    if (funcGraph) { return enrichFunctionGraphSpec(funcGraph, fallback.questionText || ""); }
+    var funcGraph = createFunctionGraphFallback(questionText);
+    if (funcGraph) { return enrichFunctionGraphSpec(funcGraph, questionText); }
   }
   if (type === "none") {
     var fallbackSpec = createSafeFallbackVisualization(fallback);
@@ -1370,14 +1396,14 @@ function normalizeVisualizationSpec(value, fallback = {}) {
 
   // If AI returns number_line but problem text is a linear equation, override with equation_balance
   if (type === "number_line") {
-    var eqOverride = createEquationAsFunctionGraphFallback(fallback.questionText || "") || createEquationBalanceFallback(fallback.questionText || "");
+    var eqOverride = createEquationAsFunctionGraphFallback(questionText) || createEquationBalanceFallback(questionText);
     if (eqOverride) {
       return eqOverride;
     }
   }
 
 
-  return normalizeNonGeometrySpec(source, type, confidence, fallback.questionText || "");
+  return normalizeNonGeometrySpec(source, type, confidence, questionText);
 }
 
 

@@ -47,6 +47,185 @@ function sampleCurve(fn, minX, maxX, count) {
   return samples;
 }
 
+function normalizeTemplateText(value) {
+  return asText(value)
+    .replace(/\u2212/g, "-")
+    .replace(/（/g, "(")
+    .replace(/）/g, ")")
+    .replace(/，/g, ",")
+    .replace(/：/g, ":");
+}
+
+function getTemplateText(questionText, source = {}) {
+  return [
+    questionText,
+    source.problemText,
+    source.title,
+    source.analysis,
+    source.finalAnswer,
+  ].map(asText).join("\n");
+}
+
+function compactTemplateText(value) {
+  return normalizeTemplateText(value).replace(/\s+/g, "");
+}
+
+function isOrdinaryFunctionGraphQuestion(text) {
+  return /画出|作出|绘制|函数图像|函数的图像|图象|图像|抛物线|双曲线|反比例函数|二次函数|一次函数/.test(text);
+}
+
+function parseCoordinatePoints(text) {
+  const normalized = normalizeTemplateText(text);
+  const points = [];
+  const seen = new Set();
+  const pattern = /(?:点\s*)?([A-Z][0-9]*)\s*\(\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*\)/g;
+  let match;
+
+  while ((match = pattern.exec(normalized)) !== null) {
+    const id = match[1];
+    const x = Number(match[2]);
+    const y = Number(match[3]);
+
+    if (!id || !Number.isFinite(x) || !Number.isFinite(y) || seen.has(id)) {
+      continue;
+    }
+
+    seen.add(id);
+    points.push(createPoint(id, x, y));
+  }
+
+  return points;
+}
+
+function createPoint(id, x, y, label) {
+  const point = {
+    id,
+    x: round4(x),
+    y: round4(y),
+  };
+
+  point.label = label || `${id}(${formatCoordinateValue(point.x)},${formatCoordinateValue(point.y)})`;
+  return point;
+}
+
+function pointMapFromList(points) {
+  return points.reduce((map, point) => {
+    if (point && point.id) {
+      map[point.id] = createPoint(point.id, point.x, point.y, point.label);
+    }
+    return map;
+  }, {});
+}
+
+function formatCoordinateValue(value) {
+  const rounded = round4(Number(value));
+  if (!Number.isFinite(rounded)) {
+    return "";
+  }
+  if (Math.abs(rounded - Math.round(rounded)) < 1e-8) {
+    return String(Math.round(rounded));
+  }
+  return String(rounded).replace(/\.?0+$/, "");
+}
+
+function formatIdNumber(value) {
+  return formatCoordinateValue(value)
+    .replace(/-/g, "negative_")
+    .replace(/\./g, "_");
+}
+
+function getPointById(points, id) {
+  return points.find((point) => point.id === id) || null;
+}
+
+function pickPointPair(points, text) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return null;
+  }
+
+  const compact = compactTemplateText(text).toUpperCase();
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      const a = points[i];
+      const b = points[j];
+      const pair1 = `${a.id}${b.id}`.toUpperCase();
+      const pair2 = `${b.id}${a.id}`.toUpperCase();
+      if (compact.includes(pair1) || compact.includes(pair2)) {
+        return [a, b];
+      }
+    }
+  }
+
+  return [points[0], points[1]];
+}
+
+function buildCoordinateSystemFromPointMap(points) {
+  return buildCoordinateSystem([{ x: 0, y: 0 }].concat(Object.values(points || {})), [], { showGrid: true });
+}
+
+function buildFunctionGraphTemplate({
+  templateId,
+  title,
+  description,
+  points,
+  auxiliaryLines,
+  highlightObjects,
+  confidence = "high",
+}) {
+  return {
+    type: "function_graph",
+    ...baseTemplateMeta(templateId, "coordinate_geometry"),
+    confidence,
+    title,
+    description,
+    coordinateSystem: buildCoordinateSystemFromPointMap(points),
+    curves: [],
+    functions: [],
+    points,
+    auxiliaryLines: auxiliaryLines || [],
+    objects: [],
+    views: [
+      {
+        id: "main",
+        title,
+        showObjects: {
+          curves: [],
+          points: Object.keys(points || {}),
+          auxiliaryLines: (auxiliaryLines || []).map((line) => line.id).filter(Boolean),
+        },
+        highlightObjects: highlightObjects || Object.keys(points || {}),
+      },
+    ],
+    steps: [],
+  };
+}
+
+function makeSegment(id, label, from, to, style = "solid", role = "original", options = {}) {
+  return {
+    id,
+    kind: "segment",
+    label,
+    from,
+    to,
+    style,
+    role,
+    ...options,
+  };
+}
+
+function makeLine(id, label, from, to, style = "dashed", role = "auxiliary", options = {}) {
+  return {
+    id,
+    kind: "line",
+    label,
+    from,
+    to,
+    style,
+    role,
+    ...options,
+  };
+}
+
 function baseTemplateMeta(templateId, templateType) {
   return {
     templateId,
@@ -328,6 +507,281 @@ function buildCoordinateAreaTemplate(questionText, source = {}) {
   };
 }
 
+function buildCoordinateDistanceTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+  const compact = compactTemplateText(text);
+  const pointsList = parseCoordinatePoints(text);
+
+  if (pointsList.length < 2 || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (!/(距离|两点间距离|的长|长度|求[A-Z][0-9]*[A-Z][0-9]*)/.test(compact)) {
+    return null;
+  }
+
+  const pair = pickPointPair(pointsList, text);
+  if (!pair) {
+    return null;
+  }
+
+  const [a, b] = pair;
+  const footId = "H";
+  const foot = createPoint(footId, b.x, a.y);
+  const points = pointMapFromList([a, b, foot]);
+  const segmentId = `segment_${a.id}${b.id}`;
+  const dx = Math.abs(round4(b.x - a.x));
+  const dy = Math.abs(round4(b.y - a.y));
+
+  const auxiliaryLines = [
+    makeSegment(segmentId, `${a.id}${b.id}`, a.id, b.id, "solid", "original", { showLabel: true }),
+    makeSegment(`segment_${a.id}H`, `Δx=${formatCoordinateValue(dx)}`, a.id, footId, "dashed", "auxiliary", { showLabel: true }),
+    makeSegment(`segment_${b.id}H`, `Δy=${formatCoordinateValue(dy)}`, b.id, footId, "dashed", "auxiliary", { showLabel: true }),
+  ];
+
+  return buildFunctionGraphTemplate({
+    templateId: "coordinate_distance_v1",
+    title: "两点距离示意图",
+    description: "本图展示两点间距离对应的水平差、竖直差和直角三角形关系。",
+    points,
+    auxiliaryLines,
+    highlightObjects: [a.id, b.id, segmentId],
+  });
+}
+
+function buildCoordinateMidpointTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+  const compact = compactTemplateText(text);
+  const pointsList = parseCoordinatePoints(text);
+
+  if (pointsList.length < 2 || isOrdinaryFunctionGraphQuestion(text) || !/中点/.test(compact)) {
+    return null;
+  }
+
+  const pair = pickPointPair(pointsList, text);
+  if (!pair) {
+    return null;
+  }
+
+  const [a, b] = pair;
+  const midpoint = createPoint("M", (a.x + b.x) / 2, (a.y + b.y) / 2);
+  const points = pointMapFromList([a, b, midpoint]);
+  const segmentId = `segment_${a.id}${b.id}`;
+
+  return buildFunctionGraphTemplate({
+    templateId: "coordinate_midpoint_v1",
+    title: "线段中点示意图",
+    description: `本图展示线段 ${a.id}${b.id} 及其中点 M 的位置。`,
+    points,
+    auxiliaryLines: [
+      makeSegment(segmentId, `${a.id}${b.id}`, a.id, b.id, "solid", "original"),
+    ],
+    highlightObjects: ["M", segmentId],
+  });
+}
+
+function buildPointToLineDistanceTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+  const normalized = normalizeTemplateText(text);
+  const compact = compactTemplateText(text);
+  const pointsList = parseCoordinatePoints(text);
+
+  if (!pointsList.length || !/(点到直线|到直线|距离)/.test(compact)) {
+    return null;
+  }
+
+  const horizontal = compact.match(/y=([+-]?(?:\d+(?:\.\d+)?|\.\d+))(?![xX/])/);
+  const vertical = compact.match(/x=([+-]?(?:\d+(?:\.\d+)?|\.\d+))(?![yY/])/);
+
+  if (!horizontal && !vertical) {
+    return null;
+  }
+
+  const point = getPointById(pointsList, "P") || pointsList[0];
+  const points = pointMapFromList([point]);
+  const span = 4;
+  let line;
+  let foot;
+
+  if (horizontal) {
+    const y = Number(horizontal[1]);
+    const lineLabel = `y=${formatCoordinateValue(y)}`;
+    foot = createPoint("H", point.x, y);
+    points.H = foot;
+    line = makeLine(
+      `line_y_${formatIdNumber(y)}`,
+      lineLabel,
+      { x: point.x - span, y },
+      { x: point.x + span, y },
+      "referenceStrong",
+      "auxiliary",
+      { orientation: "horizontal", showLabel: true },
+    );
+  } else {
+    const x = Number(vertical[1]);
+    const lineLabel = `x=${formatCoordinateValue(x)}`;
+    foot = createPoint("H", x, point.y);
+    points.H = foot;
+    line = makeLine(
+      `line_x_${formatIdNumber(x)}`,
+      lineLabel,
+      { x, y: point.y - span },
+      { x, y: point.y + span },
+      "referenceStrong",
+      "auxiliary",
+      { orientation: "vertical", showLabel: true },
+    );
+  }
+
+  return buildFunctionGraphTemplate({
+    templateId: "point_to_line_distance_v1",
+    title: "点到直线距离示意图",
+    description: `本图展示点 ${point.id} 到直线 ${line.label} 的垂直距离 PH。`,
+    points,
+    auxiliaryLines: [
+      line,
+      makeSegment("segment_PH", "PH", point.id, "H", "dashed", "auxiliary", { showLabel: true }),
+    ],
+    highlightObjects: [point.id, "H", "segment_PH"],
+  });
+}
+
+function pickTrianglePoints(pointsList) {
+  const a = getPointById(pointsList, "A");
+  const b = getPointById(pointsList, "B");
+  const c = getPointById(pointsList, "C");
+
+  if (a && b && c) {
+    return [a, b, c];
+  }
+
+  const p = getPointById(pointsList, "P");
+  const q = getPointById(pointsList, "Q");
+  const m = getPointById(pointsList, "M");
+
+  if (p && q && m) {
+    return [p, q, m];
+  }
+
+  return pointsList.slice(0, 3);
+}
+
+function buildTriangleHeightAuxiliary(a, b, c) {
+  if (Math.abs(a.y - b.y) < 1e-8) {
+    const foot = createPoint("H", c.x, a.y);
+    return {
+      foot,
+      lines: [
+        makeLine("base_line", `${a.id}${b.id}`, a.id, b.id, "solid", "original"),
+        makeSegment("height_CH", "高", c.id, "H", "dashed", "auxiliary"),
+      ],
+      confidence: "high",
+    };
+  }
+
+  if (Math.abs(a.x - b.x) < 1e-8) {
+    const foot = createPoint("H", a.x, c.y);
+    return {
+      foot,
+      lines: [
+        makeLine("base_line", `${a.id}${b.id}`, a.id, b.id, "solid", "original"),
+        makeSegment("height_CH", "高", c.id, "H", "dashed", "auxiliary"),
+      ],
+      confidence: "high",
+    };
+  }
+
+  return {
+    foot: null,
+    lines: [],
+    confidence: "medium",
+  };
+}
+
+function buildTriangleAreaCoordinateTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+  const compact = compactTemplateText(text);
+  const pointsList = parseCoordinatePoints(text);
+
+  if (
+    pointsList.length < 3
+    || isOrdinaryFunctionGraphQuestion(text)
+    || !/(三角形|△|\\triangle)/.test(compact)
+    || !/(面积|S)/i.test(compact)
+  ) {
+    return null;
+  }
+
+  const [a, b, c] = pickTrianglePoints(pointsList);
+  if (!a || !b || !c) {
+    return null;
+  }
+
+  const height = buildTriangleHeightAuxiliary(a, b, c);
+  const points = pointMapFromList([a, b, c].concat(height.foot ? [height.foot] : []));
+  const auxiliaryLines = [
+    makeSegment(`segment_${a.id}${b.id}`, `${a.id}${b.id}`, a.id, b.id, "solid", "original"),
+    makeSegment(`segment_${b.id}${c.id}`, `${b.id}${c.id}`, b.id, c.id, "solid", "original"),
+    makeSegment(`segment_${c.id}${a.id}`, `${c.id}${a.id}`, c.id, a.id, "solid", "original"),
+    ...height.lines.filter((line) => line.id !== "base_line"),
+  ];
+
+  return buildFunctionGraphTemplate({
+    templateId: "triangle_area_coordinate_v1",
+    title: "坐标三角形面积示意图",
+    description: height.foot
+      ? "本图展示坐标三角形的底和对应高，便于代入面积公式。"
+      : "本图展示坐标三角形的三个顶点和三边；当前底边不水平或竖直，暂不强行绘制高。",
+    points,
+    auxiliaryLines,
+    highlightObjects: [a.id, b.id, c.id, "height_CH"].filter(Boolean),
+    confidence: height.confidence,
+  });
+}
+
+function buildParallelPerpendicularTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+  const compact = compactTemplateText(text);
+  const pointsList = parseCoordinatePoints(text);
+  const a = getPointById(pointsList, "A");
+  const b = getPointById(pointsList, "B");
+  const c = getPointById(pointsList, "C");
+  const d = getPointById(pointsList, "D");
+
+  if (!a || !b || !c || !d || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (!/AB.*CD|CD.*AB/.test(compact) || !/(平行|垂直|判断)/.test(compact)) {
+    return null;
+  }
+
+  const dx1 = b.x - a.x;
+  const dy1 = b.y - a.y;
+  const dx2 = d.x - c.x;
+  const dy2 = d.y - c.y;
+  const cross = round4(dx1 * dy2 - dy1 * dx2);
+  const dot = round4(dx1 * dx2 + dy1 * dy2);
+  const relation = Math.abs(cross) < 1e-8
+    ? "平行"
+    : Math.abs(dot) < 1e-8
+      ? "垂直"
+      : "不平行也不垂直";
+  const points = pointMapFromList([a, b, c, d]);
+
+  return buildFunctionGraphTemplate({
+    templateId: "parallel_perpendicular_v1",
+    title: "平行垂直关系示意图",
+    description: `本图展示线段 AB 与 CD 的位置关系，可结合斜率或向量点乘判断：${relation}。`,
+    points,
+    auxiliaryLines: [
+      makeSegment("segment_AB", "AB", "A", "B", "solid", "original"),
+      makeSegment("segment_CD", "CD", "C", "D", "solid", "original"),
+    ],
+    highlightObjects: ["segment_AB", "segment_CD"],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -400,6 +854,11 @@ function buildGraphTemplateSpec(questionText, source = {}) {
   return intersectionSpec
     || buildQuadraticKeyPointsTemplate(questionText, source)
     || areaSpec
+    || buildCoordinateDistanceTemplate(questionText, source)
+    || buildCoordinateMidpointTemplate(questionText, source)
+    || buildPointToLineDistanceTemplate(questionText, source)
+    || buildTriangleAreaCoordinateTemplate(questionText, source)
+    || buildParallelPerpendicularTemplate(questionText, source)
     || null;
 }
 
@@ -407,5 +866,11 @@ module.exports = {
   buildFunctionIntersectionTemplate,
   buildQuadraticKeyPointsTemplate,
   buildCoordinateAreaTemplate,
+  parseCoordinatePoints,
+  buildCoordinateDistanceTemplate,
+  buildCoordinateMidpointTemplate,
+  buildPointToLineDistanceTemplate,
+  buildTriangleAreaCoordinateTemplate,
+  buildParallelPerpendicularTemplate,
   buildGraphTemplateSpec,
 };

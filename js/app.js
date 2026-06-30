@@ -855,9 +855,19 @@ function hasRenderableVisualizationSpec(spec) {
 
   // For function_graph, check that it actually has renderable data
   if (spec.type === "function_graph") {
+    var pointLineTemplateIds = [
+      "coordinate_area_v1",
+      "complex_function_template_v1",
+      "coordinate_distance_v1",
+      "coordinate_midpoint_v1",
+      "point_to_line_distance_v1",
+      "triangle_area_coordinate_v1",
+      "parallel_perpendicular_v1",
+    ];
+
     if (
       spec.canRender === true
-      && (spec.templateId === "coordinate_area_v1" || spec.templateId === "complex_function_template_v1")
+      && pointLineTemplateIds.indexOf(spec.templateId) !== -1
       && (
         spec.points && typeof spec.points === "object" && Object.keys(spec.points).length > 0
         || Array.isArray(spec.auxiliaryLines) && spec.auxiliaryLines.length > 0
@@ -1064,7 +1074,15 @@ function isVisualizationSpecReliable(spec, questionText, result) {
 
   if (
     spec.canRender === true
-    && (spec.templateId === "coordinate_area_v1" || spec.templateId === "complex_function_template_v1")
+    && [
+      "coordinate_area_v1",
+      "complex_function_template_v1",
+      "coordinate_distance_v1",
+      "coordinate_midpoint_v1",
+      "point_to_line_distance_v1",
+      "triangle_area_coordinate_v1",
+      "parallel_perpendicular_v1",
+    ].indexOf(spec.templateId) !== -1
   ) {
     return true;
   }
@@ -4700,6 +4718,21 @@ function normalizePlainMathToLatex(text) {
   return transformTextOutsideMathDelimiters(text, normalizePlainMathSegmentToLatex);
 }
 
+function normalizeStudentTextArtifacts(text) {
+  var s = String(text || "");
+
+  return s
+    .replace(/\s*(?:-{1,2}|={1,2})>\s*/g, "，所以")
+    .replace(/\s*[→⇒]\s*/g, "，所以")
+    .replace(/\bformulas as strings\b/gi, "")
+    .replace(/\bbecause of\b/gi, "因为")
+    .replace(/\bsolution\b/gi, "解析")
+    .replace(/\bstep\b/gi, "步骤")
+    .replace(/[◆◇■□●○]+/g, "")
+    .replace(/，所以([，。；;])/g, "，所以")
+    .replace(/\s{2,}/g, " ");
+}
+
 function prepareMathTextForDisplay(rawText) {
   var cleaned = normalizeEscapedNewlines(String(rawText ?? ""));
   cleaned = normalizeEscapedLatexBackslashes(cleaned);
@@ -4710,6 +4743,7 @@ function prepareMathTextForDisplay(rawText) {
   cleaned = normalizeCoordinateText(cleaned);
   var protectedMath = protectMathSegments(cleaned);
   cleaned = protectedMath.text;
+  cleaned = normalizeStudentTextArtifacts(cleaned);
   cleaned = normalizePlainMathToLatex(cleaned);
   cleaned = wrapLatexFragments(cleaned);
   cleaned = restoreProtectedMathSegments(cleaned, protectedMath.segments);
