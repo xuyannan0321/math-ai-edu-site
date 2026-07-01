@@ -15,6 +15,10 @@ const geometryTemplateIds = [
   "radius_equal_v1",
   "diameter_right_angle_v1",
   "tangent_radius_perpendicular_v1",
+  "same_arc_equal_inscribed_angles_v1",
+  "equal_arcs_equal_inscribed_angles_v1",
+  "central_angle_double_inscribed_angle_v1",
+  "right_angle_subtends_diameter_v1",
 ];
 
 const positiveCases = [
@@ -83,6 +87,26 @@ const positiveCases = [
     input: "已知 PA 是 ⊙O 的切线，A 为切点，OA 是半径，求证 OA⊥PA。",
     expectTemplateId: "tangent_radius_perpendicular_v1",
   },
+  {
+    name: "same_arc_equal_inscribed_angles_v1",
+    input: "已知点 A、B、C、D 在 ⊙O 上，∠ACB 与 ∠ADB 同对弧 AB，求证 ∠ACB=∠ADB。",
+    expectTemplateId: "same_arc_equal_inscribed_angles_v1",
+  },
+  {
+    name: "equal_arcs_equal_inscribed_angles_v1",
+    input: "已知 ⊙O 中，⌒AB=⌒CD，∠AEB 对⌒AB，∠CFD 对⌒CD，求证 ∠AEB=∠CFD。",
+    expectTemplateId: "equal_arcs_equal_inscribed_angles_v1",
+  },
+  {
+    name: "central_angle_double_inscribed_angle_v1",
+    input: "已知 ∠AOB 是 ⊙O 中弧 AB 所对的圆心角，∠ACB 是同弧 AB 所对的圆周角，求证 ∠AOB=2∠ACB。",
+    expectTemplateId: "central_angle_double_inscribed_angle_v1",
+  },
+  {
+    name: "right_angle_subtends_diameter_v1",
+    input: "已知 A、B、C 在 ⊙O 上，∠ACB=90°，求证 AB 是 ⊙O 的直径。",
+    expectTemplateId: "right_angle_subtends_diameter_v1",
+  },
 ];
 
 const negativeCases = [
@@ -128,6 +152,38 @@ const negativeCases = [
   {
     name: "ordinary function graph should not trigger geometry templates",
     input: "画出函数 y=x^2 的图像。",
+    forbiddenTemplateIds: geometryTemplateIds,
+  },
+  {
+    name: "bare equal inscribed angles should not trigger same_arc_equal_inscribed_angles_v1",
+    input: "已知 ∠ACB=∠ADB，求证 ∠ACB=∠ADB。",
+    forbiddenTemplateIds: ["same_arc_equal_inscribed_angles_v1"],
+  },
+  {
+    name: "bare equal arcs should not trigger equal_arcs_equal_inscribed_angles_v1",
+    input: "已知 ⊙O 中，⌒AB=⌒CD。",
+    forbiddenTemplateIds: ["equal_arcs_equal_inscribed_angles_v1"],
+  },
+  {
+    name: "bare double angle relation should not trigger central_angle_double_inscribed_angle_v1",
+    input: "已知 ∠AOB=2∠ACB，求证 ∠AOB=2∠ACB。",
+    forbiddenTemplateIds: ["central_angle_double_inscribed_angle_v1"],
+  },
+  {
+    name: "ordinary right triangle should not trigger right_angle_subtends_diameter_v1",
+    input: "已知三角形 ABC 中，∠ACB=90°，求证 AB 是斜边。",
+    forbiddenTemplateIds: ["right_angle_subtends_diameter_v1"],
+  },
+  {
+    name: "diameter right angle should keep diameter_right_angle_v1",
+    input: "已知 AB 是 ⊙O 的直径，点 C 在 ⊙O 上，求证 ∠ACB=90°。",
+    expectTemplateId: "diameter_right_angle_v1",
+    forbiddenTemplateIds: ["right_angle_subtends_diameter_v1"],
+  },
+  {
+    name: "function intersection should keep function_intersection_v1",
+    input: "求函数 y=8/x 与 y=2x 的交点。",
+    expectTemplateId: "function_intersection_v1",
     forbiddenTemplateIds: geometryTemplateIds,
   },
 ];
@@ -188,12 +244,17 @@ function checkNegative(testCase) {
   const spec = buildGraphTemplateSpec(testCase.input, {});
   const templateId = spec && spec.templateId;
   const forbidden = new Set(testCase.forbiddenTemplateIds || []);
+  const failures = [];
 
-  if (templateId && forbidden.has(templateId)) {
-    return [`did not expect ${templateId}, got ${describeSpec(spec)}`];
+  if (testCase.expectTemplateId && templateId !== testCase.expectTemplateId) {
+    failures.push(`expected templateId ${testCase.expectTemplateId}, got ${templateId || "none"}`);
   }
 
-  return [];
+  if (templateId && forbidden.has(templateId)) {
+    failures.push(`did not expect ${templateId}, got ${describeSpec(spec)}`);
+  }
+
+  return failures;
 }
 
 function run() {

@@ -906,23 +906,69 @@
     return Math.hypot(projectedP1.x - projectedP2.x, projectedP1.y - projectedP2.y);
   }
 
-  function drawAngleLabel(svg, vertex, arc, radius, mapper, label) {
+  function drawLabelBox(svg, box, label, options = {}) {
+    if (!box || !label) {
+      return;
+    }
+
+    const group = createSvgElement("g", {
+      class: "mv-label-group",
+      "data-label-for": options.forId || "",
+    });
+
+    group.append(
+      createSvgElement("rect", {
+        x: box.x.toFixed(1),
+        y: box.y.toFixed(1),
+        width: box.width.toFixed(1),
+        height: box.height.toFixed(1),
+        rx: 6,
+        class: "mv-label-bg",
+      }),
+    );
+
+    const text = createSvgElement("text", {
+      x: box.cx.toFixed(1),
+      y: box.cy.toFixed(1),
+      "text-anchor": "middle",
+      "dominant-baseline": "middle",
+      class: options.className || "mv-label",
+    });
+    text.textContent = label;
+    group.append(text);
+    svg.append(group);
+  }
+
+  function drawAngleLabel(svg, vertex, arc, radius, mapper, label, options = {}) {
     if (!label) {
       return;
     }
 
-    const labelRadius = radius + 16;
+    const labelRadius = radius + 14;
     const mid = arc.start + arc.delta / 2;
     const projectedVertex = mapper.project(vertex);
-    const text = createSvgElement("text", {
-      x: (projectedVertex.x + labelRadius * Math.cos(mid)).toFixed(2),
-      y: (projectedVertex.y + labelRadius * Math.sin(mid)).toFixed(2),
-      "text-anchor": "middle",
-      "dominant-baseline": "middle",
-      class: "mv-label mv-angle-label",
+    const primaryDirection = parseLabelDirection(options.labelDirection || options.direction)
+      || normalizeVector({ x: Math.cos(mid), y: Math.sin(mid) });
+    const anchor = {
+      x: projectedVertex.x + labelRadius * Math.cos(mid),
+      y: projectedVertex.y + labelRadius * Math.sin(mid),
+    };
+    const placement = findLabelPlacement(anchor, label, mapper, {
+      layoutState: options.layoutState,
+      primaryDirection,
+      directions: [primaryDirection],
+      offset: Number.isFinite(Number(options.labelOffset)) ? Number(options.labelOffset) : 7,
+      offsets: [7, 13, 21, 31, 43],
+      dx: Number.isFinite(Number(options.labelDx)) ? Number(options.labelDx) : 0,
+      dy: Number.isFinite(Number(options.labelDy)) ? Number(options.labelDy) : 0,
+      labelMargin: 5,
     });
-    text.textContent = label;
-    svg.append(text);
+
+    registerLabelBox(options.layoutState, placement.box);
+    drawLabelBox(svg, placement.box, label, {
+      forId: options.id,
+      className: "mv-label mv-angle-label",
+    });
   }
 
   function drawAngleArc(svg, vertex, p1, p2, mapper, options = {}) {
@@ -984,7 +1030,7 @@
     svg.append(createSvgElement("path", attributes));
 
     if (options.showLabel === true) {
-      drawAngleLabel(svg, vertex, arc, radius, mapper, options.label);
+      drawAngleLabel(svg, vertex, arc, radius, mapper, options.label, options);
     }
   }
 
@@ -1067,6 +1113,137 @@
     const y = clamp(centerY - height / 2, 4, mapper.height - height - 4);
 
     return { x, y, width, height, cx: x + width / 2, cy: y + height / 2 };
+  }
+
+  function createLabelLayoutState(obstacles = []) {
+    return {
+      obstacles: Array.isArray(obstacles) ? obstacles : [],
+      occupied: [],
+    };
+  }
+
+  function registerLabelBox(layoutState, box) {
+    if (!layoutState || !box) {
+      return;
+    }
+
+    layoutState.occupied.push(box);
+  }
+
+  function getDirectionKey(direction) {
+    return `${Math.round(direction.x * 1000)}:${Math.round(direction.y * 1000)}`;
+  }
+
+  function addDirectionCandidate(candidates, seen, direction) {
+    if (!direction) {
+      return;
+    }
+
+    const normalized = normalizeVector(direction);
+    if (!normalized.x && !normalized.y) {
+      return;
+    }
+
+    const key = getDirectionKey(normalized);
+    if (!seen.has(key)) {
+      seen.add(key);
+      candidates.push(normalized);
+    }
+  }
+
+  function getLabelDirectionCandidates(primaryDirection, fallbackDirections = []) {
+    const candidates = [];
+    const seen = new Set();
+    const primary = normalizeVector(primaryDirection || { x: 1, y: -1 });
+
+    if (primary.x || primary.y) {
+      const perpendicular = { x: -primary.y, y: primary.x };
+      addDirectionCandidate(candidates, seen, primary);
+      addDirectionCandidate(candidates, seen, {
+        x: primary.x + perpendicular.x * 0.45,
+        y: primary.y + perpendicular.y * 0.45,
+      });
+      addDirectionCandidate(candidates, seen, {
+        x: primary.x - perpendicular.x * 0.45,
+        y: primary.y - perpendicular.y * 0.45,
+      });
+      addDirectionCandidate(candidates, seen, { x: -primary.x, y: -primary.y });
+    }
+
+    (fallbackDirections || []).forEach((direction) => addDirectionCandidate(candidates, seen, direction));
+    [
+      { x: 1, y: -1 },
+      { x: 1, y: 1 },
+      { x: -1, y: -1 },
+      { x: -1, y: 1 },
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: -1 },
+      { x: 0, y: 1 },
+    ].forEach((direction) => addDirectionCandidate(candidates, seen, direction));
+
+    return candidates;
+  }
+
+  function scoreLabelPlacement(box, layoutState, options = {}) {
+    let penalty = 0;
+    const labelMargin = Number.isFinite(Number(options.labelMargin)) ? Number(options.labelMargin) : 3;
+
+    (layoutState?.occupied || []).forEach((other) => {
+      if (boxesOverlap(expandBox(box, labelMargin), expandBox(other, labelMargin))) {
+        penalty += 95;
+      }
+    });
+
+    (layoutState?.obstacles || []).forEach((obstacle) => {
+      if (labelBoxIntersectsObstacle(box, obstacle)) {
+        penalty += 120;
+      }
+    });
+
+    return penalty;
+  }
+
+  function findLabelPlacement(projected, label, mapper, options = {}) {
+    const parsedDirection = parseLabelDirection(options.direction);
+    const primaryDirection = parsedDirection
+      || options.primaryDirection
+      || (Array.isArray(options.directions) && options.directions[0])
+      || { x: 1, y: -1 };
+    const directions = getLabelDirectionCandidates(primaryDirection, options.directions || []);
+    const baseOffset = Number.isFinite(Number(options.offset)) ? Number(options.offset) : 15;
+    const offsets = Array.isArray(options.offsets) && options.offsets.length
+      ? options.offsets.map(Number).filter(Number.isFinite)
+      : [baseOffset, baseOffset + 8, baseOffset + 16, baseOffset + 28, baseOffset + 42];
+    const dx = Number.isFinite(Number(options.dx)) ? Number(options.dx) : 0;
+    const dy = Number.isFinite(Number(options.dy)) ? Number(options.dy) : 0;
+    let best = null;
+    let bestScore = -Infinity;
+
+    directions.forEach((direction, directionIndex) => {
+      offsets.forEach((offset, offsetIndex) => {
+        const box = getLabelBox(projected, label, direction, mapper, offset, dx, dy);
+        let score = 120 - directionIndex * 7 - offsetIndex * 4;
+
+        score -= scoreLabelPlacement(box, options.layoutState, options);
+
+        if (typeof options.extraScore === "function") {
+          score += Number(options.extraScore(box, direction, offset)) || 0;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = { direction, box, offset, score };
+        }
+      });
+    });
+
+    return best || {
+      direction: { x: 1, y: -1 },
+      box: getLabelBox(projected, label, { x: 1, y: -1 }, mapper, baseOffset, dx, dy),
+      offset: baseOffset,
+      score: 0,
+    };
   }
 
   function boxesOverlap(boxA, boxB) {
@@ -1320,9 +1497,52 @@
     return directions[key] || null;
   }
 
-  function layoutPointLabels(points, mapper, bounds, obstacles = []) {
+  function buildPointLabelDirectionHints(spec, objects, mapper) {
+    const hints = new Map();
+    const points = Object.values(spec?.points || {});
+
+    (objects || []).forEach((object) => {
+      if (!object || object.kind !== "circle") {
+        return;
+      }
+
+      const center = getPoint(spec, object.center);
+      const radius = Number(object.radius);
+      if (!center || !Number.isFinite(radius) || radius <= 0) {
+        return;
+      }
+
+      const projectedCenter = mapper.project(center);
+
+      points.forEach((point) => {
+        if (!point || point.id === object.center) {
+          return;
+        }
+
+        const distanceToCenter = Math.hypot(point.x - center.x, point.y - center.y);
+        if (Math.abs(distanceToCenter - radius) > Math.max(0.08, radius * 0.08)) {
+          return;
+        }
+
+        const projectedPoint = mapper.project(point);
+        const direction = normalizeVector({
+          x: projectedPoint.x - projectedCenter.x,
+          y: projectedPoint.y - projectedCenter.y,
+        });
+
+        if (direction.x || direction.y) {
+          hints.set(point.id || point.label, direction);
+        }
+      });
+    });
+
+    return hints;
+  }
+
+  function layoutPointLabels(points, mapper, bounds, obstacles = [], options = {}) {
     const placements = new Map();
-    const occupied = [];
+    const layoutState = options.layoutState || createLabelLayoutState(obstacles);
+    const directionHints = options.directionHints || new Map();
     const axisY = bounds && bounds.minY <= 0 && bounds.maxY >= 0
       ? mapper.project({ x: bounds.minX, y: 0 }).y
       : null;
@@ -1336,28 +1556,20 @@
       }
 
       const projected = mapper.project(point);
-      const directions = getPreferredLabelDirections(point.id || point.label);
-      let best = null;
-      let bestScore = -Infinity;
-      const offsets = [15, 22, 30, 40];
-
-      directions.forEach((direction, index) => {
-        offsets.forEach((offset, offsetIndex) => {
-          const box = getLabelBox(projected, point.label, direction, mapper, offset);
-          let score = 100 - index * 6 - offsetIndex * 4;
-
-          occupied.forEach((other) => {
-            if (boxesOverlap(box, other)) {
-              score -= 80;
-            }
-          });
-
-          obstacles.forEach((obstacle) => {
-            if (labelBoxIntersectsObstacle(box, obstacle)) {
-              score -= 120;
-            }
-          });
-
+      const pointId = point.id || point.label;
+      const preferredDirections = getPreferredLabelDirections(pointId);
+      const hint = directionHints.get(pointId);
+      const directions = hint
+        ? getLabelDirectionCandidates(hint, preferredDirections)
+        : preferredDirections;
+      const best = findLabelPlacement(projected, point.label, mapper, {
+        layoutState,
+        primaryDirection: directions[0],
+        directions,
+        offsets: [18, 26, 36, 48, 62],
+        labelMargin: 4,
+        extraScore(box) {
+          let score = 0;
           if (axisY !== null && Math.abs(box.cy - axisY) < 16) {
             score -= 20;
           }
@@ -1366,19 +1578,12 @@
             score -= 16;
           }
 
-          if (score > bestScore) {
-            bestScore = score;
-            best = { direction, box };
-          }
-        });
+          return score;
+        },
       });
 
-      if (!best) {
-        best = { direction: { x: 1, y: -1 }, box: getLabelBox(projected, point.label, { x: 1, y: -1 }, mapper) };
-      }
-
-      occupied.push(best.box);
-      placements.set(point.id || point.label, best);
+      registerLabelBox(layoutState, best.box);
+      placements.set(pointId, best);
     });
 
     return placements;
@@ -1399,33 +1604,26 @@
     const offset = Number.isFinite(Number(options.offset)) ? Number(options.offset) : 15;
     const dx = Number.isFinite(Number(options.dx)) ? Number(options.dx) : 0;
     const dy = Number.isFinite(Number(options.dy)) ? Number(options.dy) : 0;
-    const box = placement?.box || getLabelBox(projected, label, direction, mapper, offset, dx, dy);
-    const group = createSvgElement("g", {
-      class: "mv-label-group",
-      "data-label-for": point.id || "",
+    const resolvedPlacement = placement || findLabelPlacement(projected, label, mapper, {
+      layoutState: options.layoutState,
+      direction,
+      primaryDirection: direction,
+      directions: [direction],
+      offset,
+      dx,
+      dy,
+      labelMargin: 4,
     });
+    const box = resolvedPlacement.box || getLabelBox(projected, label, direction, mapper, offset, dx, dy);
 
-    group.append(
-      createSvgElement("rect", {
-        x: box.x.toFixed(1),
-        y: box.y.toFixed(1),
-        width: box.width.toFixed(1),
-        height: box.height.toFixed(1),
-        rx: 6,
-        class: "mv-label-bg",
-      }),
-    );
+    if (!placement && options.layoutState && options.register !== false) {
+      registerLabelBox(options.layoutState, box);
+    }
 
-    const text = createSvgElement("text", {
-      x: box.cx.toFixed(1),
-      y: box.cy.toFixed(1),
-      class: options.className || "mv-label",
-      "text-anchor": "middle",
-      "dominant-baseline": "central",
+    drawLabelBox(svg, box, label, {
+      forId: point.id,
+      className: options.className || "mv-label",
     });
-    text.textContent = label;
-    group.append(text);
-    svg.append(group);
   }
 
   function drawLabel(svg, point, label, mapper, options = {}) {
@@ -1441,7 +1639,12 @@
     const highlighted = new Set(view?.highlightObjects || []);
     const visibleObjects = getVisibleObjects(spec, view);
     const labelObstacles = buildLabelObstacles(spec, visibleObjects, mapper, bounds);
-    const pointLabelLayout = layoutPointLabels(Object.values(spec.points || {}), mapper, bounds, labelObstacles);
+    const labelLayoutState = createLabelLayoutState(labelObstacles);
+    const pointLabelHints = buildPointLabelDirectionHints(spec, visibleObjects, mapper);
+    const pointLabelLayout = layoutPointLabels(Object.values(spec.points || {}), mapper, bounds, labelObstacles, {
+      layoutState: labelLayoutState,
+      directionHints: pointLabelHints,
+    });
 
     visibleObjects.forEach((object) => {
       if (object.kind === "polygon") {
@@ -1525,11 +1728,16 @@
             label: object.label,
             showLabel: object.showLabel,
             arcLevel: object.arcLevel,
+            labelDirection: object.labelDirection || object.direction,
+            labelOffset: object.labelOffset || object.offset,
+            labelDx: object.labelDx || object.dx,
+            labelDy: object.labelDy || object.dy,
             equalMarkGroup: object.equalMarkGroup,
             forceLargeArc: object.forceLargeArc,
             allowFlatAngle: object.allowFlatAngle,
             color: object.color,
             strokeWidth: object.strokeWidth,
+            layoutState: labelLayoutState,
             className: getObjectClass(object, highlighted.has(object.id) ? "mv-highlight" : "mv-angle"),
           });
         }
@@ -1542,6 +1750,7 @@
             offset: object.offset,
             dx: object.dx,
             dy: object.dy,
+            layoutState: labelLayoutState,
           });
         }
       }
@@ -1561,6 +1770,7 @@
       drawLabelWithBackground(svg, point, point.label, mapper, {
         placement: pointLabelLayout.get(point.id || point.label),
         direction: getLabelOffsetDirection(point, connected.get(point.id) || []),
+        register: false,
       });
     });
   }

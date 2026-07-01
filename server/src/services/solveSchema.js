@@ -248,6 +248,10 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "radius_equal_v1",
   "diameter_right_angle_v1",
   "tangent_radius_perpendicular_v1",
+  "same_arc_equal_inscribed_angles_v1",
+  "equal_arcs_equal_inscribed_angles_v1",
+  "central_angle_double_inscribed_angle_v1",
+  "right_angle_subtends_diameter_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {

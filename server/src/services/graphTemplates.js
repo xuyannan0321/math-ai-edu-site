@@ -1973,12 +1973,61 @@ function hasProofIntent(compact) {
   return /(求证|证明|证)/.test(compact);
 }
 
-function circlePoint(radius, angleDegrees) {
+function circlePoint(centerOrRadius, radiusOrAngle, maybeAngleDegrees) {
+  const center = typeof centerOrRadius === "object"
+    ? centerOrRadius
+    : { x: 0, y: 0 };
+  const radius = typeof centerOrRadius === "object"
+    ? Number(radiusOrAngle)
+    : Number(centerOrRadius);
+  const angleDegrees = typeof centerOrRadius === "object"
+    ? maybeAngleDegrees
+    : radiusOrAngle;
   const radians = (Number(angleDegrees) * Math.PI) / 180;
   return {
-    x: radius * Math.cos(radians),
-    y: radius * Math.sin(radians),
+    x: round4((Number(center.x) || 0) + radius * Math.cos(radians)),
+    y: round4((Number(center.y) || 0) + radius * Math.sin(radians)),
   };
+}
+
+function makeCircleObject(id, center, radius, role = "original", options = {}) {
+  return {
+    kind: "circle",
+    id,
+    label: options.label || "⊙O",
+    center,
+    radius,
+    role,
+    style: options.style || "solid",
+    ...options,
+  };
+}
+
+function makeArcObject(id, center, radius, startAngle, endAngle, role = "highlight", options = {}) {
+  return {
+    kind: "arc",
+    id,
+    label: options.label || "",
+    center,
+    radius,
+    startAngle,
+    endAngle,
+    role,
+    style: options.style || "solid",
+    ...options,
+  };
+}
+
+function makeChord(id, from, to, role = "original", options = {}) {
+  return makeSegment(
+    id,
+    options.label || `${from}${to}`,
+    from,
+    to,
+    options.style || "solid",
+    role,
+    options,
+  );
 }
 
 function hasRadiusSegment(compact, segment) {
@@ -2084,8 +2133,9 @@ function hasDiameterRightAngleSignals(text) {
     || /C在⊙O上/.test(compact);
   const hasGoal = /∠ACB=90(?:°|度)?/.test(compact)
     || /∠ACB(?:是|为)?直角/.test(compact);
+  const hasDiameterAsGoal = /(?:求证|证明|证)AB(?:是|为)?(?:⊙O的)?直径/.test(compact);
 
-  return hasCircle && hasDiameter && hasPointCOnCircle && hasGoal && hasProofIntent(compact);
+  return hasCircle && hasDiameter && hasPointCOnCircle && hasGoal && !hasDiameterAsGoal && hasProofIntent(compact);
 }
 
 function buildDiameterRightAngleTemplate(questionText, source = {}) {
@@ -2209,6 +2259,328 @@ function buildTangentRadiusPerpendicularTemplate(questionText, source = {}) {
   });
 }
 
+function hasCirclePointGroup(compact, pointIds) {
+  const separator = "[、,，]?";
+  const groupedPoints = pointIds.join(separator);
+  const groupedPattern = new RegExp(`(?:点)?${groupedPoints}(?:均|都)?在⊙O上`);
+  const individual = pointIds.every((pointId) => (
+    new RegExp(`${pointId}在⊙O上`).test(compact)
+      || new RegExp(`${pointId}是⊙O上一点`).test(compact)
+  ));
+
+  return groupedPattern.test(compact) || individual;
+}
+
+function hasAngleEqualProofGoal(compact, firstAngle, secondAngle) {
+  return hasProofIntent(compact) && hasCongruentEqualPair(compact, firstAngle, secondAngle);
+}
+
+function hasArcEquality(compact, firstArc, secondArc) {
+  return hasCongruentEqualPair(compact, `⌒${firstArc}`, `⌒${secondArc}`);
+}
+
+function hasAngleAgainstArc(compact, angle, arc) {
+  const arcLabel = `⌒${arc}`;
+  return new RegExp(`${angle}(?:同?对|所对)${arcLabel}`).test(compact)
+    || new RegExp(`${angle}(?:是|为)?${arcLabel}所对的?圆周角`).test(compact)
+    || new RegExp(`${arcLabel}所对的?圆周角${angle}`).test(compact);
+}
+
+function buildCircleAngleBaseTemplate(options) {
+  return buildCircleBaseTemplate({
+    ...options,
+    title: options.title,
+    description: options.description,
+  });
+}
+
+function hasSameArcEqualInscribedAnglesSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasCircle = hasCircleOSignal(compact);
+  const hasPointsOnCircle = hasCirclePointGroup(compact, ["A", "B", "C", "D"]);
+  const hasSameArc = /∠ACB(?:与|和)?∠ADB同对⌒AB/.test(compact)
+    || /∠ADB(?:与|和)?∠ACB同对⌒AB/.test(compact)
+    || /∠ACB和∠ADB(?:都|均)?(?:同对|所对)⌒AB/.test(compact);
+  const hasGoal = hasAngleEqualProofGoal(compact, "∠ACB", "∠ADB");
+
+  return hasCircle && hasPointsOnCircle && hasSameArc && hasGoal;
+}
+
+function buildSameArcEqualInscribedAnglesTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasSameArcEqualInscribedAnglesSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.75;
+  const center = { x: 0, y: 0 };
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { ...circlePoint(center, radius, 220), label: "A" },
+    B: { ...circlePoint(center, radius, 320), label: "B" },
+    C: { ...circlePoint(center, radius, 80), label: "C" },
+    D: { ...circlePoint(center, radius, 145), label: "D" },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeChord("segment_AC", "A", "C"),
+    makeChord("segment_BC", "B", "C"),
+    makeChord("segment_AD", "A", "D"),
+    makeChord("segment_BD", "B", "D"),
+    makeArcObject("arc_AB", "O", radius, 220, 320, "highlight"),
+    {
+      kind: "angle",
+      id: "angle_ACB",
+      label: "∠ACB",
+      points: ["A", "C", "B"],
+      role: "highlight",
+      showLabel: true,
+      labelOffset: 13,
+    },
+    {
+      kind: "angle",
+      id: "angle_ADB",
+      label: "∠ADB",
+      points: ["A", "D", "B"],
+      role: "highlight",
+      showLabel: true,
+      arcLevel: 2,
+      labelOffset: 16,
+    },
+  ];
+
+  return buildCircleAngleBaseTemplate({
+    templateId: "same_arc_equal_inscribed_angles_v1",
+    title: "同弧圆周角示意图",
+    description: "本图保留圆 O、圆上点 A、B、C、D、弧 AB 以及两个圆周角。",
+    points,
+    objects,
+    highlightObjects: ["arc_AB", "angle_ACB", "angle_ADB"],
+    notes: [
+      "仅用于 ∠ACB 与 ∠ADB 同对弧 AB，求证 ∠ACB=∠ADB 的稳定结构。",
+      "使用初中圆周角性质：同弧所对的圆周角相等。",
+    ],
+  });
+}
+
+function hasEqualArcsEqualInscribedAnglesSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasCircle = hasCircleOSignal(compact);
+  const hasEqualArcs = hasArcEquality(compact, "AB", "CD");
+  const hasAnglesAgainstArcs = hasAngleAgainstArc(compact, "∠AEB", "AB")
+    && hasAngleAgainstArc(compact, "∠CFD", "CD");
+  const hasGoal = hasAngleEqualProofGoal(compact, "∠AEB", "∠CFD");
+
+  return hasCircle && hasEqualArcs && hasAnglesAgainstArcs && hasGoal;
+}
+
+function buildEqualArcsEqualInscribedAnglesTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasEqualArcsEqualInscribedAnglesSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.85;
+  const center = { x: 0, y: 0 };
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { ...circlePoint(center, radius, 150), label: "A" },
+    B: { ...circlePoint(center, radius, 100), label: "B" },
+    C: { ...circlePoint(center, radius, 20), label: "C" },
+    D: { ...circlePoint(center, radius, -30), label: "D" },
+    E: { ...circlePoint(center, radius, -110), label: "E" },
+    F: { ...circlePoint(center, radius, 210), label: "F" },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeArcObject("arc_AB", "O", radius, 100, 150, "highlight"),
+    makeArcObject("arc_CD", "O", radius, -30, 20, "highlight"),
+    makeChord("segment_AE", "A", "E"),
+    makeChord("segment_BE", "B", "E"),
+    makeChord("segment_CF", "C", "F"),
+    makeChord("segment_DF", "D", "F"),
+    {
+      kind: "angle",
+      id: "angle_AEB",
+      label: "∠AEB",
+      points: ["A", "E", "B"],
+      role: "highlight",
+      showLabel: true,
+      arcLevel: 2,
+      labelOffset: 18,
+    },
+    {
+      kind: "angle",
+      id: "angle_CFD",
+      label: "∠CFD",
+      points: ["C", "F", "D"],
+      role: "highlight",
+      showLabel: true,
+      arcLevel: 2,
+      labelOffset: 18,
+    },
+  ];
+
+  return buildCircleAngleBaseTemplate({
+    templateId: "equal_arcs_equal_inscribed_angles_v1",
+    title: "等弧圆周角示意图",
+    description: "本图保留圆 O、两条等弧以及分别所对的两个圆周角。",
+    points,
+    objects,
+    highlightObjects: ["arc_AB", "arc_CD", "angle_AEB", "angle_CFD"],
+    notes: [
+      "仅用于 ⌒AB=⌒CD，两个圆周角分别对这两条弧，求证两角相等的稳定结构。",
+      "使用初中圆周角性质：等弧所对的圆周角相等。",
+    ],
+  });
+}
+
+function hasCentralAngleDoubleInscribedAngleSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasCircle = hasCircleOSignal(compact);
+  const hasCentralAngle = /∠AOB(?:是|为)?.*圆心角/.test(compact);
+  const hasInscribedAngle = /∠ACB(?:是|为)?.*圆周角/.test(compact);
+  const hasSameArc = /同⌒AB|同弧AB|⌒AB所对/.test(compact);
+  const hasGoal = hasProofIntent(compact)
+    && (/∠AOB=2(?:×|\*)?∠ACB/.test(compact)
+      || /∠AOB(?:是|为)?∠ACB的?2倍/.test(compact));
+
+  return hasCircle && hasCentralAngle && hasInscribedAngle && hasSameArc && hasGoal;
+}
+
+function buildCentralAngleDoubleInscribedAngleTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasCentralAngleDoubleInscribedAngleSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.75;
+  const center = { x: 0, y: 0 };
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { ...circlePoint(center, radius, 210), label: "A" },
+    B: { ...circlePoint(center, radius, 330), label: "B" },
+    C: { ...circlePoint(center, radius, 90), label: "C" },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeArcObject("arc_AB", "O", radius, 210, 330, "highlight"),
+    makeSegment("segment_OA", "OA", "O", "A", "solid", "original"),
+    makeSegment("segment_OB", "OB", "O", "B", "solid", "original"),
+    makeChord("segment_AC", "A", "C"),
+    makeChord("segment_BC", "B", "C"),
+    {
+      kind: "angle",
+      id: "angle_AOB",
+      label: "∠AOB",
+      points: ["A", "O", "B"],
+      role: "highlight",
+      showLabel: true,
+      arcLevel: 2,
+      labelOffset: 18,
+    },
+    {
+      kind: "angle",
+      id: "angle_ACB",
+      label: "∠ACB",
+      points: ["A", "C", "B"],
+      role: "highlight",
+      showLabel: true,
+      labelOffset: 14,
+    },
+  ];
+
+  return buildCircleAngleBaseTemplate({
+    templateId: "central_angle_double_inscribed_angle_v1",
+    title: "圆心角与圆周角示意图",
+    description: "本图保留圆 O、弧 AB、圆心角 ∠AOB 和圆周角 ∠ACB。",
+    points,
+    objects,
+    highlightObjects: ["arc_AB", "angle_AOB", "angle_ACB"],
+    notes: [
+      "仅用于 ∠AOB 是弧 AB 所对圆心角、∠ACB 是同弧所对圆周角，求证 ∠AOB=2∠ACB 的稳定结构。",
+      "使用初中圆性质：同弧所对圆心角等于圆周角的 2 倍。",
+    ],
+  });
+}
+
+function hasRightAngleSubtendsDiameterSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasCircle = hasCircleOSignal(compact);
+  const hasPointsOnCircle = hasCirclePointGroup(compact, ["A", "B", "C"]);
+  const hasRightAngle = /∠ACB=90(?:°|度)?/.test(compact)
+    || /∠ACB(?:是|为)?直角/.test(compact);
+  const hasDiameterGoal = /(?:求证|证明|证)AB(?:是|为)?(?:⊙O的)?直径/.test(compact);
+
+  return hasCircle && hasPointsOnCircle && hasRightAngle && hasDiameterGoal;
+}
+
+function buildRightAngleSubtendsDiameterTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasRightAngleSubtendsDiameterSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.65;
+  const center = { x: 0, y: 0 };
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { x: -radius, y: 0, label: "A" },
+    B: { x: radius, y: 0, label: "B" },
+    C: { ...circlePoint(center, radius, 68), label: "C" },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeSegment("segment_AB", "AB", "A", "B", "solid", "highlight"),
+    makeChord("segment_AC", "A", "C"),
+    makeChord("segment_BC", "B", "C"),
+    {
+      kind: "rightAngle",
+      id: "right_angle_ACB",
+      label: "∠ACB",
+      points: ["A", "C", "B"],
+      role: "highlight",
+    },
+  ];
+
+  return buildCircleAngleBaseTemplate({
+    templateId: "right_angle_subtends_diameter_v1",
+    title: "直角圆周角所对弦示意图",
+    description: "本图保留圆 O、圆上点 A、B、C、AB、AC、BC 和 C 处直角标记。",
+    points,
+    objects,
+    highlightObjects: ["segment_AB", "right_angle_ACB"],
+    notes: [
+      "仅用于 A、B、C 在 ⊙O 上，∠ACB=90°，求证 AB 是直径的稳定结构。",
+      "使用初中圆性质：圆周角是直角时，它所对的弦是直径。",
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -2303,6 +2675,10 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildRadiusEqualTemplate(questionText, source)
     || buildDiameterRightAngleTemplate(questionText, source)
     || buildTangentRadiusPerpendicularTemplate(questionText, source)
+    || buildSameArcEqualInscribedAnglesTemplate(questionText, source)
+    || buildEqualArcsEqualInscribedAnglesTemplate(questionText, source)
+    || buildCentralAngleDoubleInscribedAngleTemplate(questionText, source)
+    || buildRightAngleSubtendsDiameterTemplate(questionText, source)
     || null;
 }
 
@@ -2333,5 +2709,9 @@ module.exports = {
   buildRadiusEqualTemplate,
   buildDiameterRightAngleTemplate,
   buildTangentRadiusPerpendicularTemplate,
+  buildSameArcEqualInscribedAnglesTemplate,
+  buildEqualArcsEqualInscribedAnglesTemplate,
+  buildCentralAngleDoubleInscribedAngleTemplate,
+  buildRightAngleSubtendsDiameterTemplate,
   buildGraphTemplateSpec,
 };

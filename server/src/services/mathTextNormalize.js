@@ -35,7 +35,7 @@ function normalizeLineRelations(text) {
 }
 
 function normalizeEqualRelations(text) {
-  const objectPattern = "(?:∠[A-Z]{1,4}|△[A-Z]{3}|[A-Z]{1,3})";
+  const objectPattern = "(?:∠[A-Z]{1,4}|△[A-Z]{3}|⌒[A-Z]{2}|[A-Z]{1,3})";
   const equalsPattern = new RegExp(`(${objectPattern})\\s*(?:等于|相等于?)\\s*(${objectPattern})`, "g");
   const pairedEqualsPattern = new RegExp(`(${objectPattern})\\s*(?:与|和)\\s*(${objectPattern})\\s*相等`, "g");
 
@@ -56,6 +56,21 @@ function normalizeCircleAndArcSymbols(text) {
     .replace(/(优弧|劣弧)\s*(?:⌒\s*)?([A-Z]{2})/g, "$1⌒$2")
     .replace(/(?:弧线|弧)\s*([A-Z]{2})/g, "⌒$1")
     .replace(/⌒\s*([A-Z]{2})/g, "⌒$1");
+}
+
+function normalizeCircleAngleTerms(text) {
+  return text
+    .replace(/同\s*弧/g, "同弧")
+    .replace(/等\s*弧/g, "等弧")
+    .replace(/圆\s*周\s*角/g, "圆周角")
+    .replace(/圆\s*心\s*角/g, "圆心角")
+    .replace(/所\s*对\s*弧/g, "所对弧")
+    .replace(/所\s*对\s*圆周角/g, "所对圆周角")
+    .replace(/所\s*对\s*圆心角/g, "所对圆心角")
+    .replace(/(∠[A-Z]{3})\s*(?:等于|=)\s*2\s*(?:倍)?\s*(∠[A-Z]{3})/g, "$1=2$2")
+    .replace(/(∠[A-Z]{3})\s*(?:等于|是|为)\s*(∠[A-Z]{3})\s*的?\s*2\s*倍/g, "$1=2$2")
+    .replace(/(∠[A-Z]{3})\s*=\s*90\s*(?:度|°)?/g, "$1=90°")
+    .replace(/(∠[A-Z]{3})\s*(?:是|为)\s*直角/g, "$1 是直角");
 }
 
 function normalizeTriangleRelations(text) {
@@ -101,6 +116,8 @@ function normalizeGeometrySymbols(text) {
   normalized = normalizeLineRelations(normalized);
   normalized = normalizeEqualRelations(normalized);
   normalized = normalizeCircleAndArcSymbols(normalized);
+  normalized = normalizeCircleAngleTerms(normalized);
+  normalized = normalizeEqualRelations(normalized);
   normalized = normalizeTriangleSymbols(normalized);
   normalized = normalizeTriangleRelations(normalized);
   normalized = normalizeBisectorsAndMidpoints(normalized);
