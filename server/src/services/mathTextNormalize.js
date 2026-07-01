@@ -76,9 +76,30 @@ function normalizeCircleAngleTerms(text) {
 function normalizeChordTerms(text) {
   return text
     .replace(/弦\s*([A-Z]{2})/g, "弦$1")
-    .replace(/([A-Z]{2})\s*(?:、|,|，|和|与)\s*([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?弦/g, "$1、$2 是 $3 的弦")
-    .replace(/([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?弦/g, "$1 是 $2 的弦")
+    .replace(/非\s*直径\s*弦/g, "非直径弦")
+    .replace(/([A-Z]{2})\s*(?:、|,|，|和|与)\s*([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?(非直径)?弦/g, "$1、$2 是 $3 的 $4弦")
+    .replace(/([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?(非直径)?弦/g, "$1 是 $2 的 $3弦")
     .replace(/弦([A-Z]{2})\s*=\s*弦([A-Z]{2})/g, "弦$1=弦$2");
+}
+
+function normalizeCircleChordDistanceTerms(text) {
+  return text
+    .replace(/([A-Z]{2})\s*过\s*圆心\s*(⊙[A-Z]|[A-Z])?/g, (match, line, center) => {
+      const normalizedCenter = center
+        ? String(center).replace(/^([A-Z])$/, "⊙$1")
+        : "⊙O";
+      return `${line} 过圆心 ${normalizedCenter}`;
+    })
+    .replace(/过\s*圆心\s*(⊙[A-Z]|[A-Z])?\s*的?\s*([A-Z]{2})/g, (match, center, line) => {
+      const normalizedCenter = center
+        ? String(center).replace(/^([A-Z])$/, "⊙$1")
+        : "⊙O";
+      return `${line} 过圆心 ${normalizedCenter}`;
+    })
+    .replace(/垂足\s*分别\s*(?:是|为)\s*([A-Z])\s*(?:、|,|，|和|与)\s*([A-Z])/g, "垂足分别为 $1、$2")
+    .replace(/垂足\s*(?:是|为)\s*([A-Z])/g, "垂足为 $1")
+    .replace(/圆心\s*到\s*弦?\s*([A-Z]{2})\s*的?\s*距离/g, "圆心到弦$1的距离")
+    .replace(/弦\s*心\s*距\s*([A-Z]{2})/g, "弦心距$1");
 }
 
 function normalizeTriangleRelations(text) {
@@ -126,6 +147,7 @@ function normalizeGeometrySymbols(text) {
   normalized = normalizeCircleAndArcSymbols(normalized);
   normalized = normalizeCircleAngleTerms(normalized);
   normalized = normalizeChordTerms(normalized);
+  normalized = normalizeCircleChordDistanceTerms(normalized);
   normalized = normalizeEqualRelations(normalized);
   normalized = normalizeTriangleSymbols(normalized);
   normalized = normalizeTriangleRelations(normalized);

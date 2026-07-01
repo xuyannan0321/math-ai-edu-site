@@ -1551,7 +1551,7 @@
       : null;
 
     (points || []).forEach((point) => {
-      if (!point || !point.label) {
+      if (!point || !point.label || point.showLabel === false) {
         return;
       }
 
@@ -1559,14 +1559,24 @@
       const pointId = point.id || point.label;
       const preferredDirections = getPreferredLabelDirections(pointId);
       const hint = directionHints.get(pointId);
-      const directions = hint
+      const explicitDirection = parseLabelDirection(point.labelDirection || point.direction);
+      const directions = explicitDirection
+        ? [explicitDirection]
+        : hint
         ? getLabelDirectionCandidates(hint, preferredDirections)
         : preferredDirections;
+      const explicitOffset = Number.isFinite(Number(point.labelOffset)) ? Number(point.labelOffset) : null;
+      const explicitDx = Number.isFinite(Number(point.dx)) ? Number(point.dx) : 0;
+      const explicitDy = Number.isFinite(Number(point.dy)) ? Number(point.dy) : 0;
       const best = findLabelPlacement(projected, point.label, mapper, {
         layoutState,
         primaryDirection: directions[0],
         directions,
-        offsets: [18, 26, 36, 48, 62],
+        offsets: explicitOffset === null
+          ? [18, 26, 36, 48, 62]
+          : [explicitOffset, explicitOffset + 8, explicitOffset + 18, explicitOffset + 32],
+        dx: explicitDx,
+        dy: explicitDy,
         labelMargin: 4,
         extraScore(box) {
           let score = 0;
@@ -1767,6 +1777,10 @@
 
     Object.values(spec.points).forEach((point) => {
       drawPoint(svg, point, mapper);
+      if (point.showLabel === false) {
+        return;
+      }
+
       drawLabelWithBackground(svg, point, point.label, mapper, {
         placement: pointLabelLayout.get(point.id || point.label),
         direction: getLabelOffsetDirection(point, connected.get(point.id) || []),

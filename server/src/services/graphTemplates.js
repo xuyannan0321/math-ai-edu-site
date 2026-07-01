@@ -2030,6 +2030,17 @@ function makeChord(id, from, to, role = "original", options = {}) {
   );
 }
 
+function makeRightAngleObject(id, points, options = {}) {
+  return {
+    kind: "rightAngle",
+    id,
+    label: options.label || "",
+    points,
+    role: options.role || "highlight",
+    ...options,
+  };
+}
+
 function hasRadiusSegment(compact, segment) {
   return new RegExp(`${segment}(?:是|为)?(?:⊙O的)?半径`).test(compact)
     || new RegExp(`半径${segment}`).test(compact);
@@ -2284,22 +2295,92 @@ function getProofGoalText(compact) {
   return match ? compact.slice(match.index) : "";
 }
 
+function getConditionText(compact) {
+  const match = /(求证|证明|证)/.exec(compact);
+  return match ? compact.slice(0, match.index) : compact;
+}
+
 function hasChordEquality(compact, firstChord, secondChord) {
   return hasCongruentEqualPair(compact, firstChord, secondChord)
     || hasCongruentEqualPair(compact, `弦${firstChord}`, `弦${secondChord}`);
 }
 
+function hasPerpendicularPair(compact, firstLine, secondLine) {
+  return compact.includes(`${firstLine}⊥${secondLine}`)
+    || compact.includes(`${secondLine}⊥${firstLine}`);
+}
+
+function hasChordSignal(compact, chord) {
+  return new RegExp(`${chord}(?:是|为)?(?:⊙O的)?(?:非直径)?弦`).test(compact)
+    || new RegExp(`弦${chord}`).test(compact)
+    || new RegExp(`非直径弦${chord}`).test(compact);
+}
+
 function hasChordPairSignal(compact, firstChord, secondChord) {
-  const pairPattern = new RegExp(`${firstChord}[、,，和与]?${secondChord}(?:是|为)?(?:⊙O的)?弦`);
-  const reversedPairPattern = new RegExp(`${secondChord}[、,，和与]?${firstChord}(?:是|为)?(?:⊙O的)?弦`);
-  const firstIsChord = new RegExp(`${firstChord}(?:是|为)?(?:⊙O的)?弦`).test(compact)
-    || new RegExp(`弦${firstChord}`).test(compact);
-  const secondIsChord = new RegExp(`${secondChord}(?:是|为)?(?:⊙O的)?弦`).test(compact)
-    || new RegExp(`弦${secondChord}`).test(compact);
+  const pairPattern = new RegExp(`${firstChord}[、,，和与]?${secondChord}(?:是|为)?(?:⊙O的)?(?:非直径)?弦`);
+  const reversedPairPattern = new RegExp(`${secondChord}[、,，和与]?${firstChord}(?:是|为)?(?:⊙O的)?(?:非直径)?弦`);
+  const firstIsChord = hasChordSignal(compact, firstChord);
+  const secondIsChord = hasChordSignal(compact, secondChord);
 
   return pairPattern.test(compact)
     || reversedPairPattern.test(compact)
     || (firstIsChord && secondIsChord);
+}
+
+function hasCenterLineSignal(compact, line) {
+  return /^O[A-Z]$/.test(line)
+    && (
+      new RegExp(`${line}(?:是|为)?过圆心(?:O|⊙O)?的?(?:直线|线段)?`).test(compact)
+      || new RegExp(`${line}过圆心(?:O|⊙O)?`).test(compact)
+      || new RegExp(`过圆心(?:O|⊙O)?的?${line}`).test(compact)
+      || new RegExp(`圆心(?:O|⊙O)?在${line}上`).test(compact)
+      || compact.includes(`直线${line}`)
+    );
+}
+
+function hasChordMidpointSignal(compact, point, chord) {
+  if (!point || !chord || chord.length !== 2) {
+    return false;
+  }
+
+  const [firstEndpoint, secondEndpoint] = chord.split("");
+  const firstHalf = `${firstEndpoint}${point}`;
+  const secondHalf = `${point}${secondEndpoint}`;
+
+  return new RegExp(`${point}(?:是|为)?${chord}的?中点`).test(compact)
+    || new RegExp(`${point}平分${chord}`).test(compact)
+    || new RegExp(`${chord}被${point}平分`).test(compact)
+    || hasCongruentEqualPair(compact, firstHalf, secondHalf);
+}
+
+function hasFootOnChordSignal(compact, foot, chord, distanceName = "") {
+  const perpendicularAtFoot = distanceName
+    ? (
+      new RegExp(`${distanceName}⊥${chord}于${foot}`).test(compact)
+      || new RegExp(`${chord}⊥${distanceName}于${foot}`).test(compact)
+    )
+    : false;
+
+  return perpendicularAtFoot
+    || new RegExp(`${foot}(?:是|为)?垂足`).test(compact)
+    || new RegExp(`垂足(?:是|为)?${foot}`).test(compact)
+    || new RegExp(`垂足分别(?:是|为)?[A-Z]*${foot}[A-Z、,，和与]*`).test(compact)
+    || new RegExp(`${foot}在${chord}上`).test(compact);
+}
+
+function hasCircleDistanceToChordSignal(compact, distanceName, chord) {
+  if (!/^O[A-Z]$/.test(distanceName)) {
+    return false;
+  }
+
+  const foot = distanceName[1];
+  const hasDistanceName = new RegExp(`弦心距${distanceName}`).test(compact)
+    || new RegExp(`圆心到弦?${chord}的?距离(?:是|为)?${distanceName}`).test(compact)
+    || new RegExp(`${distanceName}(?:是|为)?圆心到弦?${chord}的?距离`).test(compact);
+  const hasPerpendicularDistance = hasPerpendicularPair(compact, distanceName, chord)
+    && hasFootOnChordSignal(compact, foot, chord, distanceName);
+
+  return hasDistanceName || hasPerpendicularDistance;
 }
 
 function hasAngleAgainstArc(compact, angle, arc) {
@@ -2711,6 +2792,244 @@ function buildEqualArcsEqualChordsTemplate(questionText, source = {}) {
   });
 }
 
+function buildPerpendicularChordBaseTemplate(options) {
+  const radius = 1.62;
+  const chordY = -0.72;
+  const halfChord = round4(Math.sqrt(radius * radius - chordY * chordY));
+  const points = {
+    O: { x: 0, y: 0, label: "O", labelDirection: "bottom-right", labelOffset: 30, dx: 8, dy: -8 },
+    A: { x: -halfChord, y: chordY, label: "A" },
+    B: { x: halfChord, y: chordY, label: "B" },
+    M: { x: 0, y: chordY, label: "M", labelDirection: "top-right", labelOffset: 30, dx: 10, dy: 8 },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeChord("segment_AB", "A", "B", "highlight"),
+    makeSegment("segment_OM", "OM", "O", "M", "solid", "highlight"),
+    makeRightAngleObject("right_angle_OMA", ["O", "M", "A"]),
+  ];
+
+  return buildCircleBaseTemplate({
+    templateId: options.templateId,
+    title: options.title,
+    description: options.description,
+    points,
+    objects,
+    highlightObjects: options.highlightObjects || ["segment_AB", "segment_OM", "right_angle_OMA"],
+    notes: options.notes || [],
+  });
+}
+
+function hasPerpendicularDiameterBisectsChordSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const goalText = getProofGoalText(compact);
+  const hasCircle = hasCircleOSignal(compact);
+  const hasChord = hasChordSignal(compact, "AB");
+  const hasCenterLine = hasCenterLineSignal(compact, "OM");
+  const hasPerpendicular = hasPerpendicularPair(compact, "OM", "AB");
+  const hasFoot = hasFootOnChordSignal(compact, "M", "AB", "OM");
+  const hasGoal = hasChordMidpointSignal(goalText, "M", "AB");
+
+  return hasCircle
+    && hasChord
+    && hasCenterLine
+    && hasPerpendicular
+    && hasFoot
+    && hasGoal
+    && hasProofIntent(compact);
+}
+
+function buildPerpendicularDiameterBisectsChordTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasPerpendicularDiameterBisectsChordSignals(text)) {
+    return null;
+  }
+
+  return buildPerpendicularChordBaseTemplate({
+    templateId: "perpendicular_diameter_bisects_chord_v1",
+    title: "垂径定理示意图",
+    description: "本图保留圆 O、弦 AB、过圆心的 OM、垂足 M 和直角标记。",
+    notes: [
+      "仅用于 AB 是 ⊙O 的弦，OM 过圆心 O，OM⊥AB，垂足为 M，求证 AM=MB 的稳定结构。",
+      "使用初中圆性质：过圆心且垂直于弦的直线平分这条弦。",
+    ],
+  });
+}
+
+function hasDiameterBisectsChordPerpendicularSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const goalText = getProofGoalText(compact);
+  const hasCircle = hasCircleOSignal(compact);
+  const hasChord = hasChordSignal(compact, "AB");
+  const hasCenterLine = hasCenterLineSignal(compact, "OM");
+  const hasMidpoint = hasChordMidpointSignal(compact, "M", "AB");
+  const hasPerpendicularGoal = hasPerpendicularPair(goalText, "OM", "AB");
+  const isDiameterChord = /AB(?:是|为)?(?:⊙O的)?直径|直径AB/.test(compact);
+
+  return hasCircle
+    && hasChord
+    && hasCenterLine
+    && hasMidpoint
+    && hasPerpendicularGoal
+    && !isDiameterChord
+    && hasProofIntent(compact);
+}
+
+function buildDiameterBisectsChordPerpendicularTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasDiameterBisectsChordPerpendicularSignals(text)) {
+    return null;
+  }
+
+  return buildPerpendicularChordBaseTemplate({
+    templateId: "diameter_bisects_chord_perpendicular_v1",
+    title: "平分弦垂直示意图",
+    description: "本图保留圆 O、非直径弦 AB、过圆心的 OM、中点 M 和直角标记。",
+    notes: [
+      "仅用于 AB 是 ⊙O 的非直径弦，OM 过圆心 O，M 是 AB 的中点，求证 OM⊥AB 的稳定结构。",
+      "使用初中圆性质：过圆心且平分非直径弦的直线垂直于这条弦。",
+    ],
+  });
+}
+
+function makeChordDistanceBaseTemplate(options) {
+  const radius = 1.72;
+  const chordOffset = 0.78;
+  const halfChord = round4(Math.sqrt(radius * radius - chordOffset * chordOffset));
+  const points = {
+    O: { x: 0, y: 0, label: "O", labelDirection: "right", labelOffset: 34, dx: 12 },
+    A: { x: -halfChord, y: chordOffset, label: "A" },
+    B: { x: halfChord, y: chordOffset, label: "B" },
+    C: { x: -halfChord, y: -chordOffset, label: "C" },
+    D: { x: halfChord, y: -chordOffset, label: "D" },
+    M: { x: 0, y: chordOffset, label: "M", labelDirection: "top-right", labelOffset: 32, dx: 10, dy: 8 },
+    N: { x: 0, y: -chordOffset, label: "N", labelDirection: "bottom-right", labelOffset: 32, dx: 10, dy: -8 },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeChord("segment_AB", "A", "B", "highlight"),
+    makeChord("segment_CD", "C", "D", "highlight"),
+    makeSegment("segment_OM", "OM", "O", "M", "solid", "highlight"),
+    makeSegment("segment_ON", "ON", "O", "N", "solid", "highlight"),
+    makeRightAngleObject("right_angle_OMA", ["O", "M", "A"]),
+    makeRightAngleObject("right_angle_ONC", ["O", "N", "C"]),
+  ];
+
+  return buildCircleBaseTemplate({
+    templateId: options.templateId,
+    title: options.title,
+    description: options.description,
+    points,
+    objects,
+    highlightObjects: options.highlightObjects || [
+      "segment_AB",
+      "segment_CD",
+      "segment_OM",
+      "segment_ON",
+      "right_angle_OMA",
+      "right_angle_ONC",
+    ],
+    notes: options.notes || [],
+  });
+}
+
+function hasEqualChordsEqualDistanceToCenterSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const conditionText = getConditionText(compact);
+  const goalText = getProofGoalText(compact);
+  const hasCircle = hasCircleOSignal(compact);
+  const hasChordPair = hasChordPairSignal(compact, "AB", "CD");
+  const hasEqualChords = hasChordEquality(conditionText, "AB", "CD");
+  const hasDistanceOM = hasCircleDistanceToChordSignal(compact, "OM", "AB");
+  const hasDistanceON = hasCircleDistanceToChordSignal(compact, "ON", "CD");
+  const hasGoal = hasCongruentEqualPair(goalText, "OM", "ON");
+
+  return hasCircle
+    && hasChordPair
+    && hasEqualChords
+    && hasDistanceOM
+    && hasDistanceON
+    && hasGoal
+    && hasProofIntent(compact);
+}
+
+function buildEqualChordsEqualDistanceToCenterTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasEqualChordsEqualDistanceToCenterSignals(text)) {
+    return null;
+  }
+
+  return makeChordDistanceBaseTemplate({
+    templateId: "equal_chords_equal_distance_to_center_v1",
+    title: "等弦弦心距示意图",
+    description: "本图保留圆 O、等弦 AB 与 CD、圆心到两弦的垂线 OM 与 ON，以及两个直角标记。",
+    notes: [
+      "仅用于 AB、CD 是 ⊙O 的弦，AB=CD，OM⊥AB 于 M，ON⊥CD 于 N，求证 OM=ON 的稳定结构。",
+      "使用初中圆性质：同圆或等圆中，等弦到圆心的距离相等。",
+    ],
+  });
+}
+
+function hasEqualDistanceToCenterEqualChordsSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const goalText = getProofGoalText(compact);
+  const hasCircle = hasCircleOSignal(compact);
+  const hasChordPair = hasChordPairSignal(compact, "AB", "CD");
+  const hasDistanceOM = hasCircleDistanceToChordSignal(compact, "OM", "AB");
+  const hasDistanceON = hasCircleDistanceToChordSignal(compact, "ON", "CD");
+  const hasEqualDistances = hasCongruentEqualPair(compact, "OM", "ON");
+  const hasChordGoal = hasChordEquality(goalText, "AB", "CD");
+
+  return hasCircle
+    && hasChordPair
+    && hasDistanceOM
+    && hasDistanceON
+    && hasEqualDistances
+    && hasChordGoal
+    && hasProofIntent(compact);
+}
+
+function buildEqualDistanceToCenterEqualChordsTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasEqualDistanceToCenterEqualChordsSignals(text)) {
+    return null;
+  }
+
+  return makeChordDistanceBaseTemplate({
+    templateId: "equal_distance_to_center_equal_chords_v1",
+    title: "弦心距相等等弦示意图",
+    description: "本图保留圆 O、两条弦 AB 与 CD、相等弦心距 OM 与 ON，以及两个直角标记。",
+    notes: [
+      "仅用于 AB、CD 是 ⊙O 的弦，OM⊥AB 于 M，ON⊥CD 于 N，OM=ON，求证 AB=CD 的稳定结构。",
+      "使用初中圆性质：同圆或等圆中，到圆心距离相等的弦相等。",
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -2811,6 +3130,10 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildRightAngleSubtendsDiameterTemplate(questionText, source)
     || buildEqualChordsEqualArcsTemplate(questionText, source)
     || buildEqualArcsEqualChordsTemplate(questionText, source)
+    || buildPerpendicularDiameterBisectsChordTemplate(questionText, source)
+    || buildDiameterBisectsChordPerpendicularTemplate(questionText, source)
+    || buildEqualChordsEqualDistanceToCenterTemplate(questionText, source)
+    || buildEqualDistanceToCenterEqualChordsTemplate(questionText, source)
     || null;
 }
 
@@ -2847,5 +3170,9 @@ module.exports = {
   buildRightAngleSubtendsDiameterTemplate,
   buildEqualChordsEqualArcsTemplate,
   buildEqualArcsEqualChordsTemplate,
+  buildPerpendicularDiameterBisectsChordTemplate,
+  buildDiameterBisectsChordPerpendicularTemplate,
+  buildEqualChordsEqualDistanceToCenterTemplate,
+  buildEqualDistanceToCenterEqualChordsTemplate,
   buildGraphTemplateSpec,
 };

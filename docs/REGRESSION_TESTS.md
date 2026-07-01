@@ -772,6 +772,93 @@ http://localhost:5500
 - 等弧所对圆周角题仍应触发 `equal_arcs_equal_inscribed_angles_v1`，不得被该模板抢占；
 - 点标签、弦标签和弧标签不应压线或堆叠。
 
+## circle_chord_pack_v1：垂径定理与弦心距模板包
+
+### 测试 37：垂径定理，垂直弦推出平分弦
+
+输入：
+
+```text
+已知 AB 是 ⊙O 的弦，OM 过圆心 O，OM⊥AB，垂足为 M，求证 AM=MB。
+```
+
+验收标准：
+
+- 应触发 `perpendicular_diameter_bisects_chord_v1`；
+- 显示圆 ⊙O 和圆心 O；
+- 显示弦 AB；
+- 显示 OM，且 M 在 AB 上；
+- 在 M 处显示直角标记；
+- 图中只保留 A、B、O、M 等关键点和必要线段；
+- 解析使用过圆心且垂直于弦的直线平分弦；
+- 图中不显示“垂径定理”长文字，不显示 `AM=MB` 大标签；
+- 只有 `OM⊥AB`、没有圆或弦条件时不得触发；
+- 只有 `AB 是 ⊙O 的弦`、没有垂直条件时不得触发；
+- 标签不压线、不堆叠。
+
+### 测试 38：平分非直径弦推出垂直
+
+输入：
+
+```text
+已知 AB 是 ⊙O 的非直径弦，OM 过圆心 O，M 是 AB 的中点，求证 OM⊥AB。
+```
+
+验收标准：
+
+- 应触发 `diameter_bisects_chord_perpendicular_v1`；
+- 显示圆 ⊙O、圆心 O、弦 AB、OM 和点 M；
+- M 位于 AB 中点附近；
+- 在 M 处显示直角标记；
+- 解析使用过圆心且平分非直径弦的直线垂直于这条弦；
+- 图中不显示长证明文字；
+- 只有 `M 是 AB 的中点`、没有圆或圆心线条件时不得触发；
+- 普通垂直平分线题仍应触发 `perpendicular_bisector_v1`；
+- 标签不压线、不堆叠。
+
+### 测试 39：等弦到圆心距离相等
+
+输入：
+
+```text
+已知 AB、CD 是 ⊙O 的弦，AB=CD，OM⊥AB 于 M，ON⊥CD 于 N，求证 OM=ON。
+```
+
+验收标准：
+
+- 应触发 `equal_chords_equal_distance_to_center_v1`；
+- 显示圆 ⊙O 和圆心 O；
+- 显示弦 AB、CD；
+- 显示 OM、ON，且 M、N 分别在对应弦上；
+- 在 M、N 处显示两个直角标记；
+- 解析使用同圆或等圆中等弦到圆心距离相等；
+- 图中不显示“等弦到圆心距离相等”长文字；
+- 只有 `AB=CD`、没有圆或弦条件时不得触发；
+- 只有两条垂线、没有等弦条件时不得触发；
+- 坐标点到直线距离题不得触发该模板；
+- 标签不压线、不堆叠。
+
+### 测试 40：到圆心距离相等的弦相等
+
+输入：
+
+```text
+已知 AB、CD 是 ⊙O 的弦，OM⊥AB 于 M，ON⊥CD 于 N，OM=ON，求证 AB=CD。
+```
+
+验收标准：
+
+- 应触发 `equal_distance_to_center_equal_chords_v1`；
+- 显示圆 ⊙O、圆心 O、弦 AB、CD、OM、ON 和点 M、N；
+- 在 M、N 处显示两个直角标记；
+- 解析使用同圆或等圆中到圆心距离相等的弦相等；
+- 图中不显示长定理文字或长证明文字；
+- 只有 `OM=ON`、没有圆或弦条件时不得触发；
+- 等弦对等弧题仍应触发 `equal_chords_equal_arcs_v1`；
+- 等弧对等弦题仍应触发 `equal_arcs_equal_chords_v1`；
+- 圆幂、切割线、弦切角题不得触发本包模板；
+- 标签不压线、不堆叠。
+
 ## 标签避让与排版检查项
 
 模板图示新增或调整后，需额外检查标签布局：
@@ -783,6 +870,8 @@ http://localhost:5500
 - 多标签集中区域仍应可读，不应出现局部堆叠；
 - 圆模板的下方区域、圆心附近、切点附近需要重点检查；
 - 等弧圆周角示意图、同弧圆周角示意图、圆心角与圆周角示意图、直角圆周角所对弦示意图、切线与半径示意图、圆的半径示意图是本轮重点回归对象。
+- circle_chord_pack_v1 需重点检查：O、M、N 标签不压 OM/ON 或弦，M、N 不遮挡直角标记，双弦模板中 M、N、O 不堆叠，A、B、C、D 保持圆外侧可读。
+- circle_chord_pack_v1 full pipeline 修复验收：AI 返回 `none` visualizationSpec 时，稳定模板必须覆盖；`diameter_bisects_chord_perpendicular_v1` 和 `equal_chords_equal_distance_to_center_v1` 在真实页面必须渲染图示；O/M/N 不允许重复标签；points 点标签与 label object 不得重复表达同一个点名；点标签偏移字段不得被 `solveSchema.js` 丢弃；垂足点 M/N 不遮挡直角标记。
 
 ## 题干符号归一化测试
 

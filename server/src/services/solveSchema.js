@@ -33,6 +33,16 @@ const VISUALIZATION_OBJECT_KINDS = new Set([
 const GEOMETRY_ROLES = new Set(["original", "auxiliary", "highlight"]);
 const GEOMETRY_KEYWORDS = /三角形|几何|圆|四点共圆|相似|全等|角平分线|垂直|平行|中点|动点|最值|轨迹|辅助线|切线|弦|垂足/;
 const DANGEROUS_VISUALIZATION_PATTERN = /<\s*\/?\s*(script|svg|canvas|iframe|html|body|style)\b|javascript:/i;
+const POINT_LABEL_DIRECTIONS = new Set([
+  "top",
+  "bottom",
+  "left",
+  "right",
+  "top-right",
+  "bottom-right",
+  "top-left",
+  "bottom-left",
+]);
 
 function asString(value, fallback = "") {
   if (value === null || value === undefined) {
@@ -254,6 +264,10 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "right_angle_subtends_diameter_v1",
   "equal_chords_equal_arcs_v1",
   "equal_arcs_equal_chords_v1",
+  "perpendicular_diameter_bisects_chord_v1",
+  "diameter_bisects_chord_perpendicular_v1",
+  "equal_chords_equal_distance_to_center_v1",
+  "equal_distance_to_center_equal_chords_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {
@@ -371,12 +385,39 @@ function normalizePoint(id, value) {
     return null;
   }
 
-  return {
+  const point = {
     id,
     x,
     y,
     label: asString(value.label, id),
   };
+
+  const labelDirection = asString(value.labelDirection).toLowerCase();
+  const labelOffset = toFiniteNumber(value.labelOffset);
+  const dx = toFiniteNumber(value.dx);
+  const dy = toFiniteNumber(value.dy);
+
+  if (POINT_LABEL_DIRECTIONS.has(labelDirection)) {
+    point.labelDirection = labelDirection;
+  }
+
+  if (labelOffset !== null) {
+    point.labelOffset = labelOffset;
+  }
+
+  if (dx !== null) {
+    point.dx = dx;
+  }
+
+  if (dy !== null) {
+    point.dy = dy;
+  }
+
+  if (value.showLabel === false) {
+    point.showLabel = false;
+  }
+
+  return point;
 }
 
 function collectPoints(source) {
@@ -1363,14 +1404,26 @@ function createSafeFallbackVisualization(fallback) {
 
 function normalizeVisualizationSpec(value, fallback = {}) {
   const source = isPlainObject(value) ? value : null;
-  const questionText = fallback.questionText || fallback.problemText || "";
-  const stableTemplateSpec = buildRenderableGraphTemplate(questionText, {
-    ...(source || {}),
-    ...fallback,
-  });
+  const candidateTexts = [
+    fallback.questionText,
+    fallback.rawQuestionText,
+    fallback.originalQuestionText,
+    fallback.problemText,
+    source && source.problemText,
+  ].map((item) => asString(item)).filter(Boolean);
+  const uniqueCandidateTexts = [...new Set(candidateTexts)];
+  const questionText = uniqueCandidateTexts[0] || "";
 
-  if (shouldStableTemplateOverrideSource(stableTemplateSpec)) {
-    return stableTemplateSpec;
+  for (const candidateText of uniqueCandidateTexts) {
+    const stableTemplateSpec = buildRenderableGraphTemplate(candidateText, {
+      ...(source || {}),
+      ...fallback,
+      questionText: candidateText,
+    });
+
+    if (shouldStableTemplateOverrideSource(stableTemplateSpec)) {
+      return stableTemplateSpec;
+    }
   }
 
   if (!source) {
@@ -1576,6 +1629,8 @@ function normalizeSolution(raw, fallback = {}) {
     verification: asString(source.verification, "请将答案代回原题条件进行检查。"),
     visualizationSpec: normalizeVisualizationSpec(visualizationSource, {
       questionText: templateQuestionText,
+      rawQuestionText: originalQuestionText,
+      originalQuestionText: originalQuestionText,
       problemText: problemText,
       questionType: fallback.questionType || source.topic,
       questionSections: questionSections,

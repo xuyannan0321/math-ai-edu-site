@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildGraphTemplateSpec } = require("../src/services/graphTemplates");
+const { normalizeVisualizationSpec } = require("../src/services/solveSchema");
 
 const geometryTemplateIds = [
   "isosceles_triangle_v1",
@@ -21,7 +22,18 @@ const geometryTemplateIds = [
   "right_angle_subtends_diameter_v1",
   "equal_chords_equal_arcs_v1",
   "equal_arcs_equal_chords_v1",
+  "perpendicular_diameter_bisects_chord_v1",
+  "diameter_bisects_chord_perpendicular_v1",
+  "equal_chords_equal_distance_to_center_v1",
+  "equal_distance_to_center_equal_chords_v1",
 ];
+
+const circleChordTemplateIds = new Set([
+  "perpendicular_diameter_bisects_chord_v1",
+  "diameter_bisects_chord_perpendicular_v1",
+  "equal_chords_equal_distance_to_center_v1",
+  "equal_distance_to_center_equal_chords_v1",
+]);
 
 const positiveCases = [
   {
@@ -118,6 +130,26 @@ const positiveCases = [
     name: "equal_arcs_equal_chords_v1",
     input: "已知 ⊙O 中，⌒AB=⌒CD，求证 AB=CD。",
     expectTemplateId: "equal_arcs_equal_chords_v1",
+  },
+  {
+    name: "perpendicular_diameter_bisects_chord_v1",
+    input: "已知 AB 是 ⊙O 的弦，OM 过圆心 O，OM⊥AB，垂足为 M，求证 AM=MB。",
+    expectTemplateId: "perpendicular_diameter_bisects_chord_v1",
+  },
+  {
+    name: "diameter_bisects_chord_perpendicular_v1",
+    input: "已知 AB 是 ⊙O 的非直径弦，OM 过圆心 O，M 是 AB 的中点，求证 OM⊥AB。",
+    expectTemplateId: "diameter_bisects_chord_perpendicular_v1",
+  },
+  {
+    name: "equal_chords_equal_distance_to_center_v1",
+    input: "已知 AB、CD 是 ⊙O 的弦，AB=CD，OM⊥AB 于 M，ON⊥CD 于 N，求证 OM=ON。",
+    expectTemplateId: "equal_chords_equal_distance_to_center_v1",
+  },
+  {
+    name: "equal_distance_to_center_equal_chords_v1",
+    input: "已知 AB、CD 是 ⊙O 的弦，OM⊥AB 于 M，ON⊥CD 于 N，OM=ON，求证 AB=CD。",
+    expectTemplateId: "equal_distance_to_center_equal_chords_v1",
   },
 ];
 
@@ -234,6 +266,103 @@ const negativeCases = [
     expectTemplateId: "equal_arcs_equal_inscribed_angles_v1",
     forbiddenTemplateIds: ["equal_arcs_equal_chords_v1"],
   },
+  {
+    name: "bare OM perpendicular AB should not trigger perpendicular diameter theorem",
+    input: "已知 OM⊥AB，求证 AM=MB。",
+    forbiddenTemplateIds: ["perpendicular_diameter_bisects_chord_v1"],
+  },
+  {
+    name: "only chord should not trigger perpendicular diameter theorem",
+    input: "已知 AB 是 ⊙O 的弦，求证 AM=MB。",
+    forbiddenTemplateIds: ["perpendicular_diameter_bisects_chord_v1"],
+  },
+  {
+    name: "only midpoint should not trigger diameter bisects chord perpendicular",
+    input: "已知 M 是 AB 的中点，求证 OM⊥AB。",
+    forbiddenTemplateIds: ["diameter_bisects_chord_perpendicular_v1"],
+  },
+  {
+    name: "perpendicular bisector should keep perpendicular_bisector_v1",
+    input: "已知 l 是线段 AB 的垂直平分线，点 P 在 l 上，求证 PA=PB。",
+    expectTemplateId: "perpendicular_bisector_v1",
+    forbiddenTemplateIds: [
+      "perpendicular_diameter_bisects_chord_v1",
+      "diameter_bisects_chord_perpendicular_v1",
+    ],
+  },
+  {
+    name: "bare equal chords should not trigger equal chord distance",
+    input: "已知 AB=CD，求证 OM=ON。",
+    forbiddenTemplateIds: ["equal_chords_equal_distance_to_center_v1"],
+  },
+  {
+    name: "bare equal distances should not trigger equal distance chords",
+    input: "已知 OM=ON，求证 AB=CD。",
+    forbiddenTemplateIds: ["equal_distance_to_center_equal_chords_v1"],
+  },
+  {
+    name: "coordinate distance should not trigger circle chord templates",
+    input: "已知点 A(0,0)，直线 l: y=3，求点 A 到直线 l 的距离。",
+    forbiddenTemplateIds: [
+      "perpendicular_diameter_bisects_chord_v1",
+      "diameter_bisects_chord_perpendicular_v1",
+      "equal_chords_equal_distance_to_center_v1",
+      "equal_distance_to_center_equal_chords_v1",
+    ],
+  },
+  {
+    name: "function intersection should not trigger circle chord templates",
+    input: "求函数 y=8/x 与 y=2x 的交点。",
+    expectTemplateId: "function_intersection_v1",
+    forbiddenTemplateIds: [
+      "perpendicular_diameter_bisects_chord_v1",
+      "diameter_bisects_chord_perpendicular_v1",
+      "equal_chords_equal_distance_to_center_v1",
+      "equal_distance_to_center_equal_chords_v1",
+    ],
+  },
+  {
+    name: "equal chords equal arcs should keep equal_chords_equal_arcs_v1",
+    input: "已知 AB、CD 是 ⊙O 的弦，AB=CD，求证 ⌒AB=⌒CD。",
+    expectTemplateId: "equal_chords_equal_arcs_v1",
+    forbiddenTemplateIds: ["equal_chords_equal_distance_to_center_v1"],
+  },
+  {
+    name: "equal arcs equal chords should keep equal_arcs_equal_chords_v1",
+    input: "已知 ⊙O 中，⌒AB=⌒CD，求证 AB=CD。",
+    expectTemplateId: "equal_arcs_equal_chords_v1",
+    forbiddenTemplateIds: ["equal_distance_to_center_equal_chords_v1"],
+  },
+  {
+    name: "circle power should not trigger circle chord pack",
+    input: "已知 PAB 是 ⊙O 的切割线，求证 PA·PB=PC·PD。",
+    forbiddenTemplateIds: [
+      "perpendicular_diameter_bisects_chord_v1",
+      "diameter_bisects_chord_perpendicular_v1",
+      "equal_chords_equal_distance_to_center_v1",
+      "equal_distance_to_center_equal_chords_v1",
+    ],
+  },
+  {
+    name: "secant theorem should not trigger circle chord pack",
+    input: "已知直线 PAB 与 ⊙O 相交于 A、B，直线 PCD 与 ⊙O 相交于 C、D，求证 PA·PB=PC·PD。",
+    forbiddenTemplateIds: [
+      "perpendicular_diameter_bisects_chord_v1",
+      "diameter_bisects_chord_perpendicular_v1",
+      "equal_chords_equal_distance_to_center_v1",
+      "equal_distance_to_center_equal_chords_v1",
+    ],
+  },
+  {
+    name: "tangent chord angle should not trigger circle chord pack",
+    input: "已知 PA 是 ⊙O 的切线，AB 是 ⊙O 的弦，求证弦切角关系。",
+    forbiddenTemplateIds: [
+      "perpendicular_diameter_bisects_chord_v1",
+      "diameter_bisects_chord_perpendicular_v1",
+      "equal_chords_equal_distance_to_center_v1",
+      "equal_distance_to_center_equal_chords_v1",
+    ],
+  },
 ];
 
 function hasRenderablePayload(spec) {
@@ -249,6 +378,65 @@ function hasRenderablePayload(spec) {
   }
 
   return Array.isArray(spec.objects) && spec.objects.length > 0;
+}
+
+function hasNonEmptyFirstView(spec) {
+  const firstView = spec && Array.isArray(spec.views) ? spec.views[0] : null;
+  const showObjects = firstView && firstView.showObjects;
+
+  if (Array.isArray(showObjects)) {
+    return showObjects.length > 0;
+  }
+
+  if (showObjects && typeof showObjects === "object") {
+    return Object.values(showObjects).some((value) => Array.isArray(value) && value.length > 0);
+  }
+
+  return false;
+}
+
+function getDuplicatePointLabelObjects(spec) {
+  const objects = Array.isArray(spec && spec.objects) ? spec.objects : [];
+
+  return objects
+    .filter((object) => (
+      object
+      && object.kind === "label"
+      && ["O", "M", "N"].includes(object.text || object.label)
+    ))
+    .map((object) => object.text || object.label);
+}
+
+function getPointLayoutLosses(originalSpec, normalizedSpec) {
+  const losses = [];
+  const originalPoints = originalSpec && originalSpec.points && typeof originalSpec.points === "object"
+    ? originalSpec.points
+    : {};
+  const normalizedPoints = normalizedSpec && normalizedSpec.points && typeof normalizedSpec.points === "object"
+    ? normalizedSpec.points
+    : {};
+
+  ["O", "M", "N"].forEach((pointId) => {
+    const originalPoint = originalPoints[pointId];
+    if (!originalPoint) {
+      return;
+    }
+
+    const normalizedPoint = normalizedPoints[pointId];
+    if (!normalizedPoint) {
+      losses.push(`${pointId}.point`);
+      return;
+    }
+
+    ["labelDirection", "labelOffset", "dx", "dy", "showLabel"].forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(originalPoint, field)
+        && normalizedPoint[field] !== originalPoint[field]) {
+        losses.push(`${pointId}.${field}`);
+      }
+    });
+  });
+
+  return losses;
 }
 
 function describeSpec(spec) {
@@ -283,6 +471,73 @@ function checkPositive(testCase) {
 
   if (!hasRenderablePayload(spec)) {
     failures.push(`expected renderable payload with objects for geometry or curves/functions/points for function_graph, got ${describeSpec(spec)}`);
+  }
+
+  if (!hasNonEmptyFirstView(spec)) {
+    failures.push("expected first view showObjects to be non-empty");
+  }
+
+  const duplicatePointLabels = getDuplicatePointLabelObjects(spec);
+  if (duplicatePointLabels.length) {
+    failures.push(`duplicate point label objects for ${duplicatePointLabels.join(",")}`);
+  }
+
+  if (circleChordTemplateIds.has(testCase.expectTemplateId)) {
+    const normalizedFromNone = normalizeVisualizationSpec(
+      { type: "none", title: "图示状态", description: "AI returned none", objects: [] },
+      { questionText: testCase.input, problemText: testCase.input, questionType: "几何" },
+    );
+
+    if (normalizedFromNone.templateId !== testCase.expectTemplateId) {
+      failures.push(`expected stable override from AI none to ${testCase.expectTemplateId}, got ${normalizedFromNone.templateId || "none"}`);
+    }
+
+    if (normalizedFromNone.canRender !== true || normalizedFromNone.type === "none" || !hasRenderablePayload(normalizedFromNone)) {
+      failures.push(`expected stable override from AI none to be renderable, got ${describeSpec(normalizedFromNone)}`);
+    }
+
+    if (!hasNonEmptyFirstView(normalizedFromNone)) {
+      failures.push("expected stable override from AI none first view showObjects to be non-empty");
+    }
+
+    const normalizedDuplicates = getDuplicatePointLabelObjects(normalizedFromNone);
+    if (normalizedDuplicates.length) {
+      failures.push(`stable override has duplicate point label objects for ${normalizedDuplicates.join(",")}`);
+    }
+
+    const layoutLosses = getPointLayoutLosses(spec, normalizedFromNone);
+    if (layoutLosses.length) {
+      failures.push(`stable override dropped point label layout fields: ${layoutLosses.join(",")}`);
+    }
+
+    const normalizedFromOriginalQuestion = normalizeVisualizationSpec(
+      { type: "none", title: "图示状态", description: "AI returned none", objects: [], problemText: "AI 改写题干，缺少完整圆弦条件" },
+      {
+        questionText: "AI 改写题干，缺少完整圆弦条件",
+        rawQuestionText: testCase.input,
+        originalQuestionText: testCase.input,
+        problemText: "AI 改写题干，缺少完整圆弦条件",
+        questionType: "几何",
+      },
+    );
+
+    if (normalizedFromOriginalQuestion.templateId !== testCase.expectTemplateId) {
+      failures.push(`expected stable override from original question text to ${testCase.expectTemplateId}, got ${normalizedFromOriginalQuestion.templateId || "none"}`);
+    }
+
+    if (normalizedFromOriginalQuestion.canRender !== true || normalizedFromOriginalQuestion.type !== "geometry" || !hasRenderablePayload(normalizedFromOriginalQuestion)) {
+      failures.push(`expected original question text override to be renderable geometry, got ${describeSpec(normalizedFromOriginalQuestion)}`);
+    }
+
+    const originalQuestionDuplicates = getDuplicatePointLabelObjects(normalizedFromOriginalQuestion);
+    if (originalQuestionDuplicates.length) {
+      failures.push(`original question override has duplicate point label objects for ${originalQuestionDuplicates.join(",")}`);
+    }
+
+    const originalQuestionLayoutLosses = getPointLayoutLosses(spec, normalizedFromOriginalQuestion);
+    if (originalQuestionLayoutLosses.length) {
+      failures.push(`original question override dropped point label layout fields: ${originalQuestionLayoutLosses.join(",")}`);
+    }
   }
 
   return failures;
