@@ -859,6 +859,67 @@ http://localhost:5500
 - 圆幂、切割线、弦切角题不得触发本包模板；
 - 标签不压线、不堆叠。
 
+## quadrilateral_basic_pack_v1_part1：平行四边形基础模板包
+
+### 测试 41：平行四边形对边相等
+
+输入：
+
+```text
+已知 ABCD 是平行四边形，求证 AB=CD，AD=BC。
+```
+
+验收标准：
+
+- 应触发 `parallelogram_opposite_sides_equal_v1`；
+- 显示平行四边形 ABCD；
+- 显示 A、B、C、D，标签清楚且不压线；
+- 高亮两组对边 AB、CD 与 AD、BC；
+- 解析使用平行四边形的对边相等；
+- 图中不显示“平行四边形对边相等”长定理文字；
+- 只有 `AB=CD` 或 `AD=BC`、没有平行四边形条件时不得触发；
+- 普通四边形、矩形、菱形、梯形题暂不得触发本模板；
+- AI 返回 `none` visualizationSpec 时，full pipeline 必须稳定覆盖成该模板。
+
+### 测试 42：平行四边形对角相等
+
+输入：
+
+```text
+已知 ABCD 是平行四边形，求证 ∠A=∠C，∠B=∠D。
+```
+
+验收标准：
+
+- 应触发 `parallelogram_opposite_angles_equal_v1`；
+- 显示平行四边形 ABCD；
+- 轻量标出 ∠A、∠C、∠B、∠D；
+- 角标签不堆叠，不遮挡边线；
+- 解析使用平行四边形的对角相等；
+- 只有 `∠A=∠C`、普通角相等或平行线角关系题不得触发；
+- 图中不显示长定理文字；
+- AI 返回 `none` visualizationSpec 时，full pipeline 必须稳定覆盖成该模板。
+
+### 测试 43：平行四边形对角线互相平分
+
+输入：
+
+```text
+已知 ABCD 是平行四边形，对角线 AC、BD 交于 O，求证 AO=OC，BO=OD。
+```
+
+验收标准：
+
+- 应触发 `parallelogram_diagonals_bisect_v1`；
+- 显示平行四边形 ABCD；
+- 显示对角线 AC、BD 和交点 O；
+- O 标签不压在对角线交叉点上；
+- 高亮 AC、BD；
+- 解析使用平行四边形的对角线互相平分；
+- 只有 `AO=OC`、只有 `BO=OD`、普通中点题或三角形中位线题不得触发；
+- 图中不显示长定理文字；
+- AI 返回 `none` visualizationSpec 时，full pipeline 必须稳定覆盖成该模板。
+
 ## 标签避让与排版检查项
 
 模板图示新增或调整后，需额外检查标签布局：
@@ -872,6 +933,7 @@ http://localhost:5500
 - 等弧圆周角示意图、同弧圆周角示意图、圆心角与圆周角示意图、直角圆周角所对弦示意图、切线与半径示意图、圆的半径示意图是本轮重点回归对象。
 - circle_chord_pack_v1 需重点检查：O、M、N 标签不压 OM/ON 或弦，M、N 不遮挡直角标记，双弦模板中 M、N、O 不堆叠，A、B、C、D 保持圆外侧可读。
 - circle_chord_pack_v1 full pipeline 修复验收：AI 返回 `none` visualizationSpec 时，稳定模板必须覆盖；`diameter_bisects_chord_perpendicular_v1` 和 `equal_chords_equal_distance_to_center_v1` 在真实页面必须渲染图示；O/M/N 不允许重复标签；points 点标签与 label object 不得重复表达同一个点名；点标签偏移字段不得被 `solveSchema.js` 丢弃；垂足点 M/N 不遮挡直角标记。
+- quadrilateral_basic_pack_v1_part1 需重点检查：A、B、C、D、O 标签不压边或对角线；对角线交点 O 的标签需偏离交叉点；角标签不堆叠；AI 返回 `none` visualizationSpec 时，3 个平行四边形稳定模板必须覆盖。
 
 ## 题干符号归一化测试
 

@@ -3030,6 +3030,258 @@ function buildEqualDistanceToCenterEqualChordsTemplate(questionText, source = {}
   });
 }
 
+function hasParallelogramSignal(compact) {
+  return /ABCD(?:是|为)?平行四边形/.test(compact)
+    || /四边形ABCD(?:是|为)?平行四边形/.test(compact)
+    || /平行四边形ABCD/.test(compact);
+}
+
+function matchesQuadrilateralGoalPattern(goalText, pattern) {
+  if (typeof pattern === "function") {
+    return pattern(goalText);
+  }
+
+  if (Array.isArray(pattern)) {
+    return pattern.every((item) => matchesQuadrilateralGoalPattern(goalText, item));
+  }
+
+  return pattern.test(goalText);
+}
+
+function hasQuadrilateralProofGoal(compact, patterns) {
+  const goalText = getProofGoalText(compact);
+  return Boolean(goalText)
+    && hasProofIntent(compact)
+    && patterns.some((pattern) => matchesQuadrilateralGoalPattern(goalText, pattern));
+}
+
+function getParallelogramTemplateContext(questionText, source = {}) {
+  const text = asText(questionText).trim() || getTemplateText(questionText, source);
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
+  const conditionText = getConditionText(compact);
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|⊙|旋转|折叠|动点|最值|轨迹|矩形|菱形|正方形|梯形/.test(compact)) {
+    return null;
+  }
+
+  if (!hasParallelogramSignal(conditionText) || !hasProofIntent(compact)) {
+    return null;
+  }
+
+  return { normalizedText, compact, conditionText };
+}
+
+function buildQuadrilateralBaseTemplate(options) {
+  const points = {
+    A: { x: -2.2, y: 1.2, label: "A", labelDirection: "top-left", labelOffset: 24 },
+    B: { x: 1.8, y: 1.2, label: "B", labelDirection: "top-right", labelOffset: 24 },
+    C: { x: 2.4, y: -1.2, label: "C", labelDirection: "bottom-right", labelOffset: 24 },
+    D: { x: -1.6, y: -1.2, label: "D", labelDirection: "bottom-left", labelOffset: 24 },
+  };
+
+  if (options.includeCenter) {
+    points.O = { x: 0.1, y: 0, label: "O", labelDirection: "top-right", labelOffset: 28, dx: 8, dy: -8 };
+  }
+
+  const polygon = {
+    kind: "polygon",
+    id: "parallelogram_ABCD",
+    label: "ABCD",
+    points: ["A", "B", "C", "D"],
+    role: "original",
+    style: "solid",
+  };
+  const objects = [polygon, ...(options.objects || [])].filter(Boolean);
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta(options.templateId, "geometry"),
+    confidence: "high",
+    title: options.title,
+    description: options.description,
+    points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: options.title,
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: options.highlightObjects || [],
+      },
+    ],
+    steps: [],
+    notes: options.notes || [],
+  };
+}
+
+function hasParallelogramOppositeSidesEqualSignals(questionText, source = {}) {
+  const context = getParallelogramTemplateContext(questionText, source);
+  if (!context) {
+    return false;
+  }
+
+  return hasQuadrilateralProofGoal(context.compact, [
+    /对边相等/,
+    [
+      (goalText) => hasCongruentEqualPair(goalText, "AB", "CD"),
+      (goalText) => hasCongruentEqualPair(goalText, "AD", "BC"),
+    ],
+  ]);
+}
+
+function buildParallelogramOppositeSidesEqualTemplate(questionText, source = {}) {
+  if (!hasParallelogramOppositeSidesEqualSignals(questionText, source)) {
+    return null;
+  }
+
+  const objects = [
+    makeSegment("segment_AB", "AB", "A", "B", "solid", "highlight"),
+    makeSegment("segment_CD", "CD", "C", "D", "solid", "highlight"),
+    makeSegment("segment_AD", "AD", "A", "D", "solid", "highlight"),
+    makeSegment("segment_BC", "BC", "B", "C", "solid", "highlight"),
+  ];
+
+  return buildQuadrilateralBaseTemplate({
+    templateId: "parallelogram_opposite_sides_equal_v1",
+    title: "平行四边形对边示意图",
+    description: "本图保留平行四边形 ABCD，并高亮两组对边 AB、CD 与 AD、BC。",
+    objects,
+    highlightObjects: ["segment_AB", "segment_CD", "segment_AD", "segment_BC"],
+    notes: [
+      "仅用于 ABCD 是平行四边形，求证 AB=CD 且 AD=BC 的稳定结构。",
+      "使用初中平行四边形性质：平行四边形的对边相等。",
+    ],
+  });
+}
+
+function hasParallelogramOppositeAnglesEqualSignals(questionText, source = {}) {
+  const context = getParallelogramTemplateContext(questionText, source);
+  if (!context) {
+    return false;
+  }
+
+  return hasQuadrilateralProofGoal(context.compact, [
+    /对角相等/,
+    [
+      (goalText) => hasCongruentEqualPair(goalText, "∠A", "∠C"),
+      (goalText) => hasCongruentEqualPair(goalText, "∠B", "∠D"),
+    ],
+  ]);
+}
+
+function buildParallelogramOppositeAnglesEqualTemplate(questionText, source = {}) {
+  if (!hasParallelogramOppositeAnglesEqualSignals(questionText, source)) {
+    return null;
+  }
+
+  const objects = [
+    {
+      kind: "angle",
+      id: "angle_A",
+      label: "∠A",
+      points: ["D", "A", "B"],
+      role: "highlight",
+      showLabel: true,
+      labelDirection: "top-left",
+      labelOffset: 42,
+    },
+    {
+      kind: "angle",
+      id: "angle_C",
+      label: "∠C",
+      points: ["B", "C", "D"],
+      role: "highlight",
+      showLabel: true,
+      labelDirection: "bottom-right",
+      labelOffset: 42,
+    },
+    {
+      kind: "angle",
+      id: "angle_B",
+      label: "∠B",
+      points: ["A", "B", "C"],
+      role: "highlight",
+      showLabel: true,
+      labelDirection: "top-right",
+      labelOffset: 42,
+      arcLevel: 2,
+    },
+    {
+      kind: "angle",
+      id: "angle_D",
+      label: "∠D",
+      points: ["C", "D", "A"],
+      role: "highlight",
+      showLabel: true,
+      labelDirection: "bottom-left",
+      labelOffset: 42,
+      arcLevel: 2,
+    },
+  ];
+
+  return buildQuadrilateralBaseTemplate({
+    templateId: "parallelogram_opposite_angles_equal_v1",
+    title: "平行四边形对角示意图",
+    description: "本图保留平行四边形 ABCD，并标出两组对角。",
+    objects,
+    highlightObjects: ["angle_A", "angle_C", "angle_B", "angle_D"],
+    notes: [
+      "仅用于 ABCD 是平行四边形，求证 ∠A=∠C 且 ∠B=∠D 的稳定结构。",
+      "使用初中平行四边形性质：平行四边形的对角相等。",
+    ],
+  });
+}
+
+function hasParallelogramDiagonalIntersectionSignal(compact) {
+  return /对角线(?:AC[、,，和与]?BD|BD[、,，和与]?AC).{0,8}交于O/.test(compact)
+    || /(?:AC[、,，和与]?BD|BD[、,，和与]?AC).{0,4}交于O/.test(compact);
+}
+
+function hasParallelogramDiagonalsBisectSignals(questionText, source = {}) {
+  const context = getParallelogramTemplateContext(questionText, source);
+  if (!context) {
+    return false;
+  }
+
+  return hasParallelogramDiagonalIntersectionSignal(context.compact)
+    && hasQuadrilateralProofGoal(context.compact, [
+      /对角线互相平分/,
+      [
+        (goalText) => hasCongruentEqualPair(goalText, "AO", "OC"),
+        (goalText) => hasCongruentEqualPair(goalText, "BO", "OD"),
+      ],
+    ]);
+}
+
+function buildParallelogramDiagonalsBisectTemplate(questionText, source = {}) {
+  if (!hasParallelogramDiagonalsBisectSignals(questionText, source)) {
+    return null;
+  }
+
+  const objects = [
+    makeSegment("diagonal_AC", "AC", "A", "C", "solid", "highlight"),
+    makeSegment("diagonal_BD", "BD", "B", "D", "solid", "highlight"),
+  ];
+
+  return buildQuadrilateralBaseTemplate({
+    templateId: "parallelogram_diagonals_bisect_v1",
+    title: "平行四边形对角线示意图",
+    description: "本图保留平行四边形 ABCD、对角线 AC 与 BD 以及交点 O。",
+    includeCenter: true,
+    objects,
+    highlightObjects: ["diagonal_AC", "diagonal_BD"],
+    notes: [
+      "仅用于 ABCD 是平行四边形，对角线 AC、BD 交于 O，求证 AO=OC 且 BO=OD 的稳定结构。",
+      "使用初中平行四边形性质：平行四边形的对角线互相平分。",
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -3110,6 +3362,9 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildIsoscelesTriangleTemplate(questionText, source)
     || buildMidpointMidlineTemplate(questionText, source)
     || buildParallelAngleTemplate(questionText, source)
+    || buildParallelogramOppositeSidesEqualTemplate(questionText, source)
+    || buildParallelogramOppositeAnglesEqualTemplate(questionText, source)
+    || buildParallelogramDiagonalsBisectTemplate(questionText, source)
     || buildCongruentTriangleSssTemplate(questionText, source)
     || buildCongruentTriangleSasTemplate(questionText, source)
     || buildCongruentTriangleAsaTemplate(questionText, source)
@@ -3150,6 +3405,9 @@ module.exports = {
   buildIsoscelesTriangleTemplate,
   buildMidpointMidlineTemplate,
   buildParallelAngleTemplate,
+  buildParallelogramOppositeSidesEqualTemplate,
+  buildParallelogramOppositeAnglesEqualTemplate,
+  buildParallelogramDiagonalsBisectTemplate,
   buildCongruentTriangleSssTemplate,
   buildCongruentTriangleSasTemplate,
   buildCongruentTriangleAsaTemplate,

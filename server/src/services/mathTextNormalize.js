@@ -102,6 +102,21 @@ function normalizeCircleChordDistanceTerms(text) {
     .replace(/弦\s*心\s*距\s*([A-Z]{2})/g, "弦心距$1");
 }
 
+function normalizeParallelogramTerms(text) {
+  return text
+    .replace(/平行\s*四边形\s*([A-Z]{4})/g, "$1 是平行四边形")
+    .replace(/四边形\s*([A-Z]{4})\s*(?:是|为)\s*平行\s*四边形/g, "$1 是平行四边形")
+    .replace(/([A-Z]{4})\s*(?:是|为)\s*平行\s*四边形/g, "$1 是平行四边形")
+    .replace(/对\s*边\s*相等/g, "对边相等")
+    .replace(/对\s*角\s*相等/g, "对角相等")
+    .replace(/对\s*角\s*线/g, "对角线")
+    .replace(/对角线\s*([A-Z]{2})\s*(?:、|,|，|和|与)\s*([A-Z]{2})/g, "对角线 $1、$2")
+    .replace(/([A-Z]{2})\s*(?:、|,|，|和|与)\s*([A-Z]{2})\s*(?:相)?交于\s*([A-Z])/g, "$1、$2 交于 $3")
+    .replace(/([A-Z]{2})\s*(?:与|和)\s*([A-Z]{2})\s*(?:相)?交于\s*([A-Z])/g, "$1、$2 交于 $3")
+    .replace(/互\s*相\s*平分/g, "互相平分")
+    .replace(/对角线\s*互相平分/g, "对角线互相平分");
+}
+
 function normalizeTriangleRelations(text) {
   return text
     .replace(/(△[A-Z]{3})\s*(?:全等于?|≌|≅|\\cong)\s*(△[A-Z]{3})/g, "$1≌$2")
@@ -148,6 +163,7 @@ function normalizeGeometrySymbols(text) {
   normalized = normalizeCircleAngleTerms(normalized);
   normalized = normalizeChordTerms(normalized);
   normalized = normalizeCircleChordDistanceTerms(normalized);
+  normalized = normalizeParallelogramTerms(normalized);
   normalized = normalizeEqualRelations(normalized);
   normalized = normalizeTriangleSymbols(normalized);
   normalized = normalizeTriangleRelations(normalized);

@@ -13,6 +13,9 @@ const geometryTemplateIds = [
   "angle_bisector_v1",
   "perpendicular_bisector_v1",
   "pythagorean_right_triangle_v1",
+  "parallelogram_opposite_sides_equal_v1",
+  "parallelogram_opposite_angles_equal_v1",
+  "parallelogram_diagonals_bisect_v1",
   "radius_equal_v1",
   "diameter_right_angle_v1",
   "tangent_radius_perpendicular_v1",
@@ -35,6 +38,17 @@ const circleChordTemplateIds = new Set([
   "equal_distance_to_center_equal_chords_v1",
 ]);
 
+const quadrilateralTemplateIds = new Set([
+  "parallelogram_opposite_sides_equal_v1",
+  "parallelogram_opposite_angles_equal_v1",
+  "parallelogram_diagonals_bisect_v1",
+]);
+
+const stablePipelineTemplateIds = new Set([
+  ...circleChordTemplateIds,
+  ...quadrilateralTemplateIds,
+]);
+
 const positiveCases = [
   {
     name: "function_intersection_v1",
@@ -55,6 +69,21 @@ const positiveCases = [
     name: "parallel_angle_v1",
     input: "已知 AB ∥ CD，直线 EF 分别交 AB、CD 于点 E、F，求证 ∠AEF = ∠EFD。",
     expectTemplateId: "parallel_angle_v1",
+  },
+  {
+    name: "parallelogram_opposite_sides_equal_v1",
+    input: "已知 ABCD 是平行四边形，求证 AB=CD，AD=BC。",
+    expectTemplateId: "parallelogram_opposite_sides_equal_v1",
+  },
+  {
+    name: "parallelogram_opposite_angles_equal_v1",
+    input: "已知 ABCD 是平行四边形，求证 ∠A=∠C，∠B=∠D。",
+    expectTemplateId: "parallelogram_opposite_angles_equal_v1",
+  },
+  {
+    name: "parallelogram_diagonals_bisect_v1",
+    input: "已知 ABCD 是平行四边形，对角线 AC、BD 交于 O，求证 AO=OC，BO=OD。",
+    expectTemplateId: "parallelogram_diagonals_bisect_v1",
   },
   {
     name: "congruent_triangle_sss_v1",
@@ -265,6 +294,106 @@ const negativeCases = [
     input: "已知 ⊙O 中，⌒AB=⌒CD，∠AEB 对⌒AB，∠CFD 对⌒CD，求证 ∠AEB=∠CFD。",
     expectTemplateId: "equal_arcs_equal_inscribed_angles_v1",
     forbiddenTemplateIds: ["equal_arcs_equal_chords_v1"],
+  },
+  {
+    name: "bare AB=CD should not trigger parallelogram opposite sides",
+    input: "已知 AB=CD，求证 AB=CD。",
+    forbiddenTemplateIds: ["parallelogram_opposite_sides_equal_v1"],
+  },
+  {
+    name: "bare angle equality should not trigger parallelogram opposite angles",
+    input: "已知 ∠A=∠C，求证 ∠A=∠C。",
+    forbiddenTemplateIds: ["parallelogram_opposite_angles_equal_v1"],
+  },
+  {
+    name: "bare AO=OC should not trigger parallelogram diagonal bisection",
+    input: "已知 AO=OC，求证 AO=OC。",
+    forbiddenTemplateIds: ["parallelogram_diagonals_bisect_v1"],
+  },
+  {
+    name: "ordinary quadrilateral should not trigger parallelogram templates",
+    input: "已知四边形 ABCD，求证 AB=CD。",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "parallel angle theorem should not trigger parallelogram templates",
+    input: "已知 AB ∥ CD，直线 EF 分别交 AB、CD 于点 E、F，求证 ∠AEF = ∠EFD。",
+    expectTemplateId: "parallel_angle_v1",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "triangle midline should not trigger parallelogram templates",
+    input: "已知三角形 ABC 中，M 是 AB 的中点，N 是 AC 的中点，求证 MN 平行 BC。",
+    expectTemplateId: "midpoint_midline_v1",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "function intersection should not trigger parallelogram templates",
+    input: "求函数 y=8/x 与 y=2x 的交点。",
+    expectTemplateId: "function_intersection_v1",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "circle chord arc should not trigger parallelogram templates",
+    input: "已知 AB、CD 是 ⊙O 的弦，AB=CD，求证 ⌒AB=⌒CD。",
+    expectTemplateId: "equal_chords_equal_arcs_v1",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "coordinate geometry should not trigger parallelogram templates",
+    input: "已知 A(0,0)，B(4,0)，C(5,2)，D(1,2)，求四边形 ABCD 的面积。",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "rectangle should not trigger parallelogram part1 templates",
+    input: "已知 ABCD 是矩形，求证 AC=BD。",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "rhombus should not trigger parallelogram part1 templates",
+    input: "已知 ABCD 是菱形，对角线 AC、BD 交于 O，求证 AC⊥BD。",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "trapezoid should not trigger parallelogram part1 templates",
+    input: "已知 ABCD 是梯形，AD∥BC，M、N 分别为两腰中点，求证 MN∥AD。",
+    forbiddenTemplateIds: [
+      "parallelogram_opposite_sides_equal_v1",
+      "parallelogram_opposite_angles_equal_v1",
+      "parallelogram_diagonals_bisect_v1",
+    ],
   },
   {
     name: "bare OM perpendicular AB should not trigger perpendicular diameter theorem",
@@ -482,7 +611,7 @@ function checkPositive(testCase) {
     failures.push(`duplicate point label objects for ${duplicatePointLabels.join(",")}`);
   }
 
-  if (circleChordTemplateIds.has(testCase.expectTemplateId)) {
+  if (stablePipelineTemplateIds.has(testCase.expectTemplateId)) {
     const normalizedFromNone = normalizeVisualizationSpec(
       { type: "none", title: "图示状态", description: "AI returned none", objects: [] },
       { questionText: testCase.input, problemText: testCase.input, questionType: "几何" },
