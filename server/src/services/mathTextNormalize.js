@@ -117,6 +117,25 @@ function normalizeParallelogramTerms(text) {
     .replace(/对角线\s*互相平分/g, "对角线互相平分");
 }
 
+function normalizeSpecialQuadrilateralTerms(text) {
+  return text
+    .replace(/矩形\s*([A-Z]{4})/g, "$1 是矩形")
+    .replace(/四边形\s*([A-Z]{4})\s*(?:是|为)\s*矩形/g, "$1 是矩形")
+    .replace(/([A-Z]{4})\s*(?:是|为)\s*矩形/g, "$1 是矩形")
+    .replace(/矩形的?对角线相等/g, "矩形对角线相等")
+    .replace(/菱形\s*([A-Z]{4})/g, "$1 是菱形")
+    .replace(/四边形\s*([A-Z]{4})\s*(?:是|为)\s*菱形/g, "$1 是菱形")
+    .replace(/([A-Z]{4})\s*(?:是|为)\s*菱形/g, "$1 是菱形")
+    .replace(/菱形的?对角线互相垂直/g, "菱形对角线互相垂直")
+    .replace(/对角线\s*互相\s*垂直/g, "对角线互相垂直")
+    .replace(/梯形\s*([A-Z]{4})/g, "$1 是梯形")
+    .replace(/四边形\s*([A-Z]{4})\s*(?:是|为)\s*梯形/g, "$1 是梯形")
+    .replace(/([A-Z]{4})\s*(?:是|为)\s*梯形/g, "$1 是梯形")
+    .replace(/梯形\s*中\s*位\s*线/g, "梯形中位线")
+    .replace(/([A-Z])\s*(?:、|,|，|和|与)\s*([A-Z])\s*分别\s*(?:是|为)\s*([A-Z]{2})\s*(?:、|,|，|和|与)\s*([A-Z]{2})\s*的?中点/g, "$1 是 $3 的中点，$2 是 $4 的中点")
+    .replace(/([A-Z]{2})\s*=\s*\(\s*([A-Z]{2})\s*\+\s*([A-Z]{2})\s*\)\s*\/\s*2/g, "$1=($2+$3)/2");
+}
+
 function normalizeTriangleRelations(text) {
   return text
     .replace(/(△[A-Z]{3})\s*(?:全等于?|≌|≅|\\cong)\s*(△[A-Z]{3})/g, "$1≌$2")
@@ -164,6 +183,7 @@ function normalizeGeometrySymbols(text) {
   normalized = normalizeChordTerms(normalized);
   normalized = normalizeCircleChordDistanceTerms(normalized);
   normalized = normalizeParallelogramTerms(normalized);
+  normalized = normalizeSpecialQuadrilateralTerms(normalized);
   normalized = normalizeEqualRelations(normalized);
   normalized = normalizeTriangleSymbols(normalized);
   normalized = normalizeTriangleRelations(normalized);

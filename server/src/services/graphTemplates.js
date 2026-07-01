@@ -3077,7 +3077,7 @@ function getParallelogramTemplateContext(questionText, source = {}) {
 }
 
 function buildQuadrilateralBaseTemplate(options) {
-  const points = {
+  const points = options.points || {
     A: { x: -2.2, y: 1.2, label: "A", labelDirection: "top-left", labelOffset: 24 },
     B: { x: 1.8, y: 1.2, label: "B", labelDirection: "top-right", labelOffset: 24 },
     C: { x: 2.4, y: -1.2, label: "C", labelDirection: "bottom-right", labelOffset: 24 },
@@ -3090,9 +3090,9 @@ function buildQuadrilateralBaseTemplate(options) {
 
   const polygon = {
     kind: "polygon",
-    id: "parallelogram_ABCD",
-    label: "ABCD",
-    points: ["A", "B", "C", "D"],
+    id: options.polygonId || "parallelogram_ABCD",
+    label: options.polygonLabel || "ABCD",
+    points: options.polygonPoints || ["A", "B", "C", "D"],
     role: "original",
     style: "solid",
   };
@@ -3282,6 +3282,184 @@ function buildParallelogramDiagonalsBisectTemplate(questionText, source = {}) {
   });
 }
 
+function hasRectangleSignal(compact) {
+  return /ABCD(?:是|为)?矩形/.test(compact)
+    || /四边形ABCD(?:是|为)?矩形/.test(compact)
+    || /矩形ABCD/.test(compact);
+}
+
+function hasRhombusSignal(compact) {
+  return /ABCD(?:是|为)?菱形/.test(compact)
+    || /四边形ABCD(?:是|为)?菱形/.test(compact)
+    || /菱形ABCD/.test(compact);
+}
+
+function hasTrapezoidSignal(compact) {
+  return /ABCD(?:是|为)?梯形/.test(compact)
+    || /四边形ABCD(?:是|为)?梯形/.test(compact)
+    || /梯形ABCD/.test(compact);
+}
+
+function hasParallelPair(compact, firstLine, secondLine) {
+  return compact.includes(`${firstLine}∥${secondLine}`)
+    || compact.includes(`${secondLine}∥${firstLine}`);
+}
+
+function hasSegmentMidpointSignal(compact, point, segment) {
+  return new RegExp(`${point}(?:是|为)?${segment}的?中点`).test(compact)
+    || new RegExp(`${segment}的?中点(?:是|为)?${point}`).test(compact)
+    || new RegExp(`${point}平分${segment}`).test(compact);
+}
+
+function getSpecialQuadrilateralTemplateContext(questionText, source = {}) {
+  const text = asText(questionText).trim() || getTemplateText(questionText, source);
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
+  const conditionText = getConditionText(compact);
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|圆|⊙|旋转|折叠|动点|最值|轨迹|正方形/.test(compact)) {
+    return null;
+  }
+
+  if (!hasProofIntent(compact)) {
+    return null;
+  }
+
+  return { normalizedText, compact, conditionText };
+}
+
+function buildRectangleDiagonalsEqualTemplate(questionText, source = {}) {
+  const context = getSpecialQuadrilateralTemplateContext(questionText, source);
+  if (!context || !hasRectangleSignal(context.conditionText)) {
+    return null;
+  }
+
+  if (!hasQuadrilateralProofGoal(context.compact, [
+    /对角线相等/,
+    (goalText) => hasCongruentEqualPair(goalText, "AC", "BD"),
+  ])) {
+    return null;
+  }
+
+  const points = {
+    A: { x: -2.2, y: 1.2, label: "A", labelDirection: "top-left", labelOffset: 24 },
+    B: { x: 2.2, y: 1.2, label: "B", labelDirection: "top-right", labelOffset: 24 },
+    C: { x: 2.2, y: -1.2, label: "C", labelDirection: "bottom-right", labelOffset: 24 },
+    D: { x: -2.2, y: -1.2, label: "D", labelDirection: "bottom-left", labelOffset: 24 },
+  };
+  const objects = [
+    makeSegment("diagonal_AC", "AC", "A", "C", "solid", "highlight"),
+    makeSegment("diagonal_BD", "BD", "B", "D", "solid", "highlight"),
+  ];
+
+  return buildQuadrilateralBaseTemplate({
+    templateId: "rectangle_diagonals_equal_v1",
+    title: "矩形对角线示意图",
+    description: "本图保留矩形 ABCD，并高亮对角线 AC 与 BD。",
+    points,
+    polygonId: "rectangle_ABCD",
+    objects,
+    highlightObjects: ["diagonal_AC", "diagonal_BD"],
+    notes: [
+      "仅用于 ABCD 是矩形，求证 AC=BD 的稳定结构。",
+      "使用初中矩形性质：矩形的对角线相等。",
+    ],
+  });
+}
+
+function buildRhombusDiagonalsPerpendicularTemplate(questionText, source = {}) {
+  const context = getSpecialQuadrilateralTemplateContext(questionText, source);
+  if (!context || !hasRhombusSignal(context.conditionText)) {
+    return null;
+  }
+
+  if (!hasParallelogramDiagonalIntersectionSignal(context.compact)
+    || !hasQuadrilateralProofGoal(context.compact, [
+      /对角线互相垂直/,
+      (goalText) => hasPerpendicularPair(goalText, "AC", "BD"),
+    ])) {
+    return null;
+  }
+
+  const points = {
+    A: { x: 0, y: 1.55, label: "A", labelDirection: "top", labelOffset: 26 },
+    B: { x: 2.2, y: 0, label: "B", labelDirection: "right", labelOffset: 26 },
+    C: { x: 0, y: -1.55, label: "C", labelDirection: "bottom", labelOffset: 26 },
+    D: { x: -2.2, y: 0, label: "D", labelDirection: "left", labelOffset: 26 },
+    O: { x: 0, y: 0, label: "O", labelDirection: "top-right", labelOffset: 30, dx: 8, dy: -8 },
+  };
+  const objects = [
+    makeSegment("diagonal_AC", "AC", "A", "C", "solid", "highlight"),
+    makeSegment("diagonal_BD", "BD", "B", "D", "solid", "highlight"),
+    makeRightAngleObject("right_angle_AOB", ["A", "O", "B"]),
+  ];
+
+  return buildQuadrilateralBaseTemplate({
+    templateId: "rhombus_diagonals_perpendicular_v1",
+    title: "菱形对角线示意图",
+    description: "本图保留菱形 ABCD、对角线 AC 与 BD、交点 O 和直角标记。",
+    points,
+    polygonId: "rhombus_ABCD",
+    objects,
+    highlightObjects: ["diagonal_AC", "diagonal_BD", "right_angle_AOB"],
+    notes: [
+      "仅用于 ABCD 是菱形，对角线 AC、BD 交于 O，求证 AC⊥BD 的稳定结构。",
+      "使用初中菱形性质：菱形的对角线互相垂直。",
+    ],
+  });
+}
+
+function buildTrapezoidMidlineTemplate(questionText, source = {}) {
+  const context = getSpecialQuadrilateralTemplateContext(questionText, source);
+  if (!context || !hasTrapezoidSignal(context.conditionText)) {
+    return null;
+  }
+
+  const hasBases = hasParallelPair(context.compact, "AD", "BC");
+  const hasMidpoints = hasSegmentMidpointSignal(context.compact, "M", "AB")
+    && hasSegmentMidpointSignal(context.compact, "N", "CD");
+  const hasGoal = hasQuadrilateralProofGoal(context.compact, [
+    /梯形中位线/,
+    (goalText) => hasParallelPair(goalText, "MN", "AD") && hasParallelPair(goalText, "MN", "BC"),
+    /MN=\(AD\+BC\)\/2/,
+    /MN=\(BC\+AD\)\/2/,
+  ]);
+
+  if (!hasBases || !hasMidpoints || !hasGoal) {
+    return null;
+  }
+
+  const points = {
+    A: { x: -1.25, y: 1.2, label: "A", labelDirection: "top-left", labelOffset: 24 },
+    B: { x: -2.4, y: -1.2, label: "B", labelDirection: "bottom-left", labelOffset: 24 },
+    C: { x: 2.4, y: -1.2, label: "C", labelDirection: "bottom-right", labelOffset: 24 },
+    D: { x: 1.25, y: 1.2, label: "D", labelDirection: "top-right", labelOffset: 24 },
+    M: { x: -1.825, y: 0, label: "M", labelDirection: "left", labelOffset: 28, dx: -4 },
+    N: { x: 1.825, y: 0, label: "N", labelDirection: "right", labelOffset: 28, dx: 4 },
+  };
+  const objects = [
+    makeSegment("segment_MN", "MN", "M", "N", "solid", "highlight"),
+  ];
+
+  return buildQuadrilateralBaseTemplate({
+    templateId: "trapezoid_midline_v1",
+    title: "梯形中位线示意图",
+    description: "本图保留梯形 ABCD，两腰中点 M、N 以及中位线 MN。",
+    points,
+    polygonId: "trapezoid_ABCD",
+    objects,
+    highlightObjects: ["segment_MN"],
+    notes: [
+      "仅用于 ABCD 是梯形，AD∥BC，M、N 分别是 AB、CD 的中点，求证梯形中位线性质的稳定结构。",
+      "使用初中梯形中位线性质：梯形中位线平行于两底，且等于两底和的一半。",
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -3365,6 +3543,9 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildParallelogramOppositeSidesEqualTemplate(questionText, source)
     || buildParallelogramOppositeAnglesEqualTemplate(questionText, source)
     || buildParallelogramDiagonalsBisectTemplate(questionText, source)
+    || buildRectangleDiagonalsEqualTemplate(questionText, source)
+    || buildRhombusDiagonalsPerpendicularTemplate(questionText, source)
+    || buildTrapezoidMidlineTemplate(questionText, source)
     || buildCongruentTriangleSssTemplate(questionText, source)
     || buildCongruentTriangleSasTemplate(questionText, source)
     || buildCongruentTriangleAsaTemplate(questionText, source)
@@ -3408,6 +3589,9 @@ module.exports = {
   buildParallelogramOppositeSidesEqualTemplate,
   buildParallelogramOppositeAnglesEqualTemplate,
   buildParallelogramDiagonalsBisectTemplate,
+  buildRectangleDiagonalsEqualTemplate,
+  buildRhombusDiagonalsPerpendicularTemplate,
+  buildTrapezoidMidlineTemplate,
   buildCongruentTriangleSssTemplate,
   buildCongruentTriangleSasTemplate,
   buildCongruentTriangleAsaTemplate,

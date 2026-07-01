@@ -16,6 +16,9 @@ const geometryTemplateIds = [
   "parallelogram_opposite_sides_equal_v1",
   "parallelogram_opposite_angles_equal_v1",
   "parallelogram_diagonals_bisect_v1",
+  "rectangle_diagonals_equal_v1",
+  "rhombus_diagonals_perpendicular_v1",
+  "trapezoid_midline_v1",
   "radius_equal_v1",
   "diameter_right_angle_v1",
   "tangent_radius_perpendicular_v1",
@@ -42,6 +45,9 @@ const quadrilateralTemplateIds = new Set([
   "parallelogram_opposite_sides_equal_v1",
   "parallelogram_opposite_angles_equal_v1",
   "parallelogram_diagonals_bisect_v1",
+  "rectangle_diagonals_equal_v1",
+  "rhombus_diagonals_perpendicular_v1",
+  "trapezoid_midline_v1",
 ]);
 
 const stablePipelineTemplateIds = new Set([
@@ -84,6 +90,21 @@ const positiveCases = [
     name: "parallelogram_diagonals_bisect_v1",
     input: "已知 ABCD 是平行四边形，对角线 AC、BD 交于 O，求证 AO=OC，BO=OD。",
     expectTemplateId: "parallelogram_diagonals_bisect_v1",
+  },
+  {
+    name: "rectangle_diagonals_equal_v1",
+    input: "已知 ABCD 是矩形，求证 AC=BD。",
+    expectTemplateId: "rectangle_diagonals_equal_v1",
+  },
+  {
+    name: "rhombus_diagonals_perpendicular_v1",
+    input: "已知 ABCD 是菱形，对角线 AC、BD 交于 O，求证 AC⊥BD。",
+    expectTemplateId: "rhombus_diagonals_perpendicular_v1",
+  },
+  {
+    name: "trapezoid_midline_v1",
+    input: "已知梯形 ABCD 中，AD∥BC，M、N 分别是 AB、CD 的中点，求证 MN∥AD∥BC，且 MN=(AD+BC)/2。",
+    expectTemplateId: "trapezoid_midline_v1",
   },
   {
     name: "congruent_triangle_sss_v1",
@@ -393,6 +414,81 @@ const negativeCases = [
       "parallelogram_opposite_sides_equal_v1",
       "parallelogram_opposite_angles_equal_v1",
       "parallelogram_diagonals_bisect_v1",
+    ],
+  },
+  {
+    name: "bare AC=BD should not trigger rectangle diagonals",
+    input: "已知 AC=BD，求证 AC=BD。",
+    forbiddenTemplateIds: ["rectangle_diagonals_equal_v1"],
+  },
+  {
+    name: "ordinary quadrilateral equal diagonals should not trigger rectangle",
+    input: "已知四边形 ABCD 的对角线 AC=BD，求证 AC=BD。",
+    forbiddenTemplateIds: ["rectangle_diagonals_equal_v1"],
+  },
+  {
+    name: "bare AC perpendicular BD should not trigger rhombus diagonals",
+    input: "已知 AC⊥BD，求证 AC⊥BD。",
+    forbiddenTemplateIds: ["rhombus_diagonals_perpendicular_v1"],
+  },
+  {
+    name: "ordinary quadrilateral perpendicular diagonals should not trigger rhombus",
+    input: "已知四边形 ABCD 的对角线 AC、BD 交于 O，AC⊥BD，求证 AC⊥BD。",
+    forbiddenTemplateIds: ["rhombus_diagonals_perpendicular_v1"],
+  },
+  {
+    name: "only trapezoid bases should not trigger trapezoid midline",
+    input: "已知梯形 ABCD 中，AD∥BC，求证 MN∥AD。",
+    forbiddenTemplateIds: ["trapezoid_midline_v1"],
+  },
+  {
+    name: "only midpoints should not trigger trapezoid midline",
+    input: "已知 M、N 分别是 AB、CD 的中点，求证 MN∥AD。",
+    forbiddenTemplateIds: ["trapezoid_midline_v1"],
+  },
+  {
+    name: "triangle midline should not trigger trapezoid midline",
+    input: "已知三角形 ABC 中，M 是 AB 的中点，N 是 AC 的中点，求证 MN 平行 BC。",
+    expectTemplateId: "midpoint_midline_v1",
+    forbiddenTemplateIds: ["trapezoid_midline_v1"],
+  },
+  {
+    name: "function intersection should not trigger special quadrilateral templates",
+    input: "求函数 y=8/x 与 y=2x 的交点。",
+    expectTemplateId: "function_intersection_v1",
+    forbiddenTemplateIds: [
+      "rectangle_diagonals_equal_v1",
+      "rhombus_diagonals_perpendicular_v1",
+      "trapezoid_midline_v1",
+    ],
+  },
+  {
+    name: "circle chord arc should not trigger special quadrilateral templates",
+    input: "已知 AB、CD 是 ⊙O 的弦，AB=CD，求证 ⌒AB=⌒CD。",
+    expectTemplateId: "equal_chords_equal_arcs_v1",
+    forbiddenTemplateIds: [
+      "rectangle_diagonals_equal_v1",
+      "rhombus_diagonals_perpendicular_v1",
+      "trapezoid_midline_v1",
+    ],
+  },
+  {
+    name: "parallelogram diagonal bisection should not trigger special quadrilateral templates",
+    input: "已知 ABCD 是平行四边形，对角线 AC、BD 交于 O，求证 AO=OC，BO=OD。",
+    expectTemplateId: "parallelogram_diagonals_bisect_v1",
+    forbiddenTemplateIds: [
+      "rectangle_diagonals_equal_v1",
+      "rhombus_diagonals_perpendicular_v1",
+      "trapezoid_midline_v1",
+    ],
+  },
+  {
+    name: "coordinate geometry should not trigger special quadrilateral templates",
+    input: "已知 A(0,0)，B(4,0)，C(4,2)，D(0,2)，求 AC 的长。",
+    forbiddenTemplateIds: [
+      "rectangle_diagonals_equal_v1",
+      "rhombus_diagonals_perpendicular_v1",
+      "trapezoid_midline_v1",
     ],
   },
   {

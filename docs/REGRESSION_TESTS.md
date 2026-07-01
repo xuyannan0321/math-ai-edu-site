@@ -920,6 +920,70 @@ http://localhost:5500
 - 图中不显示长定理文字；
 - AI 返回 `none` visualizationSpec 时，full pipeline 必须稳定覆盖成该模板。
 
+## quadrilateral_basic_pack_v1_part2：特殊四边形与梯形模板包
+
+### 测试 44：矩形对角线相等
+
+输入：
+
+```text
+已知 ABCD 是矩形，求证 AC=BD。
+```
+
+验收标准：
+
+- 应触发 `rectangle_diagonals_equal_v1`；
+- 显示矩形 ABCD；
+- 显示并高亮对角线 AC、BD；
+- A、B、C、D 标签清楚，不压边或对角线；
+- 解析使用矩形的对角线相等；
+- 只有 `AC=BD` 或普通四边形对角线相等时不得触发；
+- 平行四边形题、坐标题、函数题不得触发；
+- 图中不显示长定理文字；
+- AI 返回 `none` visualizationSpec 时，full pipeline 必须稳定覆盖成该模板。
+
+### 测试 45：菱形对角线互相垂直
+
+输入：
+
+```text
+已知 ABCD 是菱形，对角线 AC、BD 交于 O，求证 AC⊥BD。
+```
+
+验收标准：
+
+- 应触发 `rhombus_diagonals_perpendicular_v1`；
+- 显示菱形 ABCD；
+- 显示对角线 AC、BD 和交点 O；
+- 在 O 处显示直角标记；
+- O 标签不压在对角线交叉点或直角标记上；
+- 解析使用菱形的对角线互相垂直；
+- 只有 `AC⊥BD` 或普通四边形对角线垂直时不得触发；
+- 平行四边形题、矩形题、坐标题、函数题不得触发；
+- 图中不显示长定理文字；
+- AI 返回 `none` visualizationSpec 时，full pipeline 必须稳定覆盖成该模板。
+
+### 测试 46：梯形中位线
+
+输入：
+
+```text
+已知梯形 ABCD 中，AD∥BC，M、N 分别是 AB、CD 的中点，求证 MN∥AD∥BC，且 MN=(AD+BC)/2。
+```
+
+验收标准：
+
+- 应触发 `trapezoid_midline_v1`；
+- 显示梯形 ABCD，AD 与 BC 平行；
+- M 在 AB 中点，N 在 CD 中点；
+- 显示并高亮 MN；
+- A、B、C、D、M、N 标签清楚，不压线、不堆叠；
+- 解析使用梯形中位线性质：平行于两底，且等于两底和的一半；
+- 只有 `AD∥BC`、只有 M/N 中点、三角形中位线题或普通平行线题不得触发；
+- 坐标题、函数题、梯形综合题不得触发；
+- 图中不显示长定理文字；
+- AI 返回 `none` visualizationSpec 时，full pipeline 必须稳定覆盖成该模板。
+
 ## 标签避让与排版检查项
 
 模板图示新增或调整后，需额外检查标签布局：
@@ -934,6 +998,7 @@ http://localhost:5500
 - circle_chord_pack_v1 需重点检查：O、M、N 标签不压 OM/ON 或弦，M、N 不遮挡直角标记，双弦模板中 M、N、O 不堆叠，A、B、C、D 保持圆外侧可读。
 - circle_chord_pack_v1 full pipeline 修复验收：AI 返回 `none` visualizationSpec 时，稳定模板必须覆盖；`diameter_bisects_chord_perpendicular_v1` 和 `equal_chords_equal_distance_to_center_v1` 在真实页面必须渲染图示；O/M/N 不允许重复标签；points 点标签与 label object 不得重复表达同一个点名；点标签偏移字段不得被 `solveSchema.js` 丢弃；垂足点 M/N 不遮挡直角标记。
 - quadrilateral_basic_pack_v1_part1 需重点检查：A、B、C、D、O 标签不压边或对角线；对角线交点 O 的标签需偏离交叉点；角标签不堆叠；AI 返回 `none` visualizationSpec 时，3 个平行四边形稳定模板必须覆盖。
+- quadrilateral_basic_pack_v1_part2 需重点检查：矩形/菱形对角线标签不压线；菱形 O 标签避开交点和直角标记；梯形 M/N 标签避开两腰与中位线；AI 返回 `none` visualizationSpec 时，3 个特殊四边形稳定模板必须覆盖。
 
 ## 题干符号归一化测试
 
