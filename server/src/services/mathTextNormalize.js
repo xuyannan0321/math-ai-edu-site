@@ -51,6 +51,8 @@ function normalizeCircleAndArcSymbols(text) {
     .replace(/以\s*([A-Z])\s*为圆心/g, "以 ⊙$1 为圆心")
     .replace(/圆心\s*([A-Z])/g, "圆心 ⊙$1")
     .replace(/圆\s*([A-Z])/g, "⊙$1")
+    .replace(/([A-Z])\s*在\s*(⊙[A-Z])\s*上/g, "$1 在 $2 上")
+    .replace(/([A-Z])\s*(?:是|为)\s*(⊙[A-Z])\s*上(?:的)?一?点/g, "$1 是 $2 上一点")
     .replace(/(优弧|劣弧)\s*(?:⌒\s*)?([A-Z]{2})/g, "$1⌒$2")
     .replace(/(?:弧线|弧)\s*([A-Z]{2})/g, "⌒$1")
     .replace(/⌒\s*([A-Z]{2})/g, "⌒$1");
@@ -74,15 +76,21 @@ function normalizeBisectorsAndMidpoints(text) {
 function normalizeTangentRadiusDiameter(text) {
   return text
     .replace(/([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?切线/g, "$1 是 $2 的切线")
+    .replace(/([A-Z]{2})\s*(?:与|和)\s*(⊙[A-Z])\s*相切\s*于\s*([A-Z])/g, "$1 与 $2 相切于 $3")
     .replace(/([A-Z]{2})\s*(?:与|和)\s*(⊙[A-Z])\s*相切/g, "$1 与 $2 相切")
+    .replace(/直线\s*([A-Z]{2})\s*(?:与|和)\s*(⊙[A-Z])\s*相切\s*于\s*([A-Z])/g, "$1 与 $2 相切于 $3")
     .replace(/直线\s*([A-Z]{2})\s*(?:与|和)\s*(⊙[A-Z])\s*相切/g, "$1 与 $2 相切")
     .replace(/([A-Z]{2})\s*切\s*(⊙[A-Z])\s*于\s*([A-Z])/g, "$1 切 $2 于 $3")
     .replace(/([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?半径/g, "$1 是 $2 的半径")
     .replace(/([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?直径/g, "$1 是 $2 的直径")
     .replace(/([A-Z]{2})\s*(?:是|为)\s*半径/g, "$1 是半径")
     .replace(/([A-Z]{2})\s*(?:是|为)\s*直径/g, "$1 是直径")
-    .replace(/半径\s*([A-Z]{2})/g, "半径 $1")
-    .replace(/直径\s*([A-Z]{2})/g, "直径 $1");
+    .replace(/([A-Z])\s*(?:是|为)\s*切点/g, "$1 为切点")
+    .replace(/切点\s*(?:是|为)\s*([A-Z])/g, "$1 为切点")
+    .replace(/切于\s*([A-Z])/g, "切于 $1")
+    .replace(/切线\s*([A-Z]{2})/g, "$1 是切线")
+    .replace(/半径\s*([A-Z]{2})/g, "$1 是半径")
+    .replace(/直径\s*([A-Z]{2})/g, "$1 是直径");
 }
 
 function normalizeGeometrySymbols(text) {

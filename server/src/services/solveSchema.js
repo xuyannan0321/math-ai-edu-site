@@ -245,6 +245,9 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "angle_bisector_v1",
   "perpendicular_bisector_v1",
   "pythagorean_right_triangle_v1",
+  "radius_equal_v1",
+  "diameter_right_angle_v1",
+  "tangent_radius_perpendicular_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {

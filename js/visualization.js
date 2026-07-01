@@ -546,8 +546,36 @@
     return allObjects.filter((object) => allowed.has(object.id));
   }
 
-  function getBounds(points, padding = 0.18) {
-    const safePoints = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  function getCircularBoundsPoints(objects = [], pointMap = {}) {
+    const boundsPoints = [];
+
+    (objects || []).forEach((object) => {
+      if (!object || (object.kind !== "circle" && object.kind !== "arc")) {
+        return;
+      }
+
+      const center = pointMap[object.center];
+      const radius = Number(object.radius);
+
+      if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(radius) || radius <= 0) {
+        return;
+      }
+
+      boundsPoints.push(
+        { x: center.x - radius, y: center.y },
+        { x: center.x + radius, y: center.y },
+        { x: center.x, y: center.y - radius },
+        { x: center.x, y: center.y + radius },
+      );
+    });
+
+    return boundsPoints;
+  }
+
+  function getBounds(points, padding = 0.18, objects = [], pointMap = {}) {
+    const safePoints = points
+      .concat(getCircularBoundsPoints(objects, pointMap))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
     if (!safePoints.length) {
       return { minX: -5, maxX: 5, minY: -3, maxY: 3 };
@@ -570,14 +598,41 @@
     };
   }
 
-  function createMapper(bounds, width = WIDTH, height = HEIGHT) {
+  function createMapper(bounds, width = WIDTH, height = HEIGHT, options = {}) {
     const shorterSide = Math.max(240, Math.min(width, height));
     const padding = clamp(Math.round(shorterSide * 0.1), 34, 52);
+    const spanX = Math.max(1, bounds.maxX - bounds.minX);
+    const spanY = Math.max(1, bounds.maxY - bounds.minY);
+    const innerWidth = Math.max(1, width - padding * 2);
+    const innerHeight = Math.max(1, height - padding * 2);
+
+    if (options.equalScale === true) {
+      const scale = Math.min(innerWidth / spanX, innerHeight / spanY);
+      const offsetX = (width - spanX * scale) / 2;
+      const offsetY = (height - spanY * scale) / 2;
+
+      return {
+        width,
+        height,
+        padding,
+        scale,
+        scaleX: scale,
+        scaleY: scale,
+        project(point) {
+          return {
+            x: offsetX + (point.x - bounds.minX) * scale,
+            y: height - offsetY - (point.y - bounds.minY) * scale,
+          };
+        },
+      };
+    }
 
     return {
       width,
       height,
       padding,
+      scaleX: innerWidth / spanX,
+      scaleY: innerHeight / spanY,
       project(point) {
         return projectPoint(point, bounds, width, height, padding);
       },
@@ -804,11 +859,14 @@
   function drawCircle(svg, center, radius, mapper, options = {}) {
     const projectedCenter = mapper.project(center);
     const projectedEdge = mapper.project({ x: center.x + radius, y: center.y });
+    const svgRadius = Number.isFinite(mapper.scale)
+      ? Math.abs(radius * mapper.scale)
+      : Math.abs(projectedEdge.x - projectedCenter.x);
     svg.append(
       createSvgElement("circle", {
         cx: projectedCenter.x,
         cy: projectedCenter.y,
-        r: Math.abs(projectedEdge.x - projectedCenter.x),
+        r: svgRadius,
         class: options.className || "mv-circle",
         "data-object-id": options.id || "",
       }),
@@ -828,7 +886,9 @@
     const end = mapper.project(polarPoint(center, radius, endAngle));
     const projectedCenter = mapper.project(center);
     const projectedEdge = mapper.project({ x: center.x + radius, y: center.y });
-    const svgRadius = Math.abs(projectedEdge.x - projectedCenter.x);
+    const svgRadius = Number.isFinite(mapper.scale)
+      ? Math.abs(radius * mapper.scale)
+      : Math.abs(projectedEdge.x - projectedCenter.x);
     const largeArc = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
 
     svg.append(
@@ -995,12 +1055,14 @@
     ];
   }
 
-  function getLabelBox(projected, label, direction, mapper, offset = 15) {
+  function getLabelBox(projected, label, direction, mapper, offset = 15, dx = 0, dy = 0) {
     const text = String(label || "");
     const width = clamp(text.length * 8 + 12, 20, 110);
     const height = 20;
-    const centerX = projected.x + direction.x * offset + (direction.x < 0 ? -width / 2 : width / 2);
-    const centerY = projected.y + direction.y * offset;
+    const anchorX = projected.x + (Number.isFinite(dx) ? dx : 0);
+    const anchorY = projected.y + (Number.isFinite(dy) ? dy : 0);
+    const centerX = anchorX + direction.x * offset + (direction.x < 0 ? -width / 2 : width / 2);
+    const centerY = anchorY + direction.y * offset;
     const x = clamp(centerX - width / 2, 4, mapper.width - width - 4);
     const y = clamp(centerY - height / 2, 4, mapper.height - height - 4);
 
@@ -1016,7 +1078,249 @@
     );
   }
 
-  function layoutPointLabels(points, mapper, bounds) {
+  function expandBox(box, margin = 0) {
+    return {
+      x: box.x - margin,
+      y: box.y - margin,
+      width: box.width + margin * 2,
+      height: box.height + margin * 2,
+      cx: box.cx,
+      cy: box.cy,
+    };
+  }
+
+  function pointInBox(point, box) {
+    return point.x >= box.x
+      && point.x <= box.x + box.width
+      && point.y >= box.y
+      && point.y <= box.y + box.height;
+  }
+
+  function lineOrientation(a, b, c) {
+    const value = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
+
+    if (Math.abs(value) < 1e-7) {
+      return 0;
+    }
+
+    return value > 0 ? 1 : 2;
+  }
+
+  function segmentsIntersect(p1, q1, p2, q2) {
+    const o1 = lineOrientation(p1, q1, p2);
+    const o2 = lineOrientation(p1, q1, q2);
+    const o3 = lineOrientation(p2, q2, p1);
+    const o4 = lineOrientation(p2, q2, q1);
+
+    return o1 !== o2 && o3 !== o4;
+  }
+
+  function boxIntersectsSegment(box, start, end, margin = 0) {
+    const expanded = expandBox(box, margin);
+
+    if (pointInBox(start, expanded) || pointInBox(end, expanded)) {
+      return true;
+    }
+
+    const topLeft = { x: expanded.x, y: expanded.y };
+    const topRight = { x: expanded.x + expanded.width, y: expanded.y };
+    const bottomLeft = { x: expanded.x, y: expanded.y + expanded.height };
+    const bottomRight = { x: expanded.x + expanded.width, y: expanded.y + expanded.height };
+
+    return segmentsIntersect(start, end, topLeft, topRight)
+      || segmentsIntersect(start, end, topRight, bottomRight)
+      || segmentsIntersect(start, end, bottomRight, bottomLeft)
+      || segmentsIntersect(start, end, bottomLeft, topLeft);
+  }
+
+  function distancePointToBox(point, box) {
+    const dx = Math.max(box.x - point.x, 0, point.x - (box.x + box.width));
+    const dy = Math.max(box.y - point.y, 0, point.y - (box.y + box.height));
+    return Math.hypot(dx, dy);
+  }
+
+  function maxDistancePointToBox(point, box) {
+    return Math.max(
+      Math.hypot(point.x - box.x, point.y - box.y),
+      Math.hypot(point.x - (box.x + box.width), point.y - box.y),
+      Math.hypot(point.x - box.x, point.y - (box.y + box.height)),
+      Math.hypot(point.x - (box.x + box.width), point.y - (box.y + box.height)),
+    );
+  }
+
+  function boxIntersectsCircleStroke(box, center, radius, margin = 8) {
+    const nearest = distancePointToBox(center, box);
+    const farthest = maxDistancePointToBox(center, box);
+    return nearest <= radius + margin && farthest >= radius - margin;
+  }
+
+  function getMapperRadius(mapper, center, radius) {
+    if (Number.isFinite(mapper.scale)) {
+      return Math.abs(radius * mapper.scale);
+    }
+
+    const projectedCenter = mapper.project(center);
+    const projectedEdge = mapper.project({ x: center.x + radius, y: center.y });
+    return Math.abs(projectedEdge.x - projectedCenter.x);
+  }
+
+  function getExtendedLinePoints(p1, p2, bounds, mode = "line") {
+    if (!p1 || !p2) {
+      return null;
+    }
+
+    const direction = normalizeVector({ x: p2.x - p1.x, y: p2.y - p1.y });
+
+    if (!direction.x && !direction.y) {
+      return null;
+    }
+
+    const span = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) * 2;
+
+    if (mode === "ray") {
+      return [p1, { x: p1.x + direction.x * span, y: p1.y + direction.y * span }];
+    }
+
+    return [
+      { x: p1.x - direction.x * span, y: p1.y - direction.y * span },
+      { x: p1.x + direction.x * span, y: p1.y + direction.y * span },
+    ];
+  }
+
+  function addLineObstacle(obstacles, mapper, p1, p2, padding = 8) {
+    if (!p1 || !p2) {
+      return;
+    }
+
+    obstacles.push({
+      kind: "line",
+      start: mapper.project(p1),
+      end: mapper.project(p2),
+      padding,
+    });
+  }
+
+  function buildLabelObstacles(spec, objects, mapper, bounds) {
+    const obstacles = [];
+
+    (objects || []).forEach((object) => {
+      if (!object) {
+        return;
+      }
+
+      if (object.kind === "polygon") {
+        const points = (object.points || []).map((id) => getPoint(spec, id)).filter(Boolean);
+        points.forEach((point, index) => addLineObstacle(obstacles, mapper, point, points[(index + 1) % points.length]));
+        return;
+      }
+
+      if (object.kind === "segment" || object.kind === "auxiliaryLine") {
+        const [fromId, toId] = getObjectPointIds(object);
+        addLineObstacle(obstacles, mapper, getPoint(spec, fromId), getPoint(spec, toId));
+        return;
+      }
+
+      if (object.kind === "line" || object.kind === "ray") {
+        const [fromId, toId] = getObjectPointIds(object);
+        const endpoints = getExtendedLinePoints(getPoint(spec, fromId), getPoint(spec, toId), bounds, object.kind);
+        if (endpoints) {
+          addLineObstacle(obstacles, mapper, endpoints[0], endpoints[1]);
+        }
+        return;
+      }
+
+      if (object.kind === "circle" || object.kind === "arc") {
+        const center = getPoint(spec, object.center);
+        const radius = Number(object.radius);
+        if (center && Number.isFinite(radius) && radius > 0) {
+          obstacles.push({
+            kind: "circle",
+            center: mapper.project(center),
+            radius: getMapperRadius(mapper, center, radius),
+            padding: 9,
+          });
+        }
+        return;
+      }
+
+      if (object.kind === "angle" || object.kind === "rightAngle") {
+        const [, vertexId] = getAnglePointIds(object);
+        const vertex = getPoint(spec, vertexId);
+        if (vertex) {
+          const projected = mapper.project(vertex);
+          const size = object.kind === "rightAngle" ? 34 : 48;
+          obstacles.push({
+            kind: "box",
+            box: {
+              x: projected.x - size / 2,
+              y: projected.y - size / 2,
+              width: size,
+              height: size,
+            },
+          });
+        }
+      }
+    });
+
+    return obstacles;
+  }
+
+  function labelBoxIntersectsObstacle(box, obstacle) {
+    if (!obstacle) {
+      return false;
+    }
+
+    if (obstacle.kind === "line") {
+      return boxIntersectsSegment(box, obstacle.start, obstacle.end, obstacle.padding || 8);
+    }
+
+    if (obstacle.kind === "circle") {
+      return boxIntersectsCircleStroke(box, obstacle.center, obstacle.radius, obstacle.padding || 8);
+    }
+
+    if (obstacle.kind === "box") {
+      return boxesOverlap(expandBox(box, 4), obstacle.box);
+    }
+
+    return false;
+  }
+
+  function parseLabelDirection(value) {
+    if (!value) {
+      return null;
+    }
+
+    if (typeof value === "object") {
+      const x = Number(value.x);
+      const y = Number(value.y);
+      if (Number.isFinite(x) && Number.isFinite(y) && (x || y)) {
+        return normalizeVector({ x, y });
+      }
+      return null;
+    }
+
+    const key = String(value).toLowerCase().replace(/\s+/g, "");
+    const directions = {
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
+      up: { x: 0, y: -1 },
+      top: { x: 0, y: -1 },
+      down: { x: 0, y: 1 },
+      bottom: { x: 0, y: 1 },
+      "top-left": { x: -1, y: -1 },
+      topleft: { x: -1, y: -1 },
+      "top-right": { x: 1, y: -1 },
+      topright: { x: 1, y: -1 },
+      "bottom-left": { x: -1, y: 1 },
+      bottomleft: { x: -1, y: 1 },
+      "bottom-right": { x: 1, y: 1 },
+      bottomright: { x: 1, y: 1 },
+    };
+
+    return directions[key] || null;
+  }
+
+  function layoutPointLabels(points, mapper, bounds, obstacles = []) {
     const placements = new Map();
     const occupied = [];
     const axisY = bounds && bounds.minY <= 0 && bounds.maxY >= 0
@@ -1035,29 +1339,38 @@
       const directions = getPreferredLabelDirections(point.id || point.label);
       let best = null;
       let bestScore = -Infinity;
+      const offsets = [15, 22, 30, 40];
 
       directions.forEach((direction, index) => {
-        const box = getLabelBox(projected, point.label, direction, mapper);
-        let score = 100 - index * 6;
+        offsets.forEach((offset, offsetIndex) => {
+          const box = getLabelBox(projected, point.label, direction, mapper, offset);
+          let score = 100 - index * 6 - offsetIndex * 4;
 
-        occupied.forEach((other) => {
-          if (boxesOverlap(box, other)) {
-            score -= 80;
+          occupied.forEach((other) => {
+            if (boxesOverlap(box, other)) {
+              score -= 80;
+            }
+          });
+
+          obstacles.forEach((obstacle) => {
+            if (labelBoxIntersectsObstacle(box, obstacle)) {
+              score -= 120;
+            }
+          });
+
+          if (axisY !== null && Math.abs(box.cy - axisY) < 16) {
+            score -= 20;
+          }
+
+          if (axisX !== null && Math.abs(box.cx - axisX) < 20) {
+            score -= 16;
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            best = { direction, box };
           }
         });
-
-        if (axisY !== null && Math.abs(box.cy - axisY) < 16) {
-          score -= 20;
-        }
-
-        if (axisX !== null && Math.abs(box.cx - axisX) < 20) {
-          score -= 16;
-        }
-
-        if (score > bestScore) {
-          bestScore = score;
-          best = { direction, box };
-        }
       });
 
       if (!best) {
@@ -1078,8 +1391,15 @@
 
     const projected = mapper.project(point);
     const placement = options.placement || null;
-    const direction = placement?.direction || options.direction || { x: 1, y: -1 };
-    const box = placement?.box || getLabelBox(projected, label, direction, mapper, options.offset || 15);
+    const parsedDirection = parseLabelDirection(options.direction);
+    const direction = placement?.direction
+      || parsedDirection
+      || (options.direction && typeof options.direction === "object" ? options.direction : null)
+      || { x: 1, y: -1 };
+    const offset = Number.isFinite(Number(options.offset)) ? Number(options.offset) : 15;
+    const dx = Number.isFinite(Number(options.dx)) ? Number(options.dx) : 0;
+    const dy = Number.isFinite(Number(options.dy)) ? Number(options.dy) : 0;
+    const box = placement?.box || getLabelBox(projected, label, direction, mapper, offset, dx, dy);
     const group = createSvgElement("g", {
       class: "mv-label-group",
       "data-label-for": point.id || "",
@@ -1120,7 +1440,8 @@
 
     const highlighted = new Set(view?.highlightObjects || []);
     const visibleObjects = getVisibleObjects(spec, view);
-    const pointLabelLayout = layoutPointLabels(Object.values(spec.points || {}), mapper, bounds);
+    const labelObstacles = buildLabelObstacles(spec, visibleObjects, mapper, bounds);
+    const pointLabelLayout = layoutPointLabels(Object.values(spec.points || {}), mapper, bounds, labelObstacles);
 
     visibleObjects.forEach((object) => {
       if (object.kind === "polygon") {
@@ -1215,7 +1536,13 @@
       } else if (object.kind === "label") {
         const point = object.at ? getPoint(spec, object.at) : { x: Number(object.x), y: Number(object.y), id: object.id };
         if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
-          drawLabelWithBackground(svg, point, object.text || object.label, mapper, { className: "mv-label mv-custom-label" });
+          drawLabelWithBackground(svg, point, object.text || object.label, mapper, {
+            className: "mv-label mv-custom-label",
+            direction: object.direction,
+            offset: object.offset,
+            dx: object.dx,
+            dy: object.dy,
+          });
         }
       }
     });
@@ -1258,9 +1585,11 @@
 
     const wrapper = createHtmlElement("div", "geometry-view-list");
     const allPoints = Object.values(spec.points);
-    const bounds = getBounds(allPoints, 0.22);
+    const boundsObjects = selectedViews.flatMap((view) => getVisibleObjects(spec, view));
+    const hasCircularGeometry = boundsObjects.some((object) => object && (object.kind === "circle" || object.kind === "arc"));
+    const bounds = getBounds(allPoints, 0.22, boundsObjects, spec.points || {});
     const size = getGraphSize(spec, container);
-    const mapper = createMapper(bounds, size.width, size.height);
+    const mapper = createMapper(bounds, size.width, size.height, { equalScale: hasCircularGeometry });
 
     selectedViews.forEach((view) => {
       const viewCard = createHtmlElement("article", "geometry-view-card");

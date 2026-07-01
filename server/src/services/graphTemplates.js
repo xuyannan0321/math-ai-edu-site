@@ -1950,6 +1950,265 @@ function buildPythagoreanRightTriangleTemplate(questionText, source = {}) {
   };
 }
 
+function getCircleBasicSignalContext(text) {
+  const normalizedText = normalizeMathQuestionText(text);
+  const compact = compactTemplateText(normalizedText).toUpperCase();
+
+  if (parseCoordinatePoints(text).length > 0 || isOrdinaryFunctionGraphQuestion(text)) {
+    return null;
+  }
+
+  if (/坐标|直角坐标|X轴|Y轴|函数|四点共圆|圆幂|切割线|弦切角|旋转|折叠|动点|最值|轨迹|相似|∽|全等|≌/.test(compact)) {
+    return null;
+  }
+
+  return { normalizedText, compact };
+}
+
+function hasCircleOSignal(compact) {
+  return /⊙O|圆O|同圆|圆心O/.test(compact);
+}
+
+function hasProofIntent(compact) {
+  return /(求证|证明|证)/.test(compact);
+}
+
+function circlePoint(radius, angleDegrees) {
+  const radians = (Number(angleDegrees) * Math.PI) / 180;
+  return {
+    x: radius * Math.cos(radians),
+    y: radius * Math.sin(radians),
+  };
+}
+
+function hasRadiusSegment(compact, segment) {
+  return new RegExp(`${segment}(?:是|为)?(?:⊙O的)?半径`).test(compact)
+    || new RegExp(`半径${segment}`).test(compact);
+}
+
+function hasRadiusEqualSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasCircle = hasCircleOSignal(compact);
+  const hasPairRadius = /OA[、,，和与]?OB(?:是|为)?(?:⊙O的|同圆)?半径/.test(compact)
+    || /OA和OB(?:是|为)?(?:⊙O的|同圆)?半径/.test(compact);
+  const hasTwoRadii = hasPairRadius || (hasRadiusSegment(compact, "OA") && hasRadiusSegment(compact, "OB"));
+  const hasGoal = hasCongruentEqualPair(compact, "OA", "OB");
+
+  return hasCircle && hasTwoRadii && hasGoal && hasProofIntent(compact);
+}
+
+function buildCircleBaseTemplate(options) {
+  const objects = (options.objects || []).filter(Boolean);
+
+  return {
+    type: "geometry",
+    ...baseTemplateMeta(options.templateId, "circle"),
+    confidence: "high",
+    title: options.title,
+    description: options.description,
+    points: options.points,
+    objects,
+    views: [
+      {
+        id: "main",
+        title: options.title,
+        showObjects: objects.map((object) => object.id),
+        highlightObjects: options.highlightObjects || [],
+      },
+    ],
+    steps: [],
+    notes: options.notes || [],
+  };
+}
+
+function buildRadiusEqualTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasRadiusEqualSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.55;
+  const pointA = circlePoint(radius, 20);
+  const pointB = circlePoint(radius, 138);
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { ...pointA, label: "A" },
+    B: { ...pointB, label: "B" },
+  };
+  const objects = [
+    {
+      kind: "circle",
+      id: "circle_O",
+      label: "⊙O",
+      center: "O",
+      radius,
+      role: "original",
+      style: "solid",
+    },
+    makeSegment("segment_OA", "OA", "O", "A", "solid", "highlight"),
+    makeSegment("segment_OB", "OB", "O", "B", "solid", "highlight"),
+  ];
+
+  return buildCircleBaseTemplate({
+    templateId: "radius_equal_v1",
+    title: "圆的半径示意图",
+    description: "本图保留圆 O、圆心 O、圆上点 A、B 以及半径 OA、OB。",
+    points,
+    objects,
+    highlightObjects: ["segment_OA", "segment_OB"],
+    notes: [
+      "仅用于 OA、OB 是 ⊙O 的半径，求证 OA=OB 的稳定结构。",
+      "使用初中圆的基础性质：同一个圆中，所有半径相等。",
+    ],
+  });
+}
+
+function hasDiameterRightAngleSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasCircle = hasCircleOSignal(compact);
+  const hasDiameter = /AB(?:是|为)?(?:⊙O的)?直径/.test(compact)
+    || /直径AB/.test(compact);
+  const hasPointCOnCircle = /(?:点)?C在⊙O上/.test(compact)
+    || /C是⊙O上一点/.test(compact)
+    || /C在⊙O上/.test(compact);
+  const hasGoal = /∠ACB=90(?:°|度)?/.test(compact)
+    || /∠ACB(?:是|为)?直角/.test(compact);
+
+  return hasCircle && hasDiameter && hasPointCOnCircle && hasGoal && hasProofIntent(compact);
+}
+
+function buildDiameterRightAngleTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasDiameterRightAngleSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.6;
+  const pointC = circlePoint(radius, 66);
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { x: -radius, y: 0, label: "A" },
+    B: { x: radius, y: 0, label: "B" },
+    C: { ...pointC, label: "C" },
+  };
+  const objects = [
+    {
+      kind: "circle",
+      id: "circle_O",
+      label: "⊙O",
+      center: "O",
+      radius,
+      role: "original",
+      style: "solid",
+    },
+    makeSegment("segment_AB", "AB", "A", "B", "solid", "original"),
+    makeSegment("segment_AC", "AC", "A", "C", "solid", "original"),
+    makeSegment("segment_BC", "BC", "B", "C", "solid", "original"),
+    {
+      kind: "rightAngle",
+      id: "right_angle_ACB",
+      label: "∠ACB",
+      points: ["A", "C", "B"],
+      role: "highlight",
+    },
+  ];
+
+  return buildCircleBaseTemplate({
+    templateId: "diameter_right_angle_v1",
+    title: "圆周角直角示意图",
+    description: "本图保留圆 O、直径 AB、圆上点 C、AC、BC 和 C 处直角标记。",
+    points,
+    objects,
+    highlightObjects: ["right_angle_ACB"],
+    notes: [
+      "仅用于 AB 是 ⊙O 的直径、点 C 在 ⊙O 上、求证 ∠ACB=90° 的稳定结构。",
+      "使用初中圆的基础性质：直径所对的圆周角是直角。",
+    ],
+  });
+}
+
+function hasTangentRadiusPerpendicularSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const hasCircle = hasCircleOSignal(compact);
+  const hasTangent = /PA(?:是|为)?(?:⊙O的)?切线/.test(compact)
+    || /切线PA/.test(compact)
+    || /PA(?:与|和)?⊙O相切/.test(compact)
+    || /(?:直线)?PA切⊙O于A/.test(compact);
+  const hasTangentPointA = /A(?:是|为)切点/.test(compact)
+    || /切点(?:是|为)A/.test(compact)
+    || /切于A/.test(compact)
+    || /于A/.test(compact);
+  const hasRadiusOA = hasRadiusSegment(compact, "OA") || hasCircle;
+  const hasGoal = /OA⊥PA|PA⊥OA/.test(compact);
+
+  return hasCircle && hasTangent && hasTangentPointA && hasRadiusOA && hasGoal && hasProofIntent(compact);
+}
+
+function buildTangentRadiusPerpendicularTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasTangentRadiusPerpendicularSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.55;
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { x: radius, y: 0, label: "A" },
+    P: { x: radius, y: 1.85, label: "P" },
+  };
+  const objects = [
+    {
+      kind: "circle",
+      id: "circle_O",
+      label: "⊙O",
+      center: "O",
+      radius,
+      role: "original",
+      style: "solid",
+    },
+    makeSegment("segment_OA", "OA", "O", "A", "solid", "highlight"),
+    makeSegment("segment_PA", "PA", "P", "A", "solid", "original"),
+    {
+      kind: "rightAngle",
+      id: "right_angle_OAP",
+      label: "∠OAP",
+      points: ["O", "A", "P"],
+      role: "highlight",
+    },
+  ];
+
+  return buildCircleBaseTemplate({
+    templateId: "tangent_radius_perpendicular_v1",
+    title: "切线与半径示意图",
+    description: "本图保留圆 O、圆心 O、切点 A、圆外点 P、半径 OA、切线 PA 和 A 处直角标记。",
+    points,
+    objects,
+    highlightObjects: ["segment_OA", "segment_PA", "right_angle_OAP"],
+    notes: [
+      "仅用于 PA 是 ⊙O 的切线、A 为切点、求证 OA⊥PA 的稳定结构。",
+      "使用初中圆的基础性质：圆的切线垂直于过切点的半径。",
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -2041,6 +2300,9 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildAngleBisectorTemplate(questionText, source)
     || buildPerpendicularBisectorTemplate(questionText, source)
     || buildPythagoreanRightTriangleTemplate(questionText, source)
+    || buildRadiusEqualTemplate(questionText, source)
+    || buildDiameterRightAngleTemplate(questionText, source)
+    || buildTangentRadiusPerpendicularTemplate(questionText, source)
     || null;
 }
 
@@ -2068,5 +2330,8 @@ module.exports = {
   buildAngleBisectorTemplate,
   buildPerpendicularBisectorTemplate,
   buildPythagoreanRightTriangleTemplate,
+  buildRadiusEqualTemplate,
+  buildDiameterRightAngleTemplate,
+  buildTangentRadiusPerpendicularTemplate,
   buildGraphTemplateSpec,
 };
