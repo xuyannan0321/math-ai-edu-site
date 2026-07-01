@@ -792,6 +792,41 @@ http://localhost:5500
 
 ---
 
+## 模板批量 smoke 测试
+
+模板新增或模板匹配规则调整后，优先运行：
+
+```powershell
+node server/scripts/templateSmokeTest.js
+```
+
+验收：
+
+- 正例应命中指定 `templateId`；
+- `canRender` 必须为 `true`；
+- `type` 不能为 `none`；
+- 几何模板必须有 `objects` 且长度大于 0；
+- `function_graph` 模板必须有可渲染的 curves、functions 或 points；
+- 负例不得命中特定模板。
+
+首批覆盖：
+
+- `function_intersection_v1`
+- `isosceles_triangle_v1`
+- `midpoint_midline_v1`
+- `parallel_angle_v1`
+- `congruent_triangle_sss_v1`
+- `similar_triangle_aa_v1`
+- `similar_triangle_sss_v1`
+- `angle_bisector_v1`
+- `perpendicular_bisector_v1`
+- `pythagorean_right_triangle_v1`
+- `radius_equal_v1`
+- `diameter_right_angle_v1`
+- `tangent_radius_perpendicular_v1`
+
+---
+
 ## 八、完成后必须检查
 
 每次修改代码后至少运行：
