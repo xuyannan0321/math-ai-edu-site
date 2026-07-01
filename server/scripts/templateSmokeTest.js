@@ -19,6 +19,8 @@ const geometryTemplateIds = [
   "equal_arcs_equal_inscribed_angles_v1",
   "central_angle_double_inscribed_angle_v1",
   "right_angle_subtends_diameter_v1",
+  "equal_chords_equal_arcs_v1",
+  "equal_arcs_equal_chords_v1",
 ];
 
 const positiveCases = [
@@ -107,6 +109,16 @@ const positiveCases = [
     input: "已知 A、B、C 在 ⊙O 上，∠ACB=90°，求证 AB 是 ⊙O 的直径。",
     expectTemplateId: "right_angle_subtends_diameter_v1",
   },
+  {
+    name: "equal_chords_equal_arcs_v1",
+    input: "已知 AB、CD 是 ⊙O 的弦，AB=CD，求证 ⌒AB=⌒CD。",
+    expectTemplateId: "equal_chords_equal_arcs_v1",
+  },
+  {
+    name: "equal_arcs_equal_chords_v1",
+    input: "已知 ⊙O 中，⌒AB=⌒CD，求证 AB=CD。",
+    expectTemplateId: "equal_arcs_equal_chords_v1",
+  },
 ];
 
 const negativeCases = [
@@ -185,6 +197,42 @@ const negativeCases = [
     input: "求函数 y=8/x 与 y=2x 的交点。",
     expectTemplateId: "function_intersection_v1",
     forbiddenTemplateIds: geometryTemplateIds,
+  },
+  {
+    name: "bare AB=CD should not trigger equal_chords_equal_arcs_v1",
+    input: "已知 AB=CD，求证 ⌒AB=⌒CD。",
+    forbiddenTemplateIds: ["equal_chords_equal_arcs_v1"],
+  },
+  {
+    name: "only chords should not trigger equal_chords_equal_arcs_v1",
+    input: "已知 AB、CD 是 ⊙O 的弦，求证 ⌒AB=⌒CD。",
+    forbiddenTemplateIds: ["equal_chords_equal_arcs_v1"],
+  },
+  {
+    name: "only equal arcs should not trigger equal_arcs_equal_chords_v1",
+    input: "已知 ⊙O 中，⌒AB=⌒CD。",
+    forbiddenTemplateIds: ["equal_arcs_equal_chords_v1"],
+  },
+  {
+    name: "ordinary triangle equal sides should not trigger chord arc templates",
+    input: "已知三角形 ABC 中，AB=CD，求证 ⌒AB=⌒CD。",
+    forbiddenTemplateIds: ["equal_chords_equal_arcs_v1", "equal_arcs_equal_chords_v1"],
+  },
+  {
+    name: "tangent chord angle should not trigger chord arc templates",
+    input: "已知 PA 是 ⊙O 的切线，AB 是 ⊙O 的弦，求证弦切角关系。",
+    forbiddenTemplateIds: ["equal_chords_equal_arcs_v1", "equal_arcs_equal_chords_v1"],
+  },
+  {
+    name: "circle power comprehensive should not trigger chord arc templates",
+    input: "已知 PAB 是 ⊙O 的切割线，求证 PA·PB=PC·PD。",
+    forbiddenTemplateIds: ["equal_chords_equal_arcs_v1", "equal_arcs_equal_chords_v1"],
+  },
+  {
+    name: "equal arcs inscribed angles should keep equal_arcs_equal_inscribed_angles_v1",
+    input: "已知 ⊙O 中，⌒AB=⌒CD，∠AEB 对⌒AB，∠CFD 对⌒CD，求证 ∠AEB=∠CFD。",
+    expectTemplateId: "equal_arcs_equal_inscribed_angles_v1",
+    forbiddenTemplateIds: ["equal_arcs_equal_chords_v1"],
   },
 ];
 

@@ -35,7 +35,7 @@ function normalizeLineRelations(text) {
 }
 
 function normalizeEqualRelations(text) {
-  const objectPattern = "(?:∠[A-Z]{1,4}|△[A-Z]{3}|⌒[A-Z]{2}|[A-Z]{1,3})";
+  const objectPattern = "(?:∠[A-Z]{1,4}|△[A-Z]{3}|⌒[A-Z]{2}|弦[A-Z]{2}|[A-Z]{1,3})";
   const equalsPattern = new RegExp(`(${objectPattern})\\s*(?:等于|相等于?)\\s*(${objectPattern})`, "g");
   const pairedEqualsPattern = new RegExp(`(${objectPattern})\\s*(?:与|和)\\s*(${objectPattern})\\s*相等`, "g");
 
@@ -71,6 +71,14 @@ function normalizeCircleAngleTerms(text) {
     .replace(/(∠[A-Z]{3})\s*(?:等于|是|为)\s*(∠[A-Z]{3})\s*的?\s*2\s*倍/g, "$1=2$2")
     .replace(/(∠[A-Z]{3})\s*=\s*90\s*(?:度|°)?/g, "$1=90°")
     .replace(/(∠[A-Z]{3})\s*(?:是|为)\s*直角/g, "$1 是直角");
+}
+
+function normalizeChordTerms(text) {
+  return text
+    .replace(/弦\s*([A-Z]{2})/g, "弦$1")
+    .replace(/([A-Z]{2})\s*(?:、|,|，|和|与)\s*([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?弦/g, "$1、$2 是 $3 的弦")
+    .replace(/([A-Z]{2})\s*(?:是|为)\s*(⊙[A-Z])\s*的?弦/g, "$1 是 $2 的弦")
+    .replace(/弦([A-Z]{2})\s*=\s*弦([A-Z]{2})/g, "弦$1=弦$2");
 }
 
 function normalizeTriangleRelations(text) {
@@ -117,6 +125,7 @@ function normalizeGeometrySymbols(text) {
   normalized = normalizeEqualRelations(normalized);
   normalized = normalizeCircleAndArcSymbols(normalized);
   normalized = normalizeCircleAngleTerms(normalized);
+  normalized = normalizeChordTerms(normalized);
   normalized = normalizeEqualRelations(normalized);
   normalized = normalizeTriangleSymbols(normalized);
   normalized = normalizeTriangleRelations(normalized);

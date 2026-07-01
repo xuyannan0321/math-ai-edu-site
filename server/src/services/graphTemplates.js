@@ -2279,6 +2279,29 @@ function hasArcEquality(compact, firstArc, secondArc) {
   return hasCongruentEqualPair(compact, `⌒${firstArc}`, `⌒${secondArc}`);
 }
 
+function getProofGoalText(compact) {
+  const match = /(求证|证明|证)/.exec(compact);
+  return match ? compact.slice(match.index) : "";
+}
+
+function hasChordEquality(compact, firstChord, secondChord) {
+  return hasCongruentEqualPair(compact, firstChord, secondChord)
+    || hasCongruentEqualPair(compact, `弦${firstChord}`, `弦${secondChord}`);
+}
+
+function hasChordPairSignal(compact, firstChord, secondChord) {
+  const pairPattern = new RegExp(`${firstChord}[、,，和与]?${secondChord}(?:是|为)?(?:⊙O的)?弦`);
+  const reversedPairPattern = new RegExp(`${secondChord}[、,，和与]?${firstChord}(?:是|为)?(?:⊙O的)?弦`);
+  const firstIsChord = new RegExp(`${firstChord}(?:是|为)?(?:⊙O的)?弦`).test(compact)
+    || new RegExp(`弦${firstChord}`).test(compact);
+  const secondIsChord = new RegExp(`${secondChord}(?:是|为)?(?:⊙O的)?弦`).test(compact)
+    || new RegExp(`弦${secondChord}`).test(compact);
+
+  return pairPattern.test(compact)
+    || reversedPairPattern.test(compact)
+    || (firstIsChord && secondIsChord);
+}
+
 function hasAngleAgainstArc(compact, angle, arc) {
   const arcLabel = `⌒${arc}`;
   return new RegExp(`${angle}(?:同?对|所对)${arcLabel}`).test(compact)
@@ -2581,6 +2604,113 @@ function buildRightAngleSubtendsDiameterTemplate(questionText, source = {}) {
   });
 }
 
+function hasEqualChordsEqualArcsSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const goalText = getProofGoalText(compact);
+  const hasCircle = hasCircleOSignal(compact);
+  const hasChordPair = hasChordPairSignal(compact, "AB", "CD");
+  const hasEqualChords = hasChordEquality(compact, "AB", "CD");
+  const hasArcGoal = hasArcEquality(goalText, "AB", "CD");
+
+  return hasCircle && hasChordPair && hasEqualChords && hasArcGoal && hasProofIntent(compact);
+}
+
+function buildEqualChordsEqualArcsTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasEqualChordsEqualArcsSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.65;
+  const center = { x: 0, y: 0 };
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { ...circlePoint(center, radius, 145), label: "A" },
+    B: { ...circlePoint(center, radius, 215), label: "B" },
+    C: { ...circlePoint(center, radius, 35), label: "C" },
+    D: { ...circlePoint(center, radius, -35), label: "D" },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeChord("segment_AB", "A", "B", "highlight"),
+    makeChord("segment_CD", "C", "D", "highlight"),
+    makeArcObject("arc_AB", "O", radius, 145, 215, "highlight"),
+    makeArcObject("arc_CD", "O", radius, -35, 35, "highlight"),
+  ];
+
+  return buildCircleBaseTemplate({
+    templateId: "equal_chords_equal_arcs_v1",
+    title: "等弦对等弧示意图",
+    description: "本图保留圆 O、圆上点 A、B、C、D、弦 AB、CD 以及对应弧 AB、CD。",
+    points,
+    objects,
+    highlightObjects: ["segment_AB", "segment_CD", "arc_AB", "arc_CD"],
+    notes: [
+      "仅用于 AB、CD 是 ⊙O 的弦，AB=CD，求证 ⌒AB=⌒CD 的稳定结构。",
+      "使用初中圆性质：同圆中等弦所对的弧相等。",
+    ],
+  });
+}
+
+function hasEqualArcsEqualChordsSignals(text) {
+  const context = getCircleBasicSignalContext(text);
+  if (!context) {
+    return false;
+  }
+
+  const { compact } = context;
+  const goalText = getProofGoalText(compact);
+  const hasCircle = hasCircleOSignal(compact);
+  const hasEqualArcs = hasArcEquality(compact, "AB", "CD");
+  const hasChordGoal = hasChordEquality(goalText, "AB", "CD");
+
+  return hasCircle && hasEqualArcs && hasChordGoal && hasProofIntent(compact);
+}
+
+function buildEqualArcsEqualChordsTemplate(questionText, source = {}) {
+  const text = getTemplateText(questionText, source);
+
+  if (!hasEqualArcsEqualChordsSignals(text)) {
+    return null;
+  }
+
+  const radius = 1.65;
+  const center = { x: 0, y: 0 };
+  const points = {
+    O: { x: 0, y: 0, label: "O" },
+    A: { ...circlePoint(center, radius, 145), label: "A" },
+    B: { ...circlePoint(center, radius, 215), label: "B" },
+    C: { ...circlePoint(center, radius, 35), label: "C" },
+    D: { ...circlePoint(center, radius, -35), label: "D" },
+  };
+  const objects = [
+    makeCircleObject("circle_O", "O", radius),
+    makeArcObject("arc_AB", "O", radius, 145, 215, "highlight"),
+    makeArcObject("arc_CD", "O", radius, -35, 35, "highlight"),
+    makeChord("segment_AB", "A", "B", "highlight"),
+    makeChord("segment_CD", "C", "D", "highlight"),
+  ];
+
+  return buildCircleBaseTemplate({
+    templateId: "equal_arcs_equal_chords_v1",
+    title: "等弧对等弦示意图",
+    description: "本图保留圆 O、圆上点 A、B、C、D、弧 AB、CD 以及对应弦 AB、CD。",
+    points,
+    objects,
+    highlightObjects: ["arc_AB", "arc_CD", "segment_AB", "segment_CD"],
+    notes: [
+      "仅用于 ⌒AB=⌒CD，求证 AB=CD 的稳定结构。",
+      "使用初中圆性质：同圆中等弧所对的弦相等。",
+    ],
+  });
+}
+
 function mergeTemplateSpecs(intersectionSpec, areaSpec) {
   if (!intersectionSpec || !areaSpec) {
     return null;
@@ -2679,6 +2809,8 @@ function buildGraphTemplateSpec(questionText, source = {}) {
     || buildEqualArcsEqualInscribedAnglesTemplate(questionText, source)
     || buildCentralAngleDoubleInscribedAngleTemplate(questionText, source)
     || buildRightAngleSubtendsDiameterTemplate(questionText, source)
+    || buildEqualChordsEqualArcsTemplate(questionText, source)
+    || buildEqualArcsEqualChordsTemplate(questionText, source)
     || null;
 }
 
@@ -2713,5 +2845,7 @@ module.exports = {
   buildEqualArcsEqualInscribedAnglesTemplate,
   buildCentralAngleDoubleInscribedAngleTemplate,
   buildRightAngleSubtendsDiameterTemplate,
+  buildEqualChordsEqualArcsTemplate,
+  buildEqualArcsEqualChordsTemplate,
   buildGraphTemplateSpec,
 };

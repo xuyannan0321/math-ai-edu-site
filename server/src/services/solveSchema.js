@@ -252,6 +252,8 @@ const STABLE_TEMPLATE_OVERRIDE_IDS = new Set([
   "equal_arcs_equal_inscribed_angles_v1",
   "central_angle_double_inscribed_angle_v1",
   "right_angle_subtends_diameter_v1",
+  "equal_chords_equal_arcs_v1",
+  "equal_arcs_equal_chords_v1",
 ]);
 
 function shouldStableTemplateOverrideSource(templateSpec) {
